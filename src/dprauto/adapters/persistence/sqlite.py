@@ -42,6 +42,7 @@ class SQLiteAgentPersistence:
                 ("dprauto.agent.models", "RepairCandidate"),
                 ("dprauto.agent.models", "ToolCall"),
                 ("dprauto.agent.models", "ToolResult"),
+                ("dprauto.application.build", "BuildStrategyAttempt"),
                 ("dprauto.domain.enums", "AgentPhase"),
                 ("dprauto.domain.enums", "BuildFailureKind"),
                 ("dprauto.domain.enums", "BuildStage"),

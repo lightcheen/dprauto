@@ -12,6 +12,7 @@ from dprauto.agent.models import FixPlan, ToolCall, ToolContext, ToolResult
 from dprauto.agent.state import create_agent_state
 from dprauto.agent.tools import GetBuildLogTool, ModifyBuildScriptTool, ReadFileTool, ToolRegistry
 from dprauto.agent.workflow import AgentWorkflow
+from dprauto.application.build import BuildStrategyAttempt
 from dprauto.config import AgentConfig
 from dprauto.domain.enums import AgentPhase, BuildStage, BuildStatus, FailureCategory
 from dprauto.domain.models import (
@@ -175,6 +176,32 @@ class AgentPersistenceTests(unittest.TestCase):
             self.storage,
             self.config,
             persistence,
+        )
+
+    def test_build_strategy_attempt_tool_data_round_trips_through_checkpoint_serde(self):
+        persistence = SQLiteAgentPersistence(self.database, self.storage)
+        self.addCleanup(persistence.close)
+        attempt = BuildStrategyAttempt(
+            self.plan,
+            self.state["build_result"],
+            self.state["failure"],
+        )
+        tool_result = ToolResult(
+            "build_image",
+            False,
+            "portfolio selected a repair baseline",
+            data={"strategy_attempts": (attempt,)},
+        )
+
+        encoded = persistence.checkpointer.serde.dumps_typed(tool_result)
+        restored = persistence.checkpointer.serde.loads_typed(encoded)
+
+        restored_attempt = restored.data["strategy_attempts"][0]
+        self.assertIsInstance(restored_attempt, BuildStrategyAttempt)
+        self.assertEqual(restored_attempt.plan.plan_id, self.plan.plan_id)
+        self.assertEqual(
+            restored_attempt.failure.fingerprint,
+            self.state["failure"].fingerprint,
         )
 
     def test_multiround_checkpoint_resume_summary_and_duplicate_guard(self):
