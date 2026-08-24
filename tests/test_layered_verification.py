@@ -426,6 +426,31 @@ class CommandSelectionTests(unittest.TestCase):
             "pytest --cov=sample --cov-report xml --tb=short",
         )
 
+    def test_pytest_capture_is_disabled_for_import_time_stdio_rewrapping(self) -> None:
+        selection = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "project",
+                SourceReference("fixture://project"),
+                commands=(
+                    project_command(
+                        "python -m pytest tests/test_common.py",
+                        CommandPurpose.TEST,
+                        "README.md",
+                    ),
+                ),
+                metadata={
+                    "pytest_capture_incompatible_files": ("src/sample/common.py",),
+                },
+            )
+        )
+
+        self.assertEqual(selection.kind, "pytest-capture-disabled")
+        self.assertEqual(
+            selection.command.command.display,
+            "python -m pytest tests/test_common.py -s",
+        )
+        self.assertIn("rewraps sys.stdout/sys.stderr", selection.reason)
+
     def test_required_secret_or_external_only_tests_are_not_executed(self) -> None:
         secret = ProjectProfile(
             "secret-project",

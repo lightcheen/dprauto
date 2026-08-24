@@ -219,6 +219,33 @@ def optional_lookup():
             ("SERVICE_TOKEN",),
         )
 
+    def test_module_scope_stdio_rewrapping_is_recorded_for_pytest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src" / "fixture").mkdir(parents=True)
+            (root / "tests").mkdir()
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "fixture"\nversion = "1.0.0"\n',
+                encoding="utf-8",
+            )
+            (root / "src" / "fixture" / "common.py").write_text(
+                "import io\nimport sys\n"
+                "sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf8')\n",
+                encoding="utf-8",
+            )
+            (root / "tests" / "test_common.py").write_text(
+                "def test_common(): pass\n",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://capture"), root)
+
+        self.assertEqual(
+            profile.metadata["pytest_capture_incompatible_files"],
+            ("src/fixture/common.py",),
+        )
+        self.assertFalse(profile.metadata["pytest_capture_scan_truncated"])
+
     def test_tox_default_environment_is_inferred_without_full_matrix(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

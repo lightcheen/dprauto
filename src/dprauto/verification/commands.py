@@ -88,14 +88,21 @@ class TestCommandSelector:
         selected = self._bounded_matrix_command(profile, selected, python_version)
         original = selected.command
         bounded, targets, reason = self._bounded_local_command(profile, selected)
+        capture_safe = self._with_pytest_capture_disabled(profile, bounded)
+        kinds: list[str] = []
         if targets:
-            kind = "bounded-file-slice"
+            kinds.append("bounded-file-slice")
         elif bounded.command != original:
-            kind = "coverage-normalized"
-        else:
-            kind = "project-command"
+            kinds.append("coverage-normalized")
+        if capture_safe.command != bounded.command:
+            kinds.append("pytest-capture-disabled")
+            reason += (
+                "; disabled pytest output capture because project source rewraps "
+                "sys.stdout/sys.stderr at import time"
+            )
+        kind = "+".join(kinds) or "project-command"
         return TestCommandSelection(
-            bounded,
+            capture_safe,
             original,
             kind,
             targets,
@@ -241,6 +248,47 @@ class TestCommandSelector:
             command.name,
             spec,
             f"normalized:{command.source}",
+            command.confidence,
+        )
+
+    @staticmethod
+    def _with_pytest_capture_disabled(
+        profile: ProjectProfile,
+        command: ProjectCommand,
+    ) -> ProjectCommand:
+        evidence = profile.metadata.get("pytest_capture_incompatible_files", ())
+        if (
+            not isinstance(evidence, (list, tuple))
+            or not any(isinstance(item, str) and item for item in evidence)
+            or not TestCommandSelector._is_direct_pytest(command.command.display)
+        ):
+            return command
+        try:
+            tokens = shlex.split(command.command.display)
+        except ValueError:
+            return command
+        lowered = tuple(token.casefold() for token in tokens)
+        if (
+            "-s" in lowered
+            or "--capture=no" in lowered
+            or any(
+                token == "--capture" and index + 1 < len(lowered)
+                and lowered[index + 1] == "no"
+                for index, token in enumerate(lowered)
+            )
+        ):
+            return command
+        spec = CommandSpec(
+            (*tokens, "-s"),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+        )
+        return ProjectCommand(
+            command.name,
+            spec,
+            f"capture-safe:{command.source}",
             command.confidence,
         )
 

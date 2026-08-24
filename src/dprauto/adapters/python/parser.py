@@ -162,6 +162,9 @@ class PythonProjectParser:
             )
         scm_versioning = self._scm_versioning(scanned)
         test_file_metadata = self._test_file_metadata(scanned)
+        pytest_capture_files, pytest_capture_scan_truncated = (
+            self._pytest_capture_incompatible_files(scanned)
+        )
 
         runtime_constraints = {"python": python_constraint} if python_constraint else {}
         return ProjectProfile(
@@ -194,6 +197,8 @@ class PythonProjectParser:
                 "tox_environments": tox_environments,
                 "nox_sessions": nox_sessions,
                 "pytest_parallel": pytest_parallel,
+                "pytest_capture_incompatible_files": pytest_capture_files,
+                "pytest_capture_scan_truncated": pytest_capture_scan_truncated,
                 "scm_versioning": scm_versioning,
                 **test_file_metadata,
                 "project_type_evidence": type_evidence,
@@ -409,6 +414,66 @@ class PythonProjectParser:
 
         Visitor().visit(tree)
         return tuple(dict.fromkeys(names))
+
+    @staticmethod
+    def _pytest_capture_incompatible_files(
+        scanned: ScannedProject,
+    ) -> tuple[tuple[str, ...], bool]:
+        """Find bounded, high-confidence module-scope stdio rewrapping."""
+
+        maximum_files = 1_024
+        candidates = tuple(
+            sorted(
+                (
+                    path
+                    for path in scanned.files
+                    if path.endswith(".py")
+                    and not any(
+                        part.casefold() in {"test", "tests"}
+                        for part in PurePosixPath(path).parts[:-1]
+                    )
+                ),
+                key=lambda path: (len(PurePosixPath(path).parts), path),
+            )
+        )
+        incompatible: list[str] = []
+        for path in candidates[:maximum_files]:
+            content = scanned.read_text(path)
+            if "sys.stdout" not in content and "sys.stderr" not in content:
+                continue
+            try:
+                tree = ast.parse(content)
+            except SyntaxError:
+                continue
+            for statement in tree.body:
+                targets: tuple[ast.expr, ...] = ()
+                value: ast.expr | None = None
+                if isinstance(statement, ast.Assign):
+                    targets = tuple(statement.targets)
+                    value = statement.value
+                elif isinstance(statement, ast.AnnAssign):
+                    targets = (statement.target,)
+                    value = statement.value
+                if value is None or not any(
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "sys"
+                    and target.attr in {"stdout", "stderr"}
+                    for target in targets
+                ):
+                    continue
+                if any(
+                    isinstance(node, ast.Attribute)
+                    and node.attr == "buffer"
+                    and isinstance(node.value, ast.Attribute)
+                    and isinstance(node.value.value, ast.Name)
+                    and node.value.value.id == "sys"
+                    and node.value.attr in {"stdout", "stderr"}
+                    for node in ast.walk(value)
+                ):
+                    incompatible.append(path)
+                    break
+        return tuple(incompatible[:32]), len(candidates) > maximum_files
 
     @staticmethod
     def _system_dependency_hints(
