@@ -217,6 +217,7 @@ class LLMConfig:
     temperature: float = 0.0
     timeout_seconds: int = 120
     timeout_retries_per_model: int = 1
+    max_timeout_attempts_per_operation: int = 2
     max_output_tokens: int = 4_096
     api_config_path: Path = Path("myapi.json")
     request_log_root: Path = Path("logs/llm")
@@ -232,6 +233,10 @@ class LLMConfig:
             raise ConfigurationError("llm.timeout_seconds must be positive")
         if self.timeout_retries_per_model < 0:
             raise ConfigurationError("llm.timeout_retries_per_model must not be negative")
+        if not 1 <= self.max_timeout_attempts_per_operation <= 8:
+            raise ConfigurationError(
+                "llm.max_timeout_attempts_per_operation must be between 1 and 8"
+            )
         if self.max_output_tokens <= 0:
             raise ConfigurationError("llm.max_output_tokens must be positive")
         if not str(self.api_config_path).strip():
@@ -415,6 +420,10 @@ def load_config(
             get("LLM_TIMEOUT_RETRIES_PER_MODEL", "1"),
             "LLM_TIMEOUT_RETRIES_PER_MODEL",
             minimum=0,
+        ),
+        max_timeout_attempts_per_operation=_read_int(
+            get("LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION", "2"),
+            "LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION",
         ),
         max_output_tokens=_read_int(
             get("LLM_MAX_OUTPUT_TOKENS", "4096"), "LLM_MAX_OUTPUT_TOKENS"

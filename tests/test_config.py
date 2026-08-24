@@ -21,6 +21,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_evidence_characters, 10_000)
         self.assertEqual(config.verification.command_timeout_seconds, 120)
         self.assertEqual(config.llm.timeout_retries_per_model, 1)
+        self.assertEqual(config.llm.max_timeout_attempts_per_operation, 2)
         self.assertEqual(config.llm.max_output_tokens, 4096)
         self.assertEqual(config.verification.web_path, "/")
         self.assertEqual(config.verification.pytest_version, "8.3.5")
@@ -78,6 +79,7 @@ class ConfigurationTests(unittest.TestCase):
                 "DPRAUTO_LLM_API_CONFIG_PATH": "/tmp/model.json",
                 "DPRAUTO_LLM_REQUEST_LOG_ROOT": "/tmp/llm-logs",
                 "DPRAUTO_LLM_TIMEOUT_RETRIES_PER_MODEL": "2",
+                "DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION": "3",
                 "DPRAUTO_LLM_MAX_OUTPUT_TOKENS": "2048",
                 "DPRAUTO_STORAGE_ROOT": "/tmp/dprauto-runs",
                 "DPRAUTO_LOG_LEVEL": "debug",
@@ -118,6 +120,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.llm.temperature, 0.25)
         self.assertEqual(config.llm.api_config_path, Path("/tmp/model.json"))
         self.assertEqual(config.llm.timeout_retries_per_model, 2)
+        self.assertEqual(config.llm.max_timeout_attempts_per_operation, 3)
         self.assertEqual(config.llm.max_output_tokens, 2048)
         self.assertEqual(config.llm.request_log_root, Path("/tmp/llm-logs"))
         self.assertEqual(config.storage.root, Path("/tmp/dprauto-runs"))
@@ -151,6 +154,8 @@ class ConfigurationTests(unittest.TestCase):
             {"DPRAUTO_BUILD_POETRY_TOOL_IMAGE": "tool:{unknown}"},
             {"DPRAUTO_BUILD_POETRY_TOOL_TIMEOUT_SECONDS": "0"},
             {"DPRAUTO_LLM_TEMPERATURE": "3"},
+            {"DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION": "0"},
+            {"DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION": "9"},
             {"DPRAUTO_LOG_LEVEL": "verbose"},
         ):
             with self.subTest(environment=environment):

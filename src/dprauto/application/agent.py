@@ -120,6 +120,14 @@ def create_api_llm_client(config: AppConfig | None = None) -> FailoverLLMClient:
             for model in settings
         ),
         attempts_per_model=app_config.llm.timeout_retries_per_model + 1,
+        operation_attempt_limits={
+            operation: app_config.llm.max_timeout_attempts_per_operation
+            for operation in (
+                "investigate_failure",
+                "analyze_failure",
+                "plan_fix",
+            )
+        },
     )
 
 

@@ -19,6 +19,14 @@ from dprauto.time_budget import clamped_timeout_seconds, time_budget_exhausted
 from .transport import HTTPStatusError, urlopen_with_hard_deadline
 
 
+_REPAIR_OPERATIONS = (
+    "investigate_failure",
+    "analyze_failure",
+    "plan_fix",
+)
+_DEFAULT_OPERATION_ATTEMPT_LIMIT = 2
+
+
 @dataclass(frozen=True, slots=True)
 class APIModelSettings:
     api_key: str
@@ -225,7 +233,7 @@ class OpenAICompatibleLLMClient:
 
 
 class FailoverLLMClient:
-    """Retry one timed-out model, then fail over through the configured model pool."""
+    """Fail over across models before retrying a timed-out model."""
 
     def __init__(
         self,
@@ -240,7 +248,13 @@ class FailoverLLMClient:
         if attempts_per_model <= 0:
             raise ValueError("attempts_per_model must be positive")
         self.attempts_per_model = attempts_per_model
-        self.operation_attempt_limits = dict(operation_attempt_limits or {"plan_fix": 2})
+        self.operation_attempt_limits = dict(
+            operation_attempt_limits
+            or {
+                operation: _DEFAULT_OPERATION_ATTEMPT_LIMIT
+                for operation in _REPAIR_OPERATIONS
+            }
+        )
         for operation, limit in self.operation_attempt_limits.items():
             if not operation.strip():
                 raise ValueError("operation attempt limit names must be non-empty")
@@ -252,8 +266,8 @@ class FailoverLLMClient:
         total_attempt = 0
         operation = str(request.metadata.get("operation", "")).strip()
         max_attempts = self.operation_attempt_limits.get(operation)
-        for model_index, client in enumerate(self.clients):
-            for model_attempt in range(1, self.attempts_per_model + 1):
+        for model_attempt in range(1, self.attempts_per_model + 1):
+            for model_index, client in enumerate(self.clients):
                 if max_attempts is not None and total_attempt >= max_attempts:
                     raise LLMTimeoutError(
                         f"LLM failover stopped after {max_attempts} "
