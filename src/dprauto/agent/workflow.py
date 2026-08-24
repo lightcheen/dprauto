@@ -55,6 +55,11 @@ from dprauto.time_budget import deadline_from, normalize_utc, time_budget_exhaus
 from dprauto.verification.overlay import VERIFICATION_REQUIREMENTS_PATH
 
 
+def _python_requirement_name(value: str) -> str:
+    match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", value)
+    return match.group(0).replace("_", "-").casefold() if match else value.casefold()
+
+
 class AgentWorkflow:
     """A compiled StateGraph whose nodes each own one repair responsibility."""
 
@@ -1328,6 +1333,13 @@ class AgentWorkflow:
                     "repair plan rejected: verification dependency overlays are only allowed "
                     "for Testability failures after a successful image build"
                 )
+            if action.tool == "patch_verification_dependencies":
+                evidence_violation = self._verification_dependency_evidence_violation(
+                    action.arguments,
+                    failure,
+                )
+                if evidence_violation:
+                    return evidence_violation
             if (
                 failure is not None
                 and failure.failure_stage is BuildStage.TEST
@@ -1356,6 +1368,63 @@ class AgentWorkflow:
                 "repair plan rejected: one round may change only one high-risk environment "
                 f"dimension ({', '.join(sorted(dimensions))})"
             )
+        return ""
+
+    @staticmethod
+    def _verification_dependency_evidence_violation(
+        arguments: Mapping[str, Any],
+        failure: FailureInfo | None,
+    ) -> str:
+        """Require a dependency-shaped failure before allowing an overlay mutation."""
+
+        if failure is None:
+            return "repair plan rejected: verification dependency evidence is unavailable"
+        evidence = "\n".join((*failure.evidence, failure.key_log))
+        normalized = evidence.casefold()
+        direct_dependency_markers = (
+            "modulenotfounderror",
+            "no module named",
+            "distributionnotfound",
+            "packagenotfounderror",
+            "versionconflict",
+            "resolutionimpossible",
+            "could not find a version that satisfies",
+            "no matching distribution found",
+        )
+        plugin_marker = (
+            "unrecognized arguments:" in normalized
+            or bool(re.search(r"fixture\s+['\"][^'\"]+['\"]\s+not found", normalized))
+        )
+        packages = arguments.get("packages")
+        requested = (
+            tuple(item for item in packages if isinstance(item, str))
+            if isinstance(packages, (list, tuple))
+            else ()
+        )
+        pytest_plugin_requested = any(
+            _python_requirement_name(item).startswith("pytest-")
+            for item in requested
+        )
+        if not any(marker in normalized for marker in direct_dependency_markers) and not (
+            plugin_marker and pytest_plugin_requested
+        ):
+            return (
+                "repair plan rejected: verification dependency changes require direct "
+                "missing-module, missing-plugin, distribution, or version-conflict evidence "
+                "from the Testability failure"
+            )
+
+        for item in requested:
+            name = re.escape(_python_requirement_name(item))
+            already_satisfied = re.search(
+                rf"requirement already satisfied:\s+{name}(?:\b|\[)",
+                normalized.replace("_", "-"),
+            )
+            if already_satisfied:
+                return (
+                    "repair plan rejected: Testability evidence says the requested "
+                    f"dependency is already satisfied: {item}"
+                )
         return ""
 
     @staticmethod

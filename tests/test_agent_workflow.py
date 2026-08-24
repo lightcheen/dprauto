@@ -513,6 +513,73 @@ class AgentWorkflowTests(unittest.TestCase):
 
         self.assertIn("must use patch_verification_dependencies", reason)
 
+    def test_plan_rejects_verification_dependency_without_causal_evidence(self) -> None:
+        tools = ToolRegistry(
+            (
+                StaticTool("read_file", lambda arguments, context: None),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchVerificationDependenciesTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        plan = FixPlan(
+            "guess that a package may repair pytest capture",
+            (
+                ToolCall(
+                    "patch_verification_dependencies",
+                    {"packages": ["dukpy"]},
+                ),
+            ),
+        )
+        capture_failure = FailureInfo(
+            FailureCategory.TEST,
+            BuildStage.TEST,
+            "Testability verification did not pass",
+            "test:closed-stdout",
+            key_log="ValueError: I/O operation on closed file",
+        )
+
+        reason = workflow._plan_policy_violation(plan, capture_failure)
+
+        self.assertIn("require direct missing-module", reason)
+
+    def test_plan_rejects_verification_dependency_already_satisfied(self) -> None:
+        tools = ToolRegistry(
+            (
+                StaticTool("read_file", lambda arguments, context: None),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchVerificationDependenciesTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        plan = FixPlan(
+            "add a dependency reported missing by another import",
+            (
+                ToolCall(
+                    "patch_verification_dependencies",
+                    {"packages": ["dukpy"]},
+                ),
+            ),
+        )
+        contradictory_failure = FailureInfo(
+            FailureCategory.TEST,
+            BuildStage.TEST,
+            "Testability verification did not pass",
+            "test:contradictory-dependency",
+            key_log=(
+                "Requirement already satisfied: dukpy in /usr/local/lib/python3.11/site-packages\n"
+                "ModuleNotFoundError: No module named 'different_plugin'"
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, contradictory_failure)
+
+        self.assertIn("already satisfied", reason)
+
     def test_explicit_preflight_failure_rejects_candidate_without_full_rebuild(self) -> None:
         planner = FixedPlanner()
         current_failure = failure()
