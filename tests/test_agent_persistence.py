@@ -8,7 +8,14 @@ from pathlib import Path
 from dprauto.adapters.persistence import SQLiteAgentPersistence
 from dprauto.adapters.storage import LocalArtifactStorage
 from dprauto.agent.context import method_fingerprint
-from dprauto.agent.models import FixPlan, ToolCall, ToolContext, ToolResult
+from dprauto.agent.models import (
+    EvidencePack,
+    EvidenceRecord,
+    FixPlan,
+    ToolCall,
+    ToolContext,
+    ToolResult,
+)
 from dprauto.agent.state import create_agent_state
 from dprauto.agent.tools import GetBuildLogTool, ModifyBuildScriptTool, ReadFileTool, ToolRegistry
 from dprauto.agent.workflow import AgentWorkflow
@@ -203,6 +210,29 @@ class AgentPersistenceTests(unittest.TestCase):
             restored_attempt.failure.fingerprint,
             self.state["failure"].fingerprint,
         )
+
+    def test_evidence_pack_round_trips_through_checkpoint_serde(self):
+        persistence = SQLiteAgentPersistence(self.database, self.storage)
+        self.addCleanup(persistence.close)
+        evidence = EvidencePack(
+            records=(
+                EvidenceRecord(
+                    "read_file",
+                    "read pyproject.toml lines 1-40",
+                    {"path": "pyproject.toml", "start_line": 1, "end_line": 40},
+                ),
+            ),
+            rounds=1,
+            action_count=1,
+            completed=True,
+        )
+
+        encoded = persistence.checkpointer.serde.dumps_typed(evidence)
+        restored = persistence.checkpointer.serde.loads_typed(encoded)
+
+        self.assertIsInstance(restored, EvidencePack)
+        self.assertIsInstance(restored.records[0], EvidenceRecord)
+        self.assertEqual(restored.records[0].data["path"], "pyproject.toml")
 
     def test_multiround_checkpoint_resume_summary_and_duplicate_guard(self):
         first_persistence = SQLiteAgentPersistence(self.database, self.storage)

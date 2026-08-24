@@ -38,6 +38,8 @@ class SQLiteAgentPersistence:
             allowed_msgpack_modules=(
                 ("dprauto.agent.models", "AttemptedMethod"),
                 ("dprauto.agent.models", "ContextSummary"),
+                ("dprauto.agent.models", "EvidencePack"),
+                ("dprauto.agent.models", "EvidenceRecord"),
                 ("dprauto.agent.models", "FixPlan"),
                 ("dprauto.agent.models", "RepairCandidate"),
                 ("dprauto.agent.models", "ToolCall"),
