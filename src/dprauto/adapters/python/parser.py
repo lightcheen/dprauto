@@ -681,23 +681,45 @@ class PythonProjectParser:
                 ExtractedCommand(install_command, CommandPurpose.INSTALL, install_source, 0.8)
             )
 
-        test_command = ""
-        test_source = ""
         names = {PurePosixPath(path).name.lower() for path in build_files}
         if "tox.ini" in names:
             tox_env = self._default_tox_env(scanned)
-            test_command = f"tox -e {tox_env}" if tox_env else "tox"
-            test_source = "inferred:tox.ini"
-        elif "noxfile.py" in names:
+            inferred.append(
+                ExtractedCommand(
+                    f"tox -e {tox_env}" if tox_env else "tox",
+                    CommandPurpose.TEST,
+                    "inferred:tox.ini",
+                    0.75,
+                )
+            )
+        if "noxfile.py" in names:
             nox_session = self._default_nox_session(scanned)
-            test_command = f"nox -s {nox_session}" if nox_session else "nox"
-            test_source = "inferred:noxfile.py"
-        elif self._has_pytest_evidence(scanned):
-            test_command, test_source = "python -m pytest", "inferred:test-layout"
+            inferred.append(
+                ExtractedCommand(
+                    f"nox -s {nox_session}" if nox_session else "nox",
+                    CommandPurpose.TEST,
+                    "inferred:noxfile.py",
+                    0.75,
+                )
+            )
+        if self._has_pytest_evidence(scanned):
+            inferred.append(
+                ExtractedCommand(
+                    "python -m pytest",
+                    CommandPurpose.TEST,
+                    "inferred:test-layout",
+                    0.75,
+                )
+            )
         elif self._has_unittest_evidence(scanned):
-            test_command, test_source = "python -m unittest discover", "inferred:test-layout"
-        if test_command:
-            inferred.append(ExtractedCommand(test_command, CommandPurpose.TEST, test_source, 0.75))
+            inferred.append(
+                ExtractedCommand(
+                    "python -m unittest discover",
+                    CommandPurpose.TEST,
+                    "inferred:test-layout",
+                    0.75,
+                )
+            )
 
         for entry in entry_points:
             inferred.append(
@@ -742,7 +764,10 @@ class PythonProjectParser:
     @staticmethod
     def _has_unittest_evidence(scanned: ScannedProject) -> bool:
         for path in scanned.files:
-            if path.endswith(".py") and "test" in PurePosixPath(path).parts:
+            if path.endswith(".py") and any(
+                part.casefold() in {"test", "tests"}
+                for part in PurePosixPath(path).parts
+            ):
                 if "unittest" in scanned.read_text(path):
                     return True
         return False

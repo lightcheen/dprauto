@@ -247,6 +247,7 @@ commands = ruff check .
 
         self.assertEqual(profile.metadata["default_tox_env"], "py310")
         self.assertIn("tox -e py310", command_texts(profile, CommandPurpose.TEST))
+        self.assertIn("python -m pytest", command_texts(profile, CommandPurpose.TEST))
         environments = {
             item["name"]: item for item in profile.metadata["tox_environments"]
         }

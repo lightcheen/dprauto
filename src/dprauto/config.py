@@ -173,6 +173,7 @@ class VerificationConfig:
     tox_version: str = "4.23.2"
     nox_version: str = "2024.10.9"
     max_parallel_test_workers: int = 4
+    max_test_files_per_slice: int = 8
 
     def __post_init__(self) -> None:
         if self.command_timeout_seconds <= 0:
@@ -201,6 +202,10 @@ class VerificationConfig:
         if not 1 <= self.max_parallel_test_workers <= 32:
             raise ConfigurationError(
                 "verification.max_parallel_test_workers must be between 1 and 32"
+            )
+        if not 1 <= self.max_test_files_per_slice <= 32:
+            raise ConfigurationError(
+                "verification.max_test_files_per_slice must be between 1 and 32"
             )
 
 
@@ -390,6 +395,11 @@ def load_config(
         max_parallel_test_workers=_read_int(
             get("VERIFICATION_MAX_PARALLEL_TEST_WORKERS", "4"),
             "VERIFICATION_MAX_PARALLEL_TEST_WORKERS",
+            minimum=1,
+        ),
+        max_test_files_per_slice=_read_int(
+            get("VERIFICATION_MAX_TEST_FILES_PER_SLICE", "8"),
+            "VERIFICATION_MAX_TEST_FILES_PER_SLICE",
             minimum=1,
         ),
     )

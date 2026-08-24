@@ -28,6 +28,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.verification.tox_version, "4.23.2")
         self.assertEqual(config.verification.nox_version, "2024.10.9")
         self.assertEqual(config.verification.max_parallel_test_workers, 4)
+        self.assertEqual(config.verification.max_test_files_per_slice, 8)
         self.assertEqual(config.build.docker_network, "")
         self.assertTrue(config.build.strategy_portfolio_enabled)
         self.assertEqual(config.build.max_strategy_attempts, 3)
@@ -70,6 +71,7 @@ class ConfigurationTests(unittest.TestCase):
                 "DPRAUTO_VERIFICATION_TOX_VERSION": "4.24.2",
                 "DPRAUTO_VERIFICATION_NOX_VERSION": "2025.2.9",
                 "DPRAUTO_VERIFICATION_MAX_PARALLEL_TEST_WORKERS": "6",
+                "DPRAUTO_VERIFICATION_MAX_TEST_FILES_PER_SLICE": "5",
                 "DPRAUTO_LLM_PROVIDER": "provider",
                 "DPRAUTO_LLM_MODEL": "model",
                 "DPRAUTO_LLM_TEMPERATURE": "0.25",
@@ -111,6 +113,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.verification.tox_version, "4.24.2")
         self.assertEqual(config.verification.nox_version, "2025.2.9")
         self.assertEqual(config.verification.max_parallel_test_workers, 6)
+        self.assertEqual(config.verification.max_test_files_per_slice, 5)
         self.assertTrue(config.llm.enabled)
         self.assertEqual(config.llm.temperature, 0.25)
         self.assertEqual(config.llm.api_config_path, Path("/tmp/model.json"))
@@ -140,6 +143,8 @@ class ConfigurationTests(unittest.TestCase):
             {"DPRAUTO_VERIFICATION_NOX_VERSION": "2025 2 9"},
             {"DPRAUTO_VERIFICATION_MAX_PARALLEL_TEST_WORKERS": "0"},
             {"DPRAUTO_VERIFICATION_MAX_PARALLEL_TEST_WORKERS": "33"},
+            {"DPRAUTO_VERIFICATION_MAX_TEST_FILES_PER_SLICE": "0"},
+            {"DPRAUTO_VERIFICATION_MAX_TEST_FILES_PER_SLICE": "33"},
             {"DPRAUTO_BUILD_DOCKER_NETWORK": "invalid network"},
             {"DPRAUTO_VERIFICATION_DOCKER_NETWORK": "-invalid"},
             {"DPRAUTO_BUILD_POETRY_VERSION": ">=1.8"},

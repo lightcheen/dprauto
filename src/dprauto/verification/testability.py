@@ -19,6 +19,7 @@ from dprauto.verification.overlay import load_verification_requirements
 
 class TestabilityVerifier:
     level = VerificationLevel.TESTABILITY
+    __test__ = False
 
     def __init__(
         self,
@@ -27,31 +28,58 @@ class TestabilityVerifier:
         config: VerificationConfig | None = None,
     ) -> None:
         self.runtime = runtime
-        self.selector = selector or TestCommandSelector()
         self.config = config or VerificationConfig()
+        self.selector = selector or TestCommandSelector(
+            max_test_files=self.config.max_test_files_per_slice
+        )
 
     def supports(self, profile, level: VerificationLevel) -> bool:
         return level is self.level
 
     def verify(self, context: VerificationContext) -> VerificationResult:
-        selected = self.selector.select(
+        selection = self.selector.select_with_details(
             context.profile,
             python_version=self._runtime_python_version(context),
         )
-        if selected is None:
+        if selection is None:
+            required_environment = self.selector._required_environment(context.profile)
+            test_files = self.selector._metadata_paths(context.profile, "test_files")
+            safe_files = self.selector._metadata_paths(context.profile, "safe_test_files")
+            if required_environment:
+                skip_reason = "required-secret-environment"
+                summary = (
+                    "project tests require unavailable secret environment variable(s): "
+                    + ", ".join(required_environment)
+                )
+            elif test_files and not safe_files:
+                skip_reason = "external-tests-only"
+                summary = (
+                    "only external-service or expensive project tests were discovered; "
+                    "no local Testability command was executed"
+                )
+            else:
+                skip_reason = "no-project-test-command"
+                summary = (
+                    "no project-owned test command was discovered; smoke probes are excluded"
+                )
             check = VerificationCheck(
                 "project-tests",
                 VerificationStatus.SKIPPED,
-                "no project-owned test command was discovered; smoke probes are excluded",
+                summary,
             )
             return VerificationResult(
                 verification_id(self.level),
                 self.level,
                 VerificationStatus.SKIPPED,
                 summary=check.summary,
-                metadata={"command_kind": "none"},
+                metadata={
+                    "command_kind": "none",
+                    "skip_reason": skip_reason,
+                    "required_environment_variables": required_environment,
+                },
                 checks=(check,),
             )
+        selected = selection.command
         image = context.build_result.image_reference
         if not image:
             check = VerificationCheck(
@@ -81,10 +109,13 @@ class TestabilityVerifier:
                 summary=check.summary,
                 checks=(check,),
             )
-        test_command, parallel_workers = self._with_bounded_parallelism(
-            context.profile,
-            selected.command,
-        )
+        if selection.kind == "bounded-file-slice":
+            test_command, parallel_workers = selected.command, 0
+        else:
+            test_command, parallel_workers = self._with_bounded_parallelism(
+                context.profile,
+                selected.command,
+            )
         try:
             overlay_requirements = load_verification_requirements(context.workspace)
         except (OSError, UnicodeError, ValueError) as exc:
@@ -131,7 +162,11 @@ class TestabilityVerifier:
                 "command_kind": "project-test",
                 "command_source": selected.source,
                 "command": command.display,
-                "original_command": selected.command.display,
+                "original_command": selection.original_command.display,
+                "selection_kind": selection.kind,
+                "selection_reason": selection.reason,
+                "selection_targets": selection.targets,
+                "selection_target_count": len(selection.targets),
                 "parallel_workers": parallel_workers,
                 "parallel_source": (
                     "tox.ini+ci" if parallel_workers else ""

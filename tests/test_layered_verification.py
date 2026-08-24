@@ -319,6 +319,132 @@ class CommandSelectionTests(unittest.TestCase):
 
         self.assertIsNone(selected)
 
+    def test_large_pytest_suite_is_bounded_across_local_unit_directories(self) -> None:
+        project = ProjectProfile(
+            "project",
+            SourceReference("fixture://project"),
+            commands=(
+                project_command(
+                    "pytest tests/unit",
+                    CommandPurpose.TEST,
+                    "README.rst",
+                ),
+            ),
+            metadata={
+                "test_files": (
+                    "tests/unit/test_b.py",
+                    "tests/unit/test_a.py",
+                    "tests/unit/docs/test_b.py",
+                    "tests/unit/docs/test_a.py",
+                    "tests/unit/s3/test_api.py",
+                ),
+                "safe_test_files": (
+                    "tests/unit/test_b.py",
+                    "tests/unit/test_a.py",
+                    "tests/unit/docs/test_b.py",
+                    "tests/unit/docs/test_a.py",
+                    "tests/unit/s3/test_api.py",
+                ),
+            },
+        )
+
+        selection = TestCommandSelector(max_test_files=3).select_with_details(project)
+
+        self.assertIsNotNone(selection)
+        self.assertEqual(selection.kind, "bounded-file-slice")
+        self.assertEqual(
+            selection.targets,
+            (
+                "tests/unit/test_a.py",
+                "tests/unit/docs/test_a.py",
+                "tests/unit/s3/test_api.py",
+            ),
+        )
+        self.assertEqual(
+            selection.command.command.argv,
+            (
+                "python",
+                "-m",
+                "pytest",
+                "tests/unit/test_a.py",
+                "tests/unit/docs/test_a.py",
+                "tests/unit/s3/test_api.py",
+            ),
+        )
+        self.assertEqual(selection.original_command.display, "pytest tests/unit")
+
+    def test_external_test_files_are_excluded_even_for_a_small_suite(self) -> None:
+        selection = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "project",
+                SourceReference("fixture://project"),
+                commands=(
+                    project_command(
+                        "python -m pytest",
+                        CommandPurpose.TEST,
+                        "inferred:test-layout",
+                    ),
+                ),
+                metadata={
+                    "test_files": (
+                        "tests/test_remote.py",
+                        "tests/test_unit.py",
+                    ),
+                    "safe_test_files": ("tests/test_unit.py",),
+                    "external_test_files": ("tests/test_remote.py",),
+                },
+            )
+        )
+
+        self.assertEqual(selection.targets, ("tests/test_unit.py",))
+        self.assertEqual(
+            selection.command.command.display,
+            "python -m pytest tests/test_unit.py",
+        )
+
+    def test_coverage_only_arguments_are_removed_from_testability(self) -> None:
+        selection = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "project",
+                SourceReference("fixture://project"),
+                commands=(
+                    project_command(
+                        "pytest --cov=sample --cov-report xml --tb=short",
+                        CommandPurpose.TEST,
+                        ".github/workflows/tests.yml",
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(selection.kind, "coverage-normalized")
+        self.assertEqual(selection.command.command.display, "pytest --tb=short")
+        self.assertEqual(
+            selection.original_command.display,
+            "pytest --cov=sample --cov-report xml --tb=short",
+        )
+
+    def test_required_secret_or_external_only_tests_are_not_executed(self) -> None:
+        secret = ProjectProfile(
+            "secret-project",
+            SourceReference("fixture://secret"),
+            commands=(project_command("pytest", CommandPurpose.TEST, "pyproject.toml"),),
+            metadata={"test_required_environment_variables": ("SERVICE_TOKEN",)},
+        )
+        external = ProjectProfile(
+            "external-project",
+            SourceReference("fixture://external"),
+            commands=(project_command("pytest", CommandPurpose.TEST, "pyproject.toml"),),
+            metadata={
+                "test_files": ("tests/integration/test_api.py",),
+                "safe_test_files": (),
+                "external_test_files": ("tests/integration/test_api.py",),
+            },
+        )
+
+        self.assertIsNone(TestCommandSelector().select(secret))
+        self.assertIsNone(TestCommandSelector().select(external))
+
 
 class VerificationPolicyTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -396,6 +522,57 @@ class VerificationPolicyTests(unittest.TestCase):
             self.runtime.commands[0].display,
         )
         self.assertEqual(result.metadata["original_command"], "python -m pytest -q")
+
+    def test_testability_records_bounded_slice_and_original_command(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest tests/unit", CommandPurpose.TEST, "README.rst"),
+            metadata={
+                "test_files": tuple(f"tests/unit/test_{index}.py" for index in range(5)),
+                "safe_test_files": tuple(
+                    f"tests/unit/test_{index}.py" for index in range(5)
+                ),
+            },
+        )
+        verifier = TestabilityVerifier(
+            self.runtime,
+            config=VerificationConfig(max_test_files_per_slice=2),
+        )
+
+        result = verifier.verify(build_context(project, self.workspace))
+
+        self.assertEqual(result.metadata["selection_kind"], "bounded-file-slice")
+        self.assertEqual(result.metadata["selection_target_count"], 2)
+        self.assertEqual(
+            result.metadata["selection_targets"],
+            ("tests/unit/test_0.py", "tests/unit/test_1.py"),
+        )
+        self.assertEqual(result.metadata["original_command"], "pytest tests/unit")
+        self.assertTrue(
+            self.runtime.commands[0].display.endswith(
+                "python -m pytest tests/unit/test_0.py tests/unit/test_1.py"
+            )
+        )
+
+    def test_testability_skips_required_secret_without_running_a_container(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest", CommandPurpose.TEST, "pyproject.toml"),
+            metadata={"test_required_environment_variables": ("SERVICE_TOKEN",)},
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.SKIPPED)
+        self.assertEqual(result.metadata["skip_reason"], "required-secret-environment")
+        self.assertEqual(
+            result.metadata["required_environment_variables"],
+            ("SERVICE_TOKEN",),
+        )
+        self.assertIn("SERVICE_TOKEN", result.summary)
+        self.assertFalse(self.runtime.commands)
 
     def test_testability_installs_agent_overlay_only_in_temporary_container(self) -> None:
         project = profile(

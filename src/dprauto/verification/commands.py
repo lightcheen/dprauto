@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import shlex
+from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 from dprauto.adapters.python.test_matrix import matrix_entry, preferred_matrix_name
@@ -21,8 +24,24 @@ def is_smoke_command(command: ProjectCommand) -> bool:
     return bool(_SMOKE_PATTERN.search(command.command.display))
 
 
+@dataclass(frozen=True, slots=True)
+class TestCommandSelection:
+    command: ProjectCommand
+    original_command: CommandSpec
+    kind: str = "project-command"
+    targets: tuple[str, ...] = ()
+    reason: str = "selected the narrowest local project test command"
+
+
 class TestCommandSelector:
     """Select one bounded, local project test command."""
+
+    __test__ = False
+
+    def __init__(self, *, max_test_files: int = 8) -> None:
+        if not 1 <= max_test_files <= 32:
+            raise ValueError("max_test_files must be between 1 and 32")
+        self.max_test_files = max_test_files
 
     def select(
         self,
@@ -30,6 +49,24 @@ class TestCommandSelector:
         *,
         python_version: str = "",
     ) -> ProjectCommand | None:
+        selection = self.select_with_details(
+            profile,
+            python_version=python_version,
+        )
+        return selection.command if selection is not None else None
+
+    def select_with_details(
+        self,
+        profile: ProjectProfile,
+        *,
+        python_version: str = "",
+    ) -> TestCommandSelection | None:
+        if self._required_environment(profile):
+            return None
+        test_files = self._metadata_paths(profile, "test_files")
+        safe_files = self._metadata_paths(profile, "safe_test_files")
+        if test_files and not safe_files:
+            return None
         candidates = [
             item
             for item in profile.commands
@@ -48,7 +85,164 @@ class TestCommandSelector:
                 -item.confidence,
             ),
         )
-        return self._bounded_matrix_command(profile, selected, python_version)
+        selected = self._bounded_matrix_command(profile, selected, python_version)
+        original = selected.command
+        bounded, targets, reason = self._bounded_local_command(profile, selected)
+        if targets:
+            kind = "bounded-file-slice"
+        elif bounded.command != original:
+            kind = "coverage-normalized"
+        else:
+            kind = "project-command"
+        return TestCommandSelection(
+            bounded,
+            original,
+            kind,
+            targets,
+            reason,
+        )
+
+    def _bounded_local_command(
+        self,
+        profile: ProjectProfile,
+        command: ProjectCommand,
+    ) -> tuple[ProjectCommand, tuple[str, ...], str]:
+        normalized = self._without_coverage_observation(command)
+        safe_files = self._metadata_paths(profile, "safe_test_files")
+        external_files = self._metadata_paths(profile, "external_test_files")
+        needs_targets = len(safe_files) > self.max_test_files or bool(external_files)
+        if (
+            not needs_targets
+            or not safe_files
+            or command.command.cwd
+            or not self._is_direct_pytest(command.command.display)
+        ):
+            reason = (
+                "removed coverage-only observation arguments"
+                if normalized.command != command.command
+                else "selected the narrowest local project test command"
+            )
+            return normalized, (), reason
+        targets = self._representative_targets(safe_files)
+        bounded_spec = CommandSpec(
+            ("python", "-m", "pytest", *targets),
+            purpose=command.command.purpose,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+        )
+        return (
+            ProjectCommand(
+                command.name,
+                bounded_spec,
+                f"bounded:{command.source}",
+                command.confidence,
+            ),
+            targets,
+            (
+                f"selected {len(targets)} local test file(s) from "
+                f"{len(safe_files)} safe and {len(external_files)} external-risk file(s)"
+            ),
+        )
+
+    def _representative_targets(self, paths: tuple[str, ...]) -> tuple[str, ...]:
+        groups: dict[str, list[str]] = {}
+        for path in paths:
+            groups.setdefault(PurePosixPath(path).parent.as_posix(), []).append(path)
+        ordered = [
+            sorted(groups[parent])
+            for parent in sorted(
+                groups,
+                key=lambda item: (len(PurePosixPath(item).parts), item),
+            )
+        ]
+        selected: list[str] = []
+        while len(selected) < self.max_test_files and any(ordered):
+            for group in ordered:
+                if group and len(selected) < self.max_test_files:
+                    selected.append(group.pop(0))
+        return tuple(selected)
+
+    @staticmethod
+    def _metadata_paths(profile: ProjectProfile, key: str) -> tuple[str, ...]:
+        values = profile.metadata.get(key, ())
+        if not isinstance(values, (list, tuple)):
+            return ()
+        selected: list[str] = []
+        for value in values[:512]:
+            if not isinstance(value, str):
+                continue
+            path = PurePosixPath(value)
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or path.suffix.casefold() != ".py"
+            ):
+                continue
+            selected.append(path.as_posix())
+        return tuple(dict.fromkeys(selected))
+
+    @staticmethod
+    def _required_environment(profile: ProjectProfile) -> tuple[str, ...]:
+        values = profile.metadata.get("test_required_environment_variables", ())
+        if not isinstance(values, (list, tuple)):
+            return ()
+        return tuple(
+            value
+            for value in values[:32]
+            if isinstance(value, str)
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value)
+        )
+
+    @staticmethod
+    def _is_direct_pytest(command: str) -> bool:
+        return bool(
+            re.search(
+                r"(?:^|\s)(?:python\S*\s+-m\s+)?(?:pytest|py\.test)(?:\s|$)",
+                command,
+                re.IGNORECASE,
+            )
+        ) and not re.search(r"[;&|]", command)
+
+    @staticmethod
+    def _without_coverage_observation(command: ProjectCommand) -> ProjectCommand:
+        display = command.command.display
+        if not TestCommandSelector._is_direct_pytest(display) or "cov" not in display.casefold():
+            return command
+        try:
+            tokens = shlex.split(display)
+        except ValueError:
+            return command
+        filtered: list[str] = []
+        skip_next = False
+        value_options = {"--cov", "--cov-report", "--cov-config", "--cov-fail-under"}
+        for token in tokens:
+            if skip_next:
+                skip_next = False
+                continue
+            lowered = token.casefold()
+            if lowered in value_options:
+                skip_next = True
+                continue
+            if lowered.startswith(
+                ("--cov=", "--cov-report=", "--cov-config=", "--cov-fail-under=")
+            ) or lowered in {"--cov-append", "--cov-branch", "--no-cov-on-fail"}:
+                continue
+            filtered.append(token)
+        if filtered == tokens or not filtered:
+            return command
+        spec = CommandSpec(
+            tuple(filtered),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+        )
+        return ProjectCommand(
+            command.name,
+            spec,
+            f"normalized:{command.source}",
+            command.confidence,
+        )
 
     @staticmethod
     def _has_unresolved_variables(command: str) -> bool:
