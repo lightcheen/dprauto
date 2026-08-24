@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -248,6 +249,8 @@ class FailoverLLMClient:
         if attempts_per_model <= 0:
             raise ValueError("attempts_per_model must be positive")
         self.attempts_per_model = attempts_per_model
+        self._preference_lock = threading.Lock()
+        self._preferred_model_index = 0
         self.operation_attempt_limits = dict(
             operation_attempt_limits
             or {
@@ -266,8 +269,10 @@ class FailoverLLMClient:
         total_attempt = 0
         operation = str(request.metadata.get("operation", "")).strip()
         max_attempts = self.operation_attempt_limits.get(operation)
+        model_indices = self._model_indices_by_preference()
         for model_attempt in range(1, self.attempts_per_model + 1):
-            for model_index, client in enumerate(self.clients):
+            for model_index in model_indices:
+                client = self.clients[model_index]
                 if max_attempts is not None and total_attempt >= max_attempts:
                     raise LLMTimeoutError(
                         f"LLM failover stopped after {max_attempts} "
@@ -301,13 +306,34 @@ class FailoverLLMClient:
                     deadline_at=request.deadline_at,
                 )
                 try:
-                    return client.complete(attempted)
+                    response = client.complete(attempted)
                 except LLMTimeoutError as exc:
+                    self._advance_after_timeout(model_index)
                     timeouts.append(
                         f"{client.settings.name or client.settings.model} attempt "
                         f"{model_attempt}: {exc.message}"
                     )
+                    continue
+                self._prefer_successful_model(model_index)
+                return response
         raise LLMTimeoutError(
             "all configured LLM models timed out after same-model retries",
             details={"attempts": total_attempt, "timeouts": tuple(timeouts)},
         )
+
+    def _model_indices_by_preference(self) -> tuple[int, ...]:
+        with self._preference_lock:
+            preferred = self._preferred_model_index
+        return tuple(
+            (preferred + offset) % len(self.clients)
+            for offset in range(len(self.clients))
+        )
+
+    def _advance_after_timeout(self, model_index: int) -> None:
+        with self._preference_lock:
+            if self._preferred_model_index == model_index:
+                self._preferred_model_index = (model_index + 1) % len(self.clients)
+
+    def _prefer_successful_model(self, model_index: int) -> None:
+        with self._preference_lock:
+            self._preferred_model_index = model_index

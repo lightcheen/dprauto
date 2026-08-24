@@ -273,7 +273,7 @@ class APILLMClientTests(unittest.TestCase):
             self.assertEqual(calls[0][0]["max_tokens"], 4096)
             self.assertIn("Bearer", calls[0][1]["Authorization"])
 
-    def test_timeout_switches_model_before_retrying_same_model(self) -> None:
+    def test_timeout_switches_model_and_reuses_the_successful_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config_path = root / "myapi.json"
@@ -326,18 +326,25 @@ class APILLMClientTests(unittest.TestCase):
                     metadata={"run_id": "failover-test"},
                 )
             )
+            second = client.complete(
+                LLMRequest(
+                    (LLMMessage("user", "continue repairing this project"),),
+                    metadata={"run_id": "failover-test"},
+                )
+            )
 
             self.assertEqual(response.content, "recovered")
-            self.assertEqual(attempts, {"slow-model": 1, "fallback-model": 1})
+            self.assertEqual(second.content, "recovered")
+            self.assertEqual(attempts, {"slow-model": 1, "fallback-model": 2})
             records = [
                 json.loads(line)
                 for path in (root / "logs").glob("*.log")
                 for line in path.read_text().splitlines()
             ]
-            self.assertEqual(len(records), 2)
+            self.assertEqual(len(records), 3)
             self.assertEqual(
                 [item["metadata"]["configured_model"] for item in records],
-                ["slow-model", "fallback-model"],
+                ["slow-model", "fallback-model", "fallback-model"],
             )
             self.assertNotIn("first-secret", "".join(map(json.dumps, records)))
             self.assertNotIn("second-secret", "".join(map(json.dumps, records)))
