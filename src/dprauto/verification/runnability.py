@@ -214,7 +214,38 @@ class RunnabilityVerifier:
             result.level is VerificationLevel.TESTABILITY and result.passed
             for result in context.prior_results
         )
+        tests_unavailable_reason = next(
+            (
+                str(result.metadata.get("skip_reason", ""))
+                for result in context.prior_results
+                if result.level is VerificationLevel.TESTABILITY
+                and result.status is VerificationStatus.SKIPPED
+                and result.metadata.get("skip_reason")
+                in {"required-secret-environment", "external-tests-only"}
+            ),
+            "",
+        )
         api_ok = api_found or tests_passed
+        api_status = (
+            VerificationStatus.PASSED
+            if api_ok
+            else (
+                VerificationStatus.SKIPPED
+                if import_ok and tests_unavailable_reason
+                else VerificationStatus.FAILED
+            )
+        )
+        if api_ok:
+            api_summary = "public API was observed or project tests passed"
+        elif tests_unavailable_reason:
+            api_summary = (
+                "public API evidence was unavailable and project tests were explicitly "
+                f"skipped by policy: {tests_unavailable_reason}"
+            )
+        else:
+            api_summary = (
+                "import alone is only a smoke test; no public API or passing tests were observed"
+            )
         checks = (
             VerificationCheck(
                 "library-import",
@@ -225,9 +256,13 @@ class RunnabilityVerifier:
             ),
             VerificationCheck(
                 "library-api-or-tests",
-                VerificationStatus.PASSED if api_ok else VerificationStatus.FAILED,
-                "public API was observed or project tests passed" if api_ok else "import alone is only a smoke test; no public API or passing tests were observed",
-                metadata={"public_api_found": api_found, "project_tests_passed": tests_passed},
+                api_status,
+                api_summary,
+                metadata={
+                    "public_api_found": api_found,
+                    "project_tests_passed": tests_passed,
+                    "tests_unavailable_reason": tests_unavailable_reason,
+                },
             ),
         )
         return self._result(checks, command_result=execution.command_result, metadata={"module": module})

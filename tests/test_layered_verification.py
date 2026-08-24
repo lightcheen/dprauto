@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from dprauto.domain.models import (
     ProjectCommand,
     ProjectProfile,
     SourceReference,
+    VerificationResult,
 )
 from dprauto.ports.runtime import ContainerExecution, ImageInspection, WebProbe
 from dprauto.ports.verification import VerificationContext
@@ -852,6 +854,33 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertEqual(
             next(check for check in result.checks if check.name == "library-api-or-tests").status,
             VerificationStatus.FAILED,
+        )
+
+    def test_library_import_is_accepted_when_tests_are_explicitly_unavailable(self) -> None:
+        project = profile(ProjectType.LIBRARY, import_modules=("sample",))
+        self.runtime.library_api_count = 0
+        skipped_tests = VerificationResult(
+            "testability-policy-skip",
+            VerificationLevel.TESTABILITY,
+            VerificationStatus.SKIPPED,
+            summary="tests require a secret",
+            metadata={"skip_reason": "required-secret-environment"},
+        )
+        context = replace(
+            build_context(project, self.workspace),
+            prior_results=(skipped_tests,),
+        )
+
+        result = RunnabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        policy_check = next(
+            check for check in result.checks if check.name == "library-api-or-tests"
+        )
+        self.assertEqual(policy_check.status, VerificationStatus.SKIPPED)
+        self.assertEqual(
+            policy_check.metadata["tests_unavailable_reason"],
+            "required-secret-environment",
         )
 
     def test_service_persists_each_layer_and_aggregate(self) -> None:
