@@ -311,7 +311,8 @@ class PythonProjectParser:
 
         names: list[str] = []
         assignments = re.finditer(
-            r"(?ms)^\s*([A-Za-z0-9_.-]+)\s*=\s*\[(.*?)\](?=\s*^[A-Za-z0-9_.-]+\s*=|\Z)",
+            r"(?ms)^\s*([A-Za-z0-9_.-]+)\s*=\s*\[(.*?)\]"
+            r"(?=\s*(?:^[A-Za-z0-9_.-]+\s*=|\Z))",
             section,
         )
         for match in assignments:

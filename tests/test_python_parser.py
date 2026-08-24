@@ -219,6 +219,37 @@ def optional_lookup():
             ("SERVICE_TOKEN",),
         )
 
+    def test_last_test_extra_with_nested_brackets_is_not_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "pyproject.toml").write_text(
+                """[project]
+name = "fixture"
+version = "1.0.0"
+
+[project.optional-dependencies]
+all = ["lz4>=0.10"]
+tests = [
+    "fsspec[http]>=2022.8.2",
+    "pytest>=7",
+]
+""",
+                encoding="utf-8",
+            )
+            (root / "requirements-dev.txt").write_text(
+                "scipy>=0.0.dev0\n",
+                encoding="utf-8",
+            )
+            (root / "test_fixture.py").write_text(
+                "def test_fixture(): pass\n",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://last-extra"), root)
+
+        self.assertEqual(profile.metadata["test_dependency_extras"], ("tests",))
+        self.assertEqual(profile.metadata["test_dependency_groups"], ("tests",))
+
     def test_module_scope_stdio_rewrapping_is_recorded_for_pytest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
