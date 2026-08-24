@@ -18,8 +18,32 @@ from dprauto.serialization import to_json_bytes
 
 _ANALYSIS_SCHEMA = {
     "type": "object",
-    "required": ["diagnosis"],
-    "properties": {"diagnosis": {"type": "string"}},
+    "required": ["diagnosis", "claims"],
+    "properties": {
+        "diagnosis": {"type": "string", "minLength": 1},
+        "claims": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+                "type": "object",
+                "required": ["claim", "evidence_refs", "counterevidence_refs"],
+                "properties": {
+                    "claim": {"type": "string", "minLength": 1},
+                    "evidence_refs": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "counterevidence_refs": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
     "additionalProperties": False,
 }
 
@@ -182,35 +206,60 @@ class LLMRepairPlanner:
         payload = {
             "context": context,
             "attempt_number": state.get("attempt_number", 0),
+            "evidence_reference_catalog": self._evidence_reference_catalog(context),
         }
         encoded = to_json_bytes(payload).decode()
-        response = self.client.complete(
-            LLMRequest(
-                messages=(
-                    LLMMessage(
-                        "system",
-                        "Analyze one deterministic build failure. Use only the supplied bounded "
-                        "evidence. Do not propose source-code changes. Return exactly one JSON "
-                        "object with a non-empty string field named diagnosis: "
-                        '{"diagnosis":"concise root-cause analysis"}. Do not rename or nest '
-                        "the diagnosis field.",
+        allowed_refs = {
+            str(item["ref"])
+            for item in payload["evidence_reference_catalog"]
+        }
+        feedback = ""
+        for contract_attempt in range(1, 3):
+            user_content = encoded
+            if feedback:
+                user_content += (
+                    "\n\nThe previous diagnosis violated its evidence contract. "
+                    "Correct it and return the full diagnosis again:\n"
+                    + feedback
+                )
+            response = self.client.complete(
+                LLMRequest(
+                    messages=(
+                        LLMMessage(
+                            "system",
+                            "Analyze one deterministic build failure using only supplied bounded "
+                            "evidence. Do not propose source-code changes. Return exactly one JSON "
+                            "object shaped as "
+                            '{"diagnosis":"concise root cause","claims":['
+                            '{"claim":"one factual claim","evidence_refs":['
+                            '"failure:key_log"],"counterevidence_refs":[]}]}. '
+                            "Every claim must cite one or more exact refs from "
+                            "evidence_reference_catalog. List relevant contrary evidence in "
+                            "counterevidence_refs; use an empty list only when none is present. "
+                            "Do not invent paths, observations, log facts, dependencies, or refs.",
+                        ),
+                        LLMMessage("user", user_content),
                     ),
-                    LLMMessage("user", encoded),
-                ),
-                response_schema=_ANALYSIS_SCHEMA,
-                metadata={
-                    "operation": "analyze_failure",
-                    "run_id": state["run_id"],
-                    "context_characters": len(encoded),
-                },
-                deadline_at=state.get("deadline_at"),
+                    response_schema=_ANALYSIS_SCHEMA,
+                    metadata={
+                        "operation": "analyze_failure",
+                        "run_id": state["run_id"],
+                        "context_characters": len(user_content),
+                        "contract_attempt": contract_attempt,
+                    },
+                    deadline_at=state.get("deadline_at"),
+                )
             )
-        )
-        parsed = self._object(response)
-        diagnosis = self._diagnosis(parsed)
-        if not diagnosis:
-            raise LLMError("LLM failure analysis did not contain diagnosis")
-        return diagnosis
+            try:
+                return self._evidence_backed_diagnosis(response, allowed_refs)
+            except LLMError as exc:
+                if contract_attempt == 2:
+                    raise LLMError(
+                        "LLM failure analysis violated its evidence contract after one "
+                        f"correction: {exc}"
+                    ) from exc
+                feedback = str(exc)
+        raise AssertionError("unreachable analysis contract loop")
 
     def plan_fix(
         self,
@@ -392,44 +441,118 @@ class LLMRepairPlanner:
             raise LLMError("LLM response must be a JSON object")
         return parsed
 
-    @staticmethod
-    def _diagnosis(parsed: Mapping[str, Any]) -> str:
-        """Normalize common provider-safe analysis shapes without accepting actions."""
+    def _evidence_backed_diagnosis(
+        self,
+        response: LLMResponse,
+        allowed_refs: set[str],
+    ) -> str:
+        parsed = self._object(response)
+        diagnosis = parsed.get("diagnosis")
+        if not isinstance(diagnosis, str) or not diagnosis.strip():
+            raise LLMError("LLM failure analysis must contain a non-empty diagnosis")
+        raw_claims = parsed.get("claims")
+        if not isinstance(raw_claims, list) or not 1 <= len(raw_claims) <= 8:
+            raise LLMError("LLM failure analysis must contain between 1 and 8 claims")
+        rendered: list[str] = [diagnosis.strip(), "Evidence-backed claims:"]
+        for index, raw_claim in enumerate(raw_claims, start=1):
+            if not isinstance(raw_claim, Mapping):
+                raise LLMError(f"analysis claim {index} must be an object")
+            claim = raw_claim.get("claim")
+            if not isinstance(claim, str) or not claim.strip():
+                raise LLMError(f"analysis claim {index} must be non-empty")
+            evidence_refs = raw_claim.get("evidence_refs")
+            counter_refs = raw_claim.get("counterevidence_refs")
+            if not isinstance(evidence_refs, list) or not evidence_refs or any(
+                not isinstance(item, str) or not item.strip() for item in evidence_refs
+            ):
+                raise LLMError(
+                    f"analysis claim {index} must cite at least one evidence ref"
+                )
+            if not isinstance(counter_refs, list) or any(
+                not isinstance(item, str) or not item.strip() for item in counter_refs
+            ):
+                raise LLMError(
+                    f"analysis claim {index} counterevidence_refs must be a list"
+                )
+            cited = tuple(dict.fromkeys((*evidence_refs, *counter_refs)))
+            unknown = tuple(ref for ref in cited if ref not in allowed_refs)
+            if unknown:
+                raise LLMError(
+                    f"analysis claim {index} cited unknown evidence ref(s): "
+                    + ", ".join(unknown)
+                )
+            support = ", ".join(dict.fromkeys(evidence_refs))
+            contrary = ", ".join(dict.fromkeys(counter_refs)) or "none"
+            rendered.append(
+                f"{index}. {claim.strip()} [evidence: {support}; contrary: {contrary}]"
+            )
+        return "\n".join(rendered)
 
-        direct = parsed.get("diagnosis")
-        if isinstance(direct, str) and direct.strip():
-            return direct.strip()
-        candidates: list[Any] = [
-            parsed.get("root_cause"),
-            parsed.get("analysis"),
-            parsed.get("failure_analysis"),
-            parsed.get("possible_cause"),
-            parsed.get("explanation"),
+    @staticmethod
+    def _evidence_reference_catalog(
+        context: Mapping[str, Any],
+    ) -> tuple[dict[str, str], ...]:
+        catalog: list[dict[str, str]] = [
+            {"ref": "failure:summary", "description": "normalized failure fields"}
         ]
-        for candidate in candidates:
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate.strip()
-            if isinstance(candidate, Mapping):
-                values = [
-                    candidate.get(name)
-                    for name in (
-                        "diagnosis",
-                        "root_cause",
-                        "cause",
-                        "summary",
-                        "analysis",
-                        "details",
-                        "explanation",
-                    )
-                ]
-                selected = [
-                    value.strip()
-                    for value in values
-                    if isinstance(value, str) and value.strip()
-                ]
-                if selected:
-                    return "\n".join(dict.fromkeys(selected))
-        return ""
+        failure = context.get("current_failure")
+        if isinstance(failure, Mapping):
+            if failure.get("key_log"):
+                catalog.append(
+                    {"ref": "failure:key_log", "description": "bounded failure log"}
+                )
+            evidence = failure.get("evidence")
+            if isinstance(evidence, (list, tuple)):
+                catalog.extend(
+                    {
+                        "ref": f"failure:evidence:{index}",
+                        "description": str(value)[:200],
+                    }
+                    for index, value in enumerate(evidence)
+                    if isinstance(value, str) and value
+                )
+        for record in context.get("evidence", ()):
+            if not isinstance(record, Mapping):
+                continue
+            ref = record.get("ref")
+            if not isinstance(ref, str) or not ref:
+                continue
+            data = record.get("data")
+            path = data.get("path") if isinstance(data, Mapping) else ""
+            description = f"{record.get('tool', 'observation')}: {path or record.get('summary', '')}"
+            catalog.append({"ref": ref, "description": description[:200]})
+            if isinstance(path, str) and path:
+                catalog.append(
+                    {"ref": f"path:{path}", "description": f"observed file {path}"}
+                )
+        for script in context.get("current_build_scripts", ()):
+            if not isinstance(script, Mapping):
+                continue
+            path = script.get("path")
+            if isinstance(path, str) and path:
+                catalog.append(
+                    {"ref": f"path:{path}", "description": f"build script {path}"}
+                )
+        profile = context.get("project_profile")
+        if profile is not None:
+            catalog.extend(
+                (
+                    {
+                        "ref": "profile:dependency_names",
+                        "description": "deterministically parsed project dependencies",
+                    },
+                    {
+                        "ref": "profile:commands",
+                        "description": "deterministically extracted project commands",
+                    },
+                    {
+                        "ref": "profile:build_files",
+                        "description": "deterministically identified build files",
+                    },
+                )
+            )
+        deduplicated = {item["ref"]: item for item in catalog}
+        return tuple(deduplicated.values())
 
     def _repair_policy(self, state: AgentState) -> Mapping[str, Any]:
         policy: dict[str, Any] = {

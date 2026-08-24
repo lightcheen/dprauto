@@ -143,7 +143,19 @@ class LLMRepairPlannerTests(unittest.TestCase):
     def test_llm_analyzes_and_selects_structured_tool_call(self) -> None:
         client = RecordingLLMClient(
             [
-                LLMResponse("", structured={"diagnosis": "RUN false is intentional"}),
+                LLMResponse(
+                    "",
+                    structured={
+                        "diagnosis": "RUN false is intentional",
+                        "claims": [
+                            {
+                                "claim": "the failing instruction exits with code 1",
+                                "evidence_refs": ["failure:key_log"],
+                                "counterevidence_refs": [],
+                            }
+                        ],
+                    },
+                ),
                 LLMResponse(
                     "",
                     structured={
@@ -173,7 +185,8 @@ class LLMRepairPlannerTests(unittest.TestCase):
             {"modify_build_script": "modify a build script"},
         )
 
-        self.assertEqual(diagnosis, "RUN false is intentional")
+        self.assertIn("RUN false is intentional", diagnosis)
+        self.assertIn("[evidence: failure:key_log; contrary: none]", diagnosis)
         self.assertEqual(plan.actions[0].tool, "modify_build_script")
         self.assertEqual(client.requests[0].metadata["operation"], "analyze_failure")
         self.assertEqual(client.requests[1].metadata["operation"], "plan_fix")
@@ -181,24 +194,58 @@ class LLMRepairPlannerTests(unittest.TestCase):
         self.assertIn("patch_system_packages", client.requests[1].messages[0].content)
         self.assertIn("one high-risk", client.requests[1].messages[0].content)
         self.assertIn(
-            '"diagnosis":"concise root-cause analysis"',
+            '"diagnosis":"concise root cause"',
             client.requests[0].messages[0].content,
         )
+        self.assertIn("evidence_reference_catalog", client.requests[0].messages[1].content)
         self.assertIn('"hypothesis":"..."', client.requests[1].messages[0].content)
 
-    def test_analysis_normalizes_shapes_observed_in_real_evaluation(self) -> None:
-        responses = (
-            {"analysis": "installation failed", "root_cause": "git is missing"},
-            {"failure_analysis": {"root_cause": "the lock file is stale"}},
+    def test_analysis_corrects_missing_claims_and_unknown_evidence_refs(self) -> None:
+        client = RecordingLLMClient(
+            [
+                LLMResponse("", structured={"diagnosis": "git may be missing"}),
+                LLMResponse(
+                    "",
+                    structured={
+                        "diagnosis": "the build instruction itself exits with code 1",
+                        "claims": [
+                            {
+                                "claim": "the log records a deterministic non-zero exit",
+                                "evidence_refs": ["failure:key_log"],
+                                "counterevidence_refs": [],
+                            }
+                        ],
+                    },
+                ),
+            ]
         )
-        for structured, expected in zip(
-            responses,
-            ("git is missing", "the lock file is stale"),
-        ):
-            with self.subTest(structured=structured):
-                client = RecordingLLMClient([LLMResponse("", structured=structured)])
-                diagnosis = LLMRepairPlanner(client).analyze_failure(failed_state(), ())
-                self.assertEqual(diagnosis, expected)
+
+        diagnosis = LLMRepairPlanner(client).analyze_failure(failed_state(), ())
+
+        self.assertIn("deterministic non-zero exit", diagnosis)
+        self.assertEqual(len(client.requests), 2)
+        self.assertIn("must contain between 1 and 8 claims", client.requests[1].messages[1].content)
+        self.assertEqual(client.requests[1].metadata["contract_attempt"], 2)
+
+        invalid = {
+            "diagnosis": "invented file",
+            "claims": [
+                {
+                    "claim": "a missing manifest proves the cause",
+                    "evidence_refs": ["path:not-observed.toml"],
+                    "counterevidence_refs": [],
+                }
+            ],
+        }
+        with self.assertRaisesRegex(LLMError, "unknown evidence ref"):
+            LLMRepairPlanner(
+                RecordingLLMClient(
+                    [
+                        LLMResponse("", structured=invalid),
+                        LLMResponse("", structured=invalid),
+                    ]
+                )
+            ).analyze_failure(failed_state(), ())
 
     def test_unavailable_tool_is_rejected_before_execution(self) -> None:
         invalid = LLMResponse(

@@ -53,7 +53,16 @@ class ScriptedRepairLLM:
         if operation == "analyze_failure":
             return LLMResponse(
                 "",
-                structured={"diagnosis": "Dockerfile has an intentionally failing RUN command"},
+                structured={
+                    "diagnosis": "Dockerfile has an intentionally failing RUN command",
+                    "claims": [
+                        {
+                            "claim": "the build log records the injected non-zero RUN exit",
+                            "evidence_refs": ["failure:key_log"],
+                            "counterevidence_refs": [],
+                        }
+                    ],
+                },
             )
         return LLMResponse(
             "",

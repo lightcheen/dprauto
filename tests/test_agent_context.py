@@ -53,6 +53,7 @@ class AgentContextManagerTests(unittest.TestCase):
             ("Dockerfile",),
         )
         self.assertEqual(context["evidence"][0]["data"]["start_line"], 1)
+        self.assertEqual(context["evidence"][0]["ref"], "observation:1")
         self.assertEqual(context["evidence"][0]["data"]["next_start_line"], 401)
         self.assertIn(
             "sys.stdout = io.TextIOWrapper",
@@ -142,6 +143,7 @@ class AgentContextManagerTests(unittest.TestCase):
         )
         self.assertIn("reduce install scope", context["current_failure"]["suggestions"])
         self.assertEqual(context["evidence"][0]["tool"], "read_file")
+        self.assertEqual(context["evidence"][0]["ref"], "observation:0")
         self.assertEqual(context["evidence"][0]["data"]["path"], "Dockerfile")
 
 

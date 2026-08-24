@@ -176,11 +176,11 @@ class AgentContextManager:
     ) -> tuple[dict[str, Any], ...]:
         """Retain bounded read/search evidence instead of only generated scripts."""
 
-        selected = observations[-12:]
+        selected = tuple(enumerate(observations))[-12:]
         per_record_limit = max(400, character_limit // max(1, min(len(selected), 8)))
         records: list[dict[str, Any]] = []
         used = 0
-        for observation in reversed(selected):
+        for observation_index, observation in reversed(selected):
             remaining = character_limit - used
             if remaining <= 100:
                 break
@@ -212,6 +212,7 @@ class AgentContextManager:
                 elif isinstance(value, (bool, int, float)) or value is None:
                     data[key] = value
             record = {
+                "ref": f"observation:{observation_index}",
                 "tool": observation.tool,
                 "succeeded": observation.succeeded,
                 "summary": observation.summary,
