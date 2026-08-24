@@ -20,6 +20,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_investigation_actions, 6)
         self.assertEqual(config.agent.max_evidence_characters, 10_000)
         self.assertEqual(config.verification.command_timeout_seconds, 120)
+        self.assertEqual(
+            config.verification.dependency_command_timeout_seconds,
+            180,
+        )
         self.assertEqual(config.llm.timeout_retries_per_model, 1)
         self.assertEqual(config.llm.max_timeout_attempts_per_operation, 2)
         self.assertEqual(config.llm.max_output_tokens, 4096)
@@ -64,6 +68,7 @@ class ConfigurationTests(unittest.TestCase):
                 "DPRAUTO_AGENT_MAX_INVESTIGATION_ACTIONS": "4",
                 "DPRAUTO_AGENT_MAX_EVIDENCE_CHARACTERS": "7000",
                 "DPRAUTO_VERIFICATION_COMMAND_TIMEOUT_SECONDS": "17",
+                "DPRAUTO_VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS": "29",
                 "DPRAUTO_VERIFICATION_WEB_STARTUP_TIMEOUT_SECONDS": "9",
                 "DPRAUTO_VERIFICATION_WEB_PATH": "/healthz",
                 "DPRAUTO_VERIFICATION_DOCKER_NETWORK": "dprauto-verify",
@@ -107,6 +112,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_investigation_actions, 4)
         self.assertEqual(config.agent.max_evidence_characters, 7_000)
         self.assertEqual(config.verification.command_timeout_seconds, 17)
+        self.assertEqual(
+            config.verification.dependency_command_timeout_seconds,
+            29,
+        )
         self.assertEqual(config.verification.web_startup_timeout_seconds, 9)
         self.assertEqual(config.verification.web_path, "/healthz")
         self.assertEqual(config.verification.docker_network, "dprauto-verify")
@@ -138,6 +147,7 @@ class ConfigurationTests(unittest.TestCase):
             {"DPRAUTO_AGENT_MAX_INVESTIGATION_ROUNDS": "0"},
             {"DPRAUTO_AGENT_MAX_INVESTIGATION_ACTIONS": "0"},
             {"DPRAUTO_AGENT_MAX_EVIDENCE_CHARACTERS": "0"},
+            {"DPRAUTO_VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS": "0"},
             {"DPRAUTO_VERIFICATION_WEB_PATH": "health"},
             {"DPRAUTO_VERIFICATION_PYTEST_VERSION": ">=8"},
             {"DPRAUTO_VERIFICATION_PYTEST_VERSION": "latest"},

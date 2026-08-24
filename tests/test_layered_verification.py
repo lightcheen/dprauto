@@ -549,6 +549,26 @@ class VerificationPolicyTests(unittest.TestCase):
             self.runtime.commands[0].display,
         )
         self.assertEqual(result.metadata["original_command"], "python -m pytest -q")
+        self.assertEqual(result.metadata["timeout_policy"], "dependency-and-test")
+        self.assertEqual(result.metadata["requested_timeout_seconds"], 180)
+
+    def test_testability_keeps_short_timeout_when_no_dependency_setup_is_needed(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m unittest", CommandPurpose.TEST, "README.md"),
+        )
+        verifier = TestabilityVerifier(
+            self.runtime,
+            config=VerificationConfig(
+                command_timeout_seconds=41,
+                dependency_command_timeout_seconds=173,
+            ),
+        )
+
+        result = verifier.verify(build_context(project, self.workspace))
+
+        self.assertEqual(result.metadata["timeout_policy"], "test-only")
+        self.assertEqual(result.metadata["requested_timeout_seconds"], 41)
 
     def test_testability_records_bounded_slice_and_original_command(self) -> None:
         project = profile(

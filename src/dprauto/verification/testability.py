@@ -92,23 +92,6 @@ class TestabilityVerifier:
                 summary=check.summary,
                 checks=(check,),
             )
-        timeout_seconds = clamped_timeout_seconds(
-            self.config.command_timeout_seconds,
-            context.deadline_at,
-        )
-        if timeout_seconds <= 0:
-            check = VerificationCheck(
-                "project-tests",
-                VerificationStatus.ERROR,
-                "workflow time budget exceeded before project tests",
-            )
-            return VerificationResult(
-                verification_id(self.level),
-                self.level,
-                VerificationStatus.ERROR,
-                summary=check.summary,
-                checks=(check,),
-            )
         if selection.kind == "bounded-file-slice":
             test_command, parallel_workers = selected.command, 0
         else:
@@ -137,6 +120,34 @@ class TestabilityVerifier:
             test_command,
             overlay_requirements=overlay_requirements,
         )
+        dependency_setup = command.display != test_command.display
+        timeout_policy = (
+            "dependency-and-test"
+            if dependency_setup
+            else "test-only"
+        )
+        requested_timeout_seconds = (
+            self.config.dependency_command_timeout_seconds
+            if dependency_setup
+            else self.config.command_timeout_seconds
+        )
+        timeout_seconds = clamped_timeout_seconds(
+            requested_timeout_seconds,
+            context.deadline_at,
+        )
+        if timeout_seconds <= 0:
+            check = VerificationCheck(
+                "project-tests",
+                VerificationStatus.ERROR,
+                "workflow time budget exceeded before project tests",
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                VerificationStatus.ERROR,
+                summary=check.summary,
+                checks=(check,),
+            )
         execution = self.runtime.run_image(
             image,
             command,
@@ -171,6 +182,9 @@ class TestabilityVerifier:
                 "parallel_source": (
                     "tox.ini+ci" if parallel_workers else ""
                 ),
+                "timeout_policy": timeout_policy,
+                "requested_timeout_seconds": requested_timeout_seconds,
+                "effective_timeout_seconds": timeout_seconds,
                 "verification_overlay_packages": overlay_requirements,
             },
             checks=(check,),
