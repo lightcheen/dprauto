@@ -829,6 +829,26 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertNotIn("requirements-dev.txt", executed)
         self.assertNotIn("requirements-tox.txt", executed)
 
+    def test_testability_prefers_dedicated_tests_over_docs_tests_requirements(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest", CommandPurpose.TEST, "README.md"),
+            dependency_files=(
+                "requirements-docs-tests.txt",
+                "requirements-tests.txt",
+                "requirements.txt",
+            ),
+            package_managers=("pip",),
+        )
+
+        TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        executed = self.runtime.commands[0].display
+        self.assertIn("pip install -r requirements-tests.txt", executed)
+        self.assertNotIn("requirements-docs-tests.txt", executed)
+
     def test_testability_uses_native_uv_and_pdm_group_selection(self) -> None:
         command = project_command("pytest -q", CommandPurpose.TEST, "pyproject.toml")
         uv_project = profile(

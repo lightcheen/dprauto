@@ -341,6 +341,13 @@ class TestabilityVerifier:
         name = PurePosixPath(path).name.lower()
         if not name.endswith((".txt", ".in")):
             return None
+        stem = name.rsplit(".", 1)[0]
+        if re.fullmatch(
+            r"(?:requirements[-_.](?:test|tests|testing)|"
+            r"(?:test|tests|testing)[-_.]requirements)",
+            stem,
+        ):
+            return 0
         match = re.search(
             r"(?:^|[-_.])(test|tests|testing|tox|dev|develop|development|qa)(?:[-_.]|$)",
             name,
@@ -349,7 +356,7 @@ class TestabilityVerifier:
             return None
         kind = match.group(1)
         if kind in {"test", "tests", "testing"}:
-            return 0
-        if kind == "tox":
             return 1
-        return 2
+        if kind == "tox":
+            return 2
+        return 3
