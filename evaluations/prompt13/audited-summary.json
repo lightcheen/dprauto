@@ -1,0 +1,90 @@
+{
+  "agent": {
+    "actual_entered_agent": 22,
+    "eligible_projects_after_infrastructure_exclusion": 22,
+    "repair_success": 0,
+    "repair_success_rate_actual": 0.0,
+    "repair_success_rate_infrastructure_adjusted": 0.0,
+    "average_applied_repair_rounds": 1.227273,
+    "max_applied_repair_rounds": 2,
+    "applied_repair_rounds": 27,
+    "repeated_error_stops": 0,
+    "schema_rejected_analysis_calls": 0,
+    "llm_timeout_calls": 8,
+    "successful_structured_analysis_calls": 34,
+    "successful_structured_plan_calls": 27
+  },
+  "build": {
+    "project_total": 24,
+    "standard_success": 12,
+    "standard_success_rate": 0.5,
+    "standard_failed": 5,
+    "standard_timed_out": 7,
+    "standard_failure_total": 12,
+    "template": {
+      "total": 22,
+      "success": 12,
+      "failed": 4,
+      "timed_out": 6
+    },
+    "docker": {
+      "total": 2,
+      "success": 0,
+      "failed": 1,
+      "timed_out": 1
+    }
+  },
+  "cost": {
+    "average_agent_seconds": 404.61321,
+    "average_llm_api_seconds": 48.270361,
+    "average_standard_build_seconds": 144.555336,
+    "cumulative_wall_seconds": 12408.965729,
+    "input_tokens": 182507,
+    "llm_calls": 69,
+    "output_tokens": 195582,
+    "p50_standard_build_seconds": 110.351574,
+    "p95_standard_build_seconds": 300.102929,
+    "total_tokens": 378089
+  },
+  "infrastructure": {
+    "docker_daemon_failure": 0,
+    "disk_cpu_memory_failure": 0,
+    "git_download_failure": 0,
+    "image_manifest_platform_failure": 1,
+    "network_failure": 0,
+    "source_snapshot_missing_vcs_metadata": 0
+  },
+  "repair_quality": {
+    "applied_repair_rounds": 27,
+    "persisted_environment_diffs": 22,
+    "high_risk_diffs": 17,
+    "medium_risk_diffs": 3,
+    "low_risk_diffs": 2,
+    "duplicate_repair_plans": 0,
+    "ineffective_modifications": 10,
+    "invalid_tool_argument_stops": 4,
+    "no_environment_change_stops": 1,
+    "business_source_modifications": 0,
+    "manual_review_required": 0,
+    "regression_checks_completed": 8,
+    "regression_count": 0,
+    "regression_rate": 0.0,
+    "qualification": "No Agent repair produced final success; zero detected regressions does not establish repair quality."
+  },
+  "verification": {
+    "build_success_but_test_failed": 10,
+    "installability_pass": 14,
+    "runnability_pass": 4,
+    "test_success_but_run_failed": 1,
+    "testability_pass": 2
+  },
+  "failure_type_distribution": {
+    "build_command": 7,
+    "dependency_conflict": 1,
+    "docker": 1,
+    "run": 1,
+    "system_dependency": 2,
+    "test": 10,
+    "unknown": 1
+  }
+}

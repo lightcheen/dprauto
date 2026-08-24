@@ -1,0 +1,307 @@
+"""Execute a project-owned test command; never promote smoke probes to tests."""
+
+import re
+import shlex
+from dataclasses import replace
+from pathlib import PurePosixPath
+from typing import Mapping
+
+from dprauto.config import VerificationConfig
+from dprauto.domain.enums import VerificationLevel, VerificationStatus
+from dprauto.domain.models import CommandSpec, VerificationCheck, VerificationResult
+from dprauto.ports.runtime import ContainerRuntime
+from dprauto.ports.verification import VerificationContext
+from dprauto.time_budget import clamped_timeout_seconds
+from dprauto.verification.commands import TestCommandSelector
+from dprauto.verification.common import verification_id
+from dprauto.verification.overlay import load_verification_requirements
+
+
+class TestabilityVerifier:
+    level = VerificationLevel.TESTABILITY
+
+    def __init__(
+        self,
+        runtime: ContainerRuntime,
+        selector: TestCommandSelector | None = None,
+        config: VerificationConfig | None = None,
+    ) -> None:
+        self.runtime = runtime
+        self.selector = selector or TestCommandSelector()
+        self.config = config or VerificationConfig()
+
+    def supports(self, profile, level: VerificationLevel) -> bool:
+        return level is self.level
+
+    def verify(self, context: VerificationContext) -> VerificationResult:
+        selected = self.selector.select(
+            context.profile,
+            python_version=self._runtime_python_version(context),
+        )
+        if selected is None:
+            check = VerificationCheck(
+                "project-tests",
+                VerificationStatus.SKIPPED,
+                "no project-owned test command was discovered; smoke probes are excluded",
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                VerificationStatus.SKIPPED,
+                summary=check.summary,
+                metadata={"command_kind": "none"},
+                checks=(check,),
+            )
+        image = context.build_result.image_reference
+        if not image:
+            check = VerificationCheck(
+                "project-tests", VerificationStatus.ERROR, "cannot run tests without an image"
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                VerificationStatus.ERROR,
+                summary=check.summary,
+                checks=(check,),
+            )
+        timeout_seconds = clamped_timeout_seconds(
+            self.config.command_timeout_seconds,
+            context.deadline_at,
+        )
+        if timeout_seconds <= 0:
+            check = VerificationCheck(
+                "project-tests",
+                VerificationStatus.ERROR,
+                "workflow time budget exceeded before project tests",
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                VerificationStatus.ERROR,
+                summary=check.summary,
+                checks=(check,),
+            )
+        test_command, parallel_workers = self._with_bounded_parallelism(
+            context.profile,
+            selected.command,
+        )
+        try:
+            overlay_requirements = load_verification_requirements(context.workspace)
+        except (OSError, UnicodeError, ValueError) as exc:
+            check = VerificationCheck(
+                "project-tests",
+                VerificationStatus.ERROR,
+                f"invalid Testability dependency overlay: {exc}",
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                check.status,
+                summary=check.summary,
+                metadata={"command_kind": "project-test", "overlay_invalid": True},
+                checks=(check,),
+            )
+        command = self._with_test_dependency_install(
+            context.profile,
+            test_command,
+            overlay_requirements=overlay_requirements,
+        )
+        execution = self.runtime.run_image(
+            image,
+            command,
+            timeout_seconds=timeout_seconds,
+        )
+        passed = execution.command_result.succeeded
+        check = VerificationCheck(
+            "project-tests",
+            VerificationStatus.PASSED if passed else VerificationStatus.FAILED,
+            f"project test command from {selected.source} {'passed' if passed else 'failed'}",
+            command_result=execution.command_result,
+            evidence=(execution.command_result.stdout,) if execution.command_result.stdout else (),
+            metadata={"source": selected.source, "output_excerpt": execution.output_excerpt},
+        )
+        return VerificationResult(
+            verification_id(self.level),
+            self.level,
+            check.status,
+            command_result=execution.command_result,
+            evidence=check.evidence,
+            summary=check.summary,
+            metadata={
+                "command_kind": "project-test",
+                "command_source": selected.source,
+                "command": command.display,
+                "original_command": selected.command.display,
+                "parallel_workers": parallel_workers,
+                "parallel_source": (
+                    "tox.ini+ci" if parallel_workers else ""
+                ),
+                "verification_overlay_packages": overlay_requirements,
+            },
+            checks=(check,),
+        )
+
+    @staticmethod
+    def _runtime_python_version(context: VerificationContext) -> str:
+        plan = context.build_plan
+        if plan is not None:
+            for key in ("runtime_base_image", "base_image"):
+                image = str(plan.metadata.get(key, ""))
+                match = re.search(r"(?:python[:_-])?(3\.\d{1,2})(?:[.-]|$)", image, re.I)
+                if match:
+                    return match.group(1)
+        constraint = context.profile.runtime_constraints.get("python", "")
+        exact = re.search(r"(?:==|~=)\s*(3\.\d{1,2})", constraint)
+        return exact.group(1) if exact else ""
+
+    def _with_test_dependency_install(
+        self,
+        profile,
+        command: CommandSpec,
+        *,
+        overlay_requirements: tuple[str, ...] = (),
+    ) -> CommandSpec:
+        display = command.display
+        tools: list[str] = []
+        lowered = display.casefold()
+        matrix_runner = bool(re.search(r"\b(?:tox|nox)\b", lowered))
+        installs = [] if matrix_runner else self._declared_test_dependency_commands(profile)
+        if re.search(r"\b(pytest|py\.test)\b", lowered):
+            tools.append(f"pytest=={self.config.pytest_version}")
+        if (
+            self._parallel_metadata(profile)
+            and re.search(r"(?:--numprocesses(?:=|\s)|(?:^|\s)-n\s)", display)
+        ):
+            tools.append(f"pytest-xdist=={self.config.pytest_xdist_version}")
+        if re.search(r"\btox\b", lowered):
+            tools.append(f"tox=={self.config.tox_version}")
+        if re.search(r"\bnox\b", lowered):
+            tools.append(f"nox=={self.config.nox_version}")
+        tools.extend(overlay_requirements)
+        if tools:
+            tool_requirements = " ".join(
+                shlex.quote(tool) for tool in dict.fromkeys(tools)
+            )
+            if installs and installs[-1].startswith("python -m pip install "):
+                installs[-1] += " " + tool_requirements
+            else:
+                installs.append("python -m pip install " + tool_requirements)
+        if not installs:
+            return command
+        return replace(
+            command,
+            argv=(" && ".join((*installs, display)),),
+            shell=True,
+        )
+
+    def _with_bounded_parallelism(
+        self,
+        profile,
+        command: CommandSpec,
+    ) -> tuple[CommandSpec, int]:
+        metadata = self._parallel_metadata(profile)
+        display = command.display.strip()
+        if (
+            not metadata
+            or not re.search(r"\b(?:pytest|py\.test)\b", display, re.IGNORECASE)
+            or re.search(r"(?:--numprocesses(?:=|\s)|(?:^|\s)-n\s)", display)
+            or re.search(r"[;&|]", display)
+        ):
+            return command, 0
+        requested = str(metadata.get("requested_workers", "")).strip()
+        workers = self.config.max_parallel_test_workers
+        if requested.isdigit():
+            workers = min(workers, int(requested))
+        if workers <= 1:
+            return command, 0
+        return (
+            replace(
+                command,
+                argv=(f"{display} --numprocesses {workers}",),
+                shell=True,
+            ),
+            workers,
+        )
+
+    @staticmethod
+    def _parallel_metadata(profile) -> Mapping[str, object]:
+        value = profile.metadata.get("pytest_parallel", {})
+        if not isinstance(value, Mapping):
+            return {}
+        if (
+            value.get("runner") != "pytest"
+            or value.get("dependency") != "pytest-xdist"
+            or value.get("argument") != "--numprocesses"
+            or value.get("ci_confirmed") is not True
+        ):
+            return {}
+        return value
+
+    @staticmethod
+    def _declared_test_dependency_commands(profile) -> list[str]:
+        metadata = profile.metadata
+        extras = tuple(metadata.get("test_dependency_extras", ()))
+        manager_groups = tuple(metadata.get("test_dependency_manager_groups", ()))
+        legacy_groups = tuple(metadata.get("test_dependency_groups", ()))
+        managers = set(profile.package_managers)
+        if not extras and not manager_groups and legacy_groups:
+            if managers & {"poetry", "pdm", "uv"}:
+                manager_groups = legacy_groups
+            else:
+                extras = legacy_groups
+
+        if "poetry" in managers and (manager_groups or extras):
+            selected_groups = ",".join(dict.fromkeys(("main", *manager_groups)))
+            command = f"poetry install --only {shlex.quote(selected_groups)}"
+            if extras:
+                command += " --extras " + shlex.quote(" ".join(extras))
+            return [command + " --no-interaction --no-ansi"]
+        elif "uv" in managers and (manager_groups or extras):
+            parts = ["uv sync --frozen --inexact --no-default-groups"]
+            parts.extend(f"--group {shlex.quote(group)}" for group in manager_groups)
+            parts.extend(f"--extra {shlex.quote(extra)}" for extra in extras)
+            return [" ".join(parts)]
+        elif "pdm" in managers and (manager_groups or extras):
+            groups = tuple(dict.fromkeys((*manager_groups, *extras)))
+            return [
+                "pdm sync --no-editable "
+                + " ".join(f"-G {shlex.quote(group)}" for group in groups)
+            ]
+        elif extras:
+            target = ".[" + ",".join(extras) + "]"
+            return [f"python -m pip install {shlex.quote(target)}"]
+
+        requirement_files = [
+            path
+            for path in profile.dependency_files
+            if TestabilityVerifier._test_requirement_priority(path) is not None
+        ]
+        if not requirement_files:
+            return []
+        selected = min(
+            requirement_files,
+            key=lambda path: (
+                TestabilityVerifier._test_requirement_priority(path),
+                len(PurePosixPath(path).parts),
+                path,
+            ),
+        )
+        return [f"python -m pip install -r {shlex.quote(selected)}"]
+
+    @staticmethod
+    def _test_requirement_priority(path: str) -> int | None:
+        name = PurePosixPath(path).name.lower()
+        if not name.endswith((".txt", ".in")):
+            return None
+        match = re.search(
+            r"(?:^|[-_.])(test|tests|testing|tox|dev|develop|development|qa)(?:[-_.]|$)",
+            name,
+        )
+        if not match:
+            return None
+        kind = match.group(1)
+        if kind in {"test", "tests", "testing"}:
+            return 0
+        if kind == "tox":
+            return 1
+        return 2

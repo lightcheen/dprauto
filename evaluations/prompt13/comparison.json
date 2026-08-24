@@ -1,0 +1,62 @@
+{
+  "sample_size": 24,
+  "same_manifest": "../prompt12/manifest.json",
+  "metrics": {
+    "standard_build_success_rate": {
+      "before": 0.5,
+      "after": 0.5,
+      "percentage_point_change": 0.0
+    },
+    "agent_repair_success_rate": {
+      "before": 0.0,
+      "after": 0.0,
+      "percentage_point_change": 0.0
+    },
+    "final_environment_success_rate": {
+      "before": 0.0,
+      "after": 0.041667,
+      "percentage_point_change": 4.166667,
+      "qualification": "The one success was deterministic and did not involve Agent repair."
+    },
+    "runnability_success_rate": {
+      "before": 0.125,
+      "after": 0.166667,
+      "percentage_point_change": 4.166667
+    },
+    "regression_count": {
+      "before": 0,
+      "after": 0,
+      "qualification": "The first round applied no repairs; the second round completed eight regression checks."
+    },
+    "average_repair_rounds": {
+      "before": 0.0,
+      "after": 1.227273,
+      "change": 1.227273
+    },
+    "average_standard_build_seconds": {
+      "before": 134.103098,
+      "after": 144.555336,
+      "relative_change_percent": 7.79418
+    },
+    "average_agent_seconds": {
+      "before": 48.329814,
+      "after": 404.61321,
+      "relative_change_percent": 737.191738
+    },
+    "llm_calls": {
+      "before": 23,
+      "after": 69,
+      "relative_change_percent": 200.0
+    },
+    "total_tokens": {
+      "before": 152326,
+      "after": 378089,
+      "relative_change_percent": 148.210417
+    },
+    "cumulative_wall_seconds": {
+      "before": 4330.394944,
+      "after": 12408.965729,
+      "relative_change_percent": 186.555058
+    }
+  }
+}

@@ -1,0 +1,302 @@
+"""Docker CLI adapter used by the verification core."""
+
+from __future__ import annotations
+
+import json
+import socket
+import subprocess
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+from dprauto.config import BuildConfig, VerificationConfig
+from dprauto.domain.enums import CommandPurpose
+from dprauto.domain.models import CommandResult, CommandSpec
+from dprauto.ports.runtime import ContainerExecution, ImageInspection, WebProbe
+from dprauto.ports.storage import Storage
+from dprauto.proxy import docker_proxy_environment_arguments
+
+
+class DockerContainerRuntime:
+    """Keep Docker lifecycle and HTTP probing outside verification policies."""
+
+    def __init__(
+        self,
+        storage: Storage,
+        build_config: BuildConfig | None = None,
+        verification_config: VerificationConfig | None = None,
+    ) -> None:
+        self.storage = storage
+        self.build_config = build_config or BuildConfig()
+        self.verification_config = verification_config or VerificationConfig()
+
+    def inspect_image(self, image_reference: str) -> ImageInspection:
+        completed = subprocess.run(
+            [self.build_config.docker_binary, "image", "inspect", image_reference],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return ImageInspection(False, metadata={"error": self._excerpt(completed.stdout)})
+        try:
+            payload = json.loads(completed.stdout)[0]
+        except (json.JSONDecodeError, IndexError, TypeError):
+            return ImageInspection(False, metadata={"error": "invalid docker inspect output"})
+        config = payload.get("Config") or {}
+        command = tuple(config.get("Entrypoint") or ()) + tuple(config.get("Cmd") or ())
+        ports: list[int] = []
+        for value in (config.get("ExposedPorts") or {}):
+            try:
+                ports.append(int(str(value).split("/", 1)[0]))
+            except ValueError:
+                continue
+        return ImageInspection(
+            exists=True,
+            image_id=str(payload.get("Id") or ""),
+            working_directory=str(config.get("WorkingDir") or ""),
+            default_command=command,
+            exposed_ports=tuple(sorted(set(ports))),
+            metadata={"architecture": payload.get("Architecture", "")},
+        )
+
+    def run_image(
+        self,
+        image_reference: str,
+        command: CommandSpec | None,
+        *,
+        timeout_seconds: int,
+    ) -> ContainerExecution:
+        name = f"dprauto-verify-{uuid.uuid4().hex[:12]}"
+        requested = command or CommandSpec(
+            ("<image-default-command>",),
+            purpose=CommandPurpose.RUN,
+            timeout_seconds=timeout_seconds,
+        )
+        create = [self.build_config.docker_binary, "create", "--name", name]
+        if self.verification_config.docker_network:
+            create.extend(("--network", self.verification_config.docker_network))
+        create.extend(docker_proxy_environment_arguments(self.build_config))
+        if self.build_config.use_cache:
+            create.extend(
+                (
+                    "--mount",
+                    "type=volume,source=dprauto-python-package-cache,target=/root/.cache",
+                )
+            )
+        if command is not None:
+            for key, value in command.environment.items():
+                create.extend(("--env", f"{key}={value}"))
+            # Docker treats arguments after the image as arguments to the
+            # image ENTRYPOINT.  Override it so an explicit verification
+            # command is executed by the shell instead of being appended to
+            # an unrelated project entrypoint.
+            create.extend(("--entrypoint", "/bin/sh"))
+        create.append(image_reference)
+        if command is not None:
+            create.extend(("-lc", command.display))
+        created = subprocess.run(create, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+        started = time.monotonic()
+        output = created.stdout or b""
+        timed_out = False
+        exit_code: int | None = created.returncode if created.returncode else None
+        changes: tuple[str, ...] = ()
+        try:
+            if created.returncode == 0:
+                try:
+                    run = subprocess.run(
+                        [self.build_config.docker_binary, "start", "--attach", name],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        timeout=timeout_seconds,
+                        check=False,
+                    )
+                    output = run.stdout or b""
+                    exit_code = self._container_exit_code(name, run.returncode)
+                except subprocess.TimeoutExpired as exc:
+                    output = (exc.stdout or b"") + b"\nverification command timed out\n"
+                    timed_out = True
+                    exit_code = None
+                    subprocess.run(
+                        [self.build_config.docker_binary, "stop", "--time", "1", name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                diff = subprocess.run(
+                    [self.build_config.docker_binary, "diff", name],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                if diff.returncode == 0:
+                    changes = tuple(
+                        line.decode("utf-8", "replace").strip()
+                        for line in diff.stdout.splitlines()
+                        if line.strip()
+                    )
+        finally:
+            subprocess.run(
+                [self.build_config.docker_binary, "rm", "--force", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        artifact = self.storage.save(
+            f"verification-logs/{uuid.uuid4().hex}.log",
+            output,
+            media_type="text/plain; charset=utf-8",
+        )
+        result = CommandResult(
+            requested,
+            exit_code,
+            stdout=artifact,
+            timed_out=timed_out,
+            duration_seconds=time.monotonic() - started,
+        )
+        return ContainerExecution(result, self._excerpt(output), changes)
+
+    def probe_web(
+        self,
+        image_reference: str,
+        command: CommandSpec | None,
+        *,
+        container_port: int,
+        timeout_seconds: int,
+        path: str = "/",
+    ) -> WebProbe:
+        name = f"dprauto-web-{uuid.uuid4().hex[:12]}"
+        host_port = self._free_port()
+        create = [
+            self.build_config.docker_binary,
+            "create",
+            "--name",
+            name,
+            "--publish",
+            f"127.0.0.1:{host_port}:{container_port}",
+        ]
+        if self.verification_config.docker_network:
+            create.extend(("--network", self.verification_config.docker_network))
+        create.extend(docker_proxy_environment_arguments(self.build_config))
+        if command is not None:
+            for key, value in command.environment.items():
+                create.extend(("--env", f"{key}={value}"))
+            create.extend(("--entrypoint", "/bin/sh"))
+        create.append(image_reference)
+        if command is not None:
+            create.extend(("-lc", command.display))
+        created = subprocess.run(create, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+        output = created.stdout or b""
+        process_running = False
+        port_open = False
+        http_reachable = False
+        http_status: int | None = None
+        try:
+            if created.returncode != 0:
+                return WebProbe(
+                    False,
+                    False,
+                    False,
+                    container_port,
+                    host_port,
+                    output_excerpt=self._excerpt(output),
+                )
+            started = subprocess.run(
+                [self.build_config.docker_binary, "start", name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            output += started.stdout or b""
+            deadline = time.monotonic() + timeout_seconds
+            while time.monotonic() < deadline:
+                process_running = self._is_running(name)
+                if not process_running:
+                    break
+                port_open = self._port_open(host_port)
+                if port_open:
+                    try:
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{host_port}{path}", timeout=1
+                        ) as response:
+                            http_status = response.status
+                            http_reachable = True
+                            break
+                    except urllib.error.HTTPError as exc:
+                        http_status = exc.code
+                        http_reachable = True
+                        break
+                    except (urllib.error.URLError, TimeoutError):
+                        pass
+                time.sleep(0.2)
+            logs = subprocess.run(
+                [self.build_config.docker_binary, "logs", name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            output += logs.stdout or b""
+            return WebProbe(
+                process_running,
+                port_open,
+                http_reachable,
+                container_port,
+                host_port,
+                http_status,
+                self._excerpt(output),
+            )
+        finally:
+            subprocess.run(
+                [self.build_config.docker_binary, "rm", "--force", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+
+    def _container_exit_code(self, name: str, fallback: int) -> int:
+        inspected = subprocess.run(
+            [
+                self.build_config.docker_binary,
+                "inspect",
+                "--format",
+                "{{.State.ExitCode}}",
+                name,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        try:
+            return int(inspected.stdout.strip()) if inspected.returncode == 0 else fallback
+        except ValueError:
+            return fallback
+
+    def _is_running(self, name: str) -> bool:
+        completed = subprocess.run(
+            [self.build_config.docker_binary, "inspect", "--format", "{{.State.Running}}", name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return completed.returncode == 0 and completed.stdout.strip() == "true"
+
+    @staticmethod
+    def _free_port() -> int:
+        with socket.socket() as stream:
+            stream.bind(("127.0.0.1", 0))
+            return int(stream.getsockname()[1])
+
+    @staticmethod
+    def _port_open(port: int) -> bool:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return True
+        except OSError:
+            return False
+
+    def _excerpt(self, output: bytes) -> str:
+        limit = self.verification_config.output_excerpt_characters
+        return output.decode("utf-8", "replace")[-limit:]

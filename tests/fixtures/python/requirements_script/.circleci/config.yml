@@ -1,0 +1,6 @@
+version: 2.1
+jobs:
+  test:
+    steps:
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover
