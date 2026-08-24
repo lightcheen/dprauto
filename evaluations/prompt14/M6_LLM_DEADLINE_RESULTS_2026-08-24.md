@@ -14,8 +14,9 @@
   较小值作为绝对墙钟截止，并在超时后 terminate/kill 子进程。
 - 响应最大 8 MiB；正常响应、HTTP 错误、socket 错误和父进程硬回收统一进入小时 JSONL
   审计日志，API key 不进入日志。
-- `investigate_failure`、`analyze_failure`、`plan_fix` 每次调用默认最多尝试 2 个模型；配置项
-  `DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION` 的范围为 1–8。
+- `investigate_failure`、`analyze_failure`、`plan_fix` 每次调用默认最多执行 2 次传输尝试；
+  多模型池下优先使用不同模型。配置项 `DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION`
+  的范围为 1–8。
 - 超时后先切换模型，再考虑重试同一模型；成功的 fallback 会成为后续 Agent 调用的首选，
   避免每个调查轮次重新撞击刚超时的第一个模型。
 
