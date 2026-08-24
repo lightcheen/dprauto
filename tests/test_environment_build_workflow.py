@@ -268,6 +268,54 @@ class EnvironmentBuildWorkflowTests(unittest.TestCase):
         return VerificationReport(f"report-{index}", f"attempt-{index}", results)
 
     @staticmethod
+    def _collection_warning_report(index):
+        command = CommandSpec(
+            ("python -m pytest -q",),
+            purpose=CommandPurpose.TEST,
+            shell=True,
+        )
+        command_result = CommandResult(command, 2)
+        excerpt = (
+            "ERROR collecting tests/test_form.py\n"
+            "E PendingDeprecationWarning: Please use import python_multipart instead.\n"
+            "================ short test summary info ================\n"
+            "ERROR tests/test_form.py - PendingDeprecationWarning\n"
+            "Interrupted: 1 error during collection"
+        )
+        results = (
+            VerificationResult(
+                f"install-{index}",
+                VerificationLevel.INSTALLABILITY,
+                VerificationStatus.PASSED,
+                summary="install passed",
+            ),
+            VerificationResult(
+                f"tests-{index}",
+                VerificationLevel.TESTABILITY,
+                VerificationStatus.FAILED,
+                command_result=command_result,
+                summary="project test collection failed",
+                metadata={"output_excerpt": excerpt},
+                checks=(
+                    VerificationCheck(
+                        "tests",
+                        VerificationStatus.FAILED,
+                        "project test command failed during collection",
+                        command_result=command_result,
+                        metadata={"output_excerpt": excerpt},
+                    ),
+                ),
+            ),
+            VerificationResult(
+                f"run-{index}",
+                VerificationLevel.RUNNABILITY,
+                VerificationStatus.SKIPPED,
+                summary="run skipped",
+            ),
+        )
+        return VerificationReport(f"report-{index}", f"attempt-{index}", results)
+
+    @staticmethod
     def _active_test_timeout_report(index):
         command = CommandSpec(
             ("python -m pip install '.[tests]' pytest==8.3.5 && pytest",),
@@ -637,6 +685,24 @@ class EnvironmentBuildWorkflowTests(unittest.TestCase):
         self.assertEqual(result.llm_call_count, 0)
         self.assertEqual(planner.analysis_calls, 0)
         self.assertIn("test assertions failed", result.stop_reason)
+
+    def test_collection_warning_is_eligible_for_environment_repair(self):
+        workflow, planner, _ = self._workflow(
+            [
+                (self._build_result(33, True), None),
+                (self._build_result(34, True), None),
+            ],
+            [self._collection_warning_report(33), self._report(34, test="fail")],
+            max_attempts=1,
+        )
+
+        result = self._run(workflow, "collection-warning")
+
+        self.assertEqual(result.final_status, EnvironmentBuildStatus.VERIFICATION_FAILED)
+        self.assertTrue(result.agent_participated)
+        self.assertEqual(result.repair_attempts, 1)
+        self.assertEqual(planner.analysis_calls, 1)
+        self.assertNotIn("test assertions failed", result.stop_reason)
 
     def test_build_succeeds_but_tests_keep_failing(self):
         workflow, _, _ = self._workflow(

@@ -1633,7 +1633,6 @@ class AgentWorkflow:
             "assertionerror" in evidence
             or re.search(r"(?m)^\s*e\s+assert\b", evidence)
             or re.search(r"\b\d+\s+failed(?:,|\s|$)", evidence)
-            or "short test summary info" in evidence
         )
 
     @staticmethod
