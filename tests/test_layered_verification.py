@@ -673,6 +673,38 @@ class VerificationPolicyTests(unittest.TestCase):
 
         self.assertIn("pip install pytest==8.4.2", self.runtime.commands[0].display)
 
+    def test_testability_preserves_project_owned_pytest_version(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest -q", CommandPurpose.TEST, "README.md"),
+            dependency_files=("requirements-tests.txt",),
+            package_managers=("pip",),
+        )
+
+        TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        executed = self.runtime.commands[0].display
+        self.assertIn("python -m pip install -r requirements-tests.txt", executed)
+        self.assertNotIn("pytest==8.3.5", executed)
+
+    def test_testability_does_not_append_unhashed_runner_to_lock_requirements(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m pytest", CommandPurpose.TEST, "tox.ini"),
+            dependency_files=("requirements-dev-lock.txt",),
+            package_managers=("pip",),
+        )
+
+        TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        executed = self.runtime.commands[0].display
+        self.assertIn("pip install -r requirements-dev-lock.txt", executed)
+        self.assertNotIn("requirements-dev-lock.txt pytest", executed)
+
     def test_testability_uses_ci_confirmed_tox_parallelism_with_fixed_cap(self) -> None:
         project = profile(
             ProjectType.LIBRARY,
@@ -699,7 +731,7 @@ class VerificationPolicyTests(unittest.TestCase):
 
         executed = self.runtime.commands[0].display
         self.assertIn(
-            "python -m pip install '.[tests]' pytest==8.3.5 pytest-xdist==3.6.1",
+            "python -m pip install '.[tests]' pytest-xdist==3.6.1",
             executed,
         )
         self.assertTrue(executed.endswith("pytest --numprocesses 4"))
@@ -753,8 +785,7 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertNotIn("requirements-test.txt", executed)
         self.assertIn("poetry install --only main,test,dev", executed)
         self.assertIn("--extras testing", executed)
-        self.assertIn("pip install pytest==8.3.5", executed)
-        self.assertLess(executed.index("poetry install"), executed.index("pip install pytest"))
+        self.assertNotIn("pytest==8.3.5", executed)
 
     def test_testability_prefers_pip_extra_over_broad_dev_requirements(self) -> None:
         project = profile(
@@ -771,7 +802,8 @@ class VerificationPolicyTests(unittest.TestCase):
 
         self.assertTrue(result.passed)
         executed = self.runtime.commands[0].display
-        self.assertIn("python -m pip install '.[tests]' pytest==8.3.5", executed)
+        self.assertIn("python -m pip install '.[tests]'", executed)
+        self.assertNotIn("pytest==8.3.5", executed)
         self.assertNotIn("requirements-dev.txt", executed)
 
     def test_testability_selects_narrowest_single_requirements_file(self) -> None:
@@ -790,9 +822,10 @@ class VerificationPolicyTests(unittest.TestCase):
 
         executed = self.runtime.commands[0].display
         self.assertIn(
-            "pip install -r requirements-testing.in pytest==8.3.5",
+            "pip install -r requirements-testing.in",
             executed,
         )
+        self.assertNotIn("pytest==8.3.5", executed)
         self.assertNotIn("requirements-dev.txt", executed)
         self.assertNotIn("requirements-tox.txt", executed)
 

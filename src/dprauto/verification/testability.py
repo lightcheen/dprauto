@@ -201,7 +201,12 @@ class TestabilityVerifier:
         lowered = display.casefold()
         matrix_runner = bool(re.search(r"\b(?:tox|nox)\b", lowered))
         installs = [] if matrix_runner else self._declared_test_dependency_commands(profile)
-        if re.search(r"\b(pytest|py\.test)\b", lowered):
+        # A project-owned extra/group/requirements file is authoritative for the
+        # runner version. Appending our fixed pytest pin can conflict with a
+        # project pin and also breaks pip's --require-hashes mode for lock-style
+        # requirements files. Only bootstrap pytest when no declared test
+        # dependency source was found.
+        if not installs and re.search(r"\b(pytest|py\.test)\b", lowered):
             tools.append(f"pytest=={self.config.pytest_version}")
         if (
             self._parallel_metadata(profile)
