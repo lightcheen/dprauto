@@ -31,6 +31,9 @@ _PYTHON_REQUIREMENT = re.compile(
     r"(?:\s*,\s*(?:===|==|!=|~=|>=|<=|>|<)\s*[A-Za-z0-9.*+!_-]+)*)?$"
 )
 _IMAGE_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:@+-]*$")
+_CONTROLLED_VERIFICATION_RUNNERS = frozenset(
+    {"pytest", "pytest-xdist", "tox", "nox"}
+)
 _FROM = re.compile(
     r"(?im)^(?P<prefix>\s*FROM\s+(?:--platform=\S+\s+)?)"
     r"(?P<image>[^\s]+)(?P<suffix>[^\n]*)$"
@@ -289,7 +292,8 @@ class PatchVerificationDependenciesTool:
     description = (
         "Add bounded literal Python requirements to the Testability-only overlay after a "
         "successful image build. The fixed overlay is installed only in temporary verification "
-        "containers and never in the final runtime image."
+        "containers and never in the final runtime image. DPRAuto-managed test runners "
+        "(pytest, pytest-xdist, tox and nox) cannot be changed through this tool."
     )
     argument_schema = {
         "type": "object",
@@ -313,6 +317,17 @@ class PatchVerificationDependenciesTool:
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
         requested = _package_list(arguments, python=True)
+        controlled = tuple(
+            item
+            for item in requested
+            if PatchPythonDependenciesTool._name(item)
+            in _CONTROLLED_VERIFICATION_RUNNERS
+        )
+        if controlled:
+            raise ToolExecutionError(
+                "verification overlay cannot override DPRAuto-managed test runner(s): "
+                + ", ".join(controlled)
+            )
         try:
             existing = load_verification_requirements(Path(context.workspace))
             packages = tuple(dict.fromkeys((*existing, *requested)))

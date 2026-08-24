@@ -244,6 +244,24 @@ class AgentToolTests(unittest.TestCase):
                 self.context,
             )
 
+    def test_verification_dependencies_cannot_override_controlled_runners(self) -> None:
+        tool = PatchVerificationDependenciesTool(self.storage)
+        overlay = self.root / ".dprauto" / "requirements-verification.txt"
+
+        for requirement in (
+            "pytest<8.3.5",
+            "pytest_xdist==3.6.1",
+            "tox>=4",
+            "nox==2025.5.1",
+        ):
+            with self.subTest(requirement=requirement), self.assertRaisesRegex(
+                ToolExecutionError,
+                "DPRAuto-managed test runner",
+            ):
+                tool.invoke({"packages": [requirement]}, self.context)
+
+        self.assertFalse(overlay.exists())
+
     def test_structured_base_image_requires_exact_non_latest_precondition(self) -> None:
         dockerfile = self.root / "Dockerfile"
         dockerfile.write_text(
