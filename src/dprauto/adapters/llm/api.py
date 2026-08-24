@@ -16,6 +16,8 @@ from dprauto.observability.llm_calls import HourlyLLMCallLogger
 from dprauto.ports.llm import LLMRequest, LLMResponse
 from dprauto.time_budget import clamped_timeout_seconds, time_budget_exhausted
 
+from .transport import HTTPStatusError, urlopen_with_hard_deadline
+
 
 @dataclass(frozen=True, slots=True)
 class APIModelSettings:
@@ -87,7 +89,7 @@ class OpenAICompatibleLLMClient:
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
         self.max_output_tokens = max_output_tokens
-        self._opener = opener or urllib.request.urlopen
+        self._opener = opener
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         timeout_seconds = clamped_timeout_seconds(
@@ -111,20 +113,34 @@ class OpenAICompatibleLLMClient:
         }
         started_wall = self.logger.clock()
         started = time.monotonic()
-        http_request = urllib.request.Request(
-            self.settings.base_url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.settings.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        encoded_payload = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {self.settings.api_key}",
+            "Content-Type": "application/json",
+        }
         try:
-            with self._opener(http_request, timeout=timeout_seconds) as response:
-                raw = response.read()
+            if self._opener is None:
+                raw = urlopen_with_hard_deadline(
+                    self.settings.base_url,
+                    data=encoded_payload,
+                    headers=headers,
+                    timeout_seconds=timeout_seconds,
+                )
+            else:
+                http_request = urllib.request.Request(
+                    self.settings.base_url,
+                    data=encoded_payload,
+                    headers=headers,
+                    method="POST",
+                )
+                with self._opener(http_request, timeout=timeout_seconds) as response:
+                    raw = response.read()
             decoded = json.loads(raw.decode("utf-8"))
             result = self._response(decoded, request)
+        except HTTPStatusError as exc:
+            message = f"LLM API returned HTTP {exc.code}: {exc.body}"
+            self._log(payload, None, request, started, started_wall, message)
+            raise LLMError(message) from exc
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")[-4_000:]
             message = f"LLM API returned HTTP {exc.code}: {body}"

@@ -1,8 +1,13 @@
 import json
+import os
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from dprauto.adapters.llm import (
@@ -37,7 +42,135 @@ class FakeHTTPResponse:
         return self.payload
 
 
+class SlowStreamingLLMHandler(BaseHTTPRequestHandler):
+    response_body = json.dumps(
+        {
+            "model": "fixture-model",
+            "choices": [{"message": {"content": "too late"}}],
+            "usage": {},
+        }
+    ).encode()
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(self.response_body)))
+        self.end_headers()
+        chunk_size = max(1, len(self.response_body) // 5)
+        try:
+            for offset in range(0, len(self.response_body), chunk_size):
+                self.wfile.write(self.response_body[offset : offset + chunk_size])
+                self.wfile.flush()
+                time.sleep(0.4)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def log_message(self, format, *args):
+        pass
+
+
+class ImmediateLLMHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        request = json.loads(
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        )
+        body = json.dumps(
+            {
+                "model": request["model"],
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+            }
+        ).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
+
+
 class APILLMClientTests(unittest.TestCase):
+    def test_production_transport_returns_completed_response(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), ImmediateLLMHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            client = OpenAICompatibleLLMClient(
+                APIModelSettings(
+                    "secret",
+                    "fixture-model",
+                    f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+                ),
+                HourlyLLMCallLogger(root / "logs"),
+                timeout_seconds=2,
+            )
+            try:
+                with patch.dict(
+                    os.environ,
+                    {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"},
+                ):
+                    response = client.complete(
+                        LLMRequest(
+                            (LLMMessage("user", "complete in time"),),
+                            response_schema={"type": "object"},
+                        )
+                    )
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1)
+
+            self.assertEqual(response.structured, {"answer": "ok"})
+            self.assertEqual(response.input_tokens, 3)
+            self.assertEqual(response.output_tokens, 2)
+
+    def test_production_transport_enforces_absolute_wall_clock_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), SlowStreamingLLMHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            client = OpenAICompatibleLLMClient(
+                APIModelSettings(
+                    "secret",
+                    "fixture-model",
+                    f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+                ),
+                HourlyLLMCallLogger(root / "logs"),
+                timeout_seconds=1,
+            )
+
+            started = time.monotonic()
+            try:
+                with patch.dict(
+                    os.environ,
+                    {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"},
+                ):
+                    with self.assertRaises(LLMTimeoutError) as raised:
+                        client.complete(
+                            LLMRequest((LLMMessage("user", "enforce the deadline"),))
+                        )
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1)
+            elapsed = time.monotonic() - started
+
+            self.assertIn("hard wall-clock timeout after 1s", raised.exception.message)
+            self.assertGreaterEqual(elapsed, 0.8)
+            self.assertLess(elapsed, 2.0)
+            records = [
+                json.loads(line)
+                for path in (root / "logs").glob("*.log")
+                for line in path.read_text().splitlines()
+            ]
+            self.assertEqual(len(records), 1)
+            self.assertIn("hard wall-clock timeout", records[0]["error"])
+
     def test_configured_client_logs_questions_and_results_once_per_hour_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
