@@ -164,6 +164,61 @@ ruff = "*"
         self.assertEqual(profile.metadata["test_dependency_extras"], ("test",))
         self.assertEqual(profile.metadata["test_dependency_manager_groups"], ("dev",))
 
+    def test_pytest_semantic_extra_and_bounded_test_evidence_are_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tests" / "integration").mkdir(parents=True)
+            (root / "pyproject.toml").write_text(
+                """[project]
+name = "fixture"
+
+[project.optional-dependencies]
+pytesting = [
+    "fixture[full]",
+    "pytest>=7",
+    "pytest-cov",
+]
+coveraging = ["coverage"]
+docs = ["sphinx"]
+""",
+                encoding="utf-8",
+            )
+            (root / "tests" / "test_unit.py").write_text(
+                "def test_ok(): pass\n", encoding="utf-8"
+            )
+            (root / "tests" / "test_remote.py").write_text(
+                'client.download("https://example.invalid/value")\n',
+                encoding="utf-8",
+            )
+            (root / "tests" / "integration" / "test_api.py").write_text(
+                "def test_api(): pass\n", encoding="utf-8"
+            )
+            (root / "tests" / "conftest.py").write_text(
+                """import os
+
+class Settings:
+    TOKEN = os.environ["SERVICE_TOKEN"]
+
+def optional_lookup():
+    return os.environ["FUNCTION_ONLY_TOKEN"]
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://test-evidence"), root)
+
+        self.assertEqual(profile.metadata["test_dependency_extras"], ("pytesting",))
+        self.assertEqual(profile.metadata["test_file_count"], 3)
+        self.assertEqual(profile.metadata["safe_test_files"], ("tests/test_unit.py",))
+        self.assertEqual(
+            profile.metadata["external_test_files"],
+            ("tests/integration/test_api.py", "tests/test_remote.py"),
+        )
+        self.assertEqual(
+            profile.metadata["test_required_environment_variables"],
+            ("SERVICE_TOKEN",),
+        )
+
     def test_tox_default_environment_is_inferred_without_full_matrix(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

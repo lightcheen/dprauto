@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path, PurePosixPath
 from typing import Iterable
@@ -77,6 +78,17 @@ _WEB_DEPENDENCIES = {
     "tornado",
     "uvicorn",
 }
+_TEST_PATH_RISK = re.compile(
+    r"(?:^|[-_.])(integration|e2e|functional|remote|live|slow|notebooks?|benchmark|"
+    r"bench|performance|fuzz)(?:[-_.]|$)",
+    re.IGNORECASE,
+)
+_TEST_CONTENT_RISK = re.compile(
+    r"(?:pytest\.mark\.(?:integration|e2e|remote|live|slow)|"
+    r"\.download\s*\(\s*['\"]https?://|"
+    r"(?:requests|httpx)\.(?:get|post|put|delete|request)\s*\(\s*['\"]https?://)",
+    re.IGNORECASE,
+)
 
 
 class PythonProjectParser:
@@ -149,6 +161,7 @@ class PythonProjectParser:
                 str(pytest_parallel["factor"]),
             )
         scm_versioning = self._scm_versioning(scanned)
+        test_file_metadata = self._test_file_metadata(scanned)
 
         runtime_constraints = {"python": python_constraint} if python_constraint else {}
         return ProjectProfile(
@@ -182,6 +195,7 @@ class PythonProjectParser:
                 "nox_sessions": nox_sessions,
                 "pytest_parallel": pytest_parallel,
                 "scm_versioning": scm_versioning,
+                **test_file_metadata,
                 "project_type_evidence": type_evidence,
                 "scan_file_count": len(scanned.files),
                 "scan_skipped_files": scanned.skipped_files,
@@ -254,18 +268,10 @@ class PythonProjectParser:
         pyproject = scanned.read_text("pyproject.toml")
         for section_name in ("project.optional-dependencies", "tool.poetry.extras"):
             section = self._toml_section(pyproject, section_name)
-            extras.extend(
-                match.group(1)
-                for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=", section)
-                if match.group(1).lower() in accepted
-            )
+            extras.extend(self._test_group_names(section, accepted))
         for section_name in ("dependency-groups", "tool.pdm.dev-dependencies"):
             section = self._toml_section(pyproject, section_name)
-            manager_groups.extend(
-                match.group(1)
-                for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=", section)
-                if match.group(1).lower() in accepted
-            )
+            manager_groups.extend(self._test_group_names(section, accepted))
         manager_groups.extend(
             match.group(1)
             for match in re.finditer(
@@ -293,6 +299,116 @@ class PythonProjectParser:
                 if match.group(1).lower() in accepted
             )
         return tuple(dict.fromkeys(extras)), tuple(dict.fromkeys(manager_groups))
+
+    @staticmethod
+    def _test_group_names(section: str, accepted: set[str]) -> tuple[str, ...]:
+        """Recognize conventional and pytest-semantic dependency groups."""
+
+        names: list[str] = []
+        assignments = re.finditer(
+            r"(?ms)^\s*([A-Za-z0-9_.-]+)\s*=\s*\[(.*?)\](?=\s*^[A-Za-z0-9_.-]+\s*=|\Z)",
+            section,
+        )
+        for match in assignments:
+            name = match.group(1)
+            normalized = name.casefold()
+            values = match.group(2).casefold()
+            conventional = normalized in accepted or bool(
+                re.search(r"(?:^|[-_.])tests?(?:ing)?(?:[-_.]|$)", normalized)
+                or normalized in {"pytest", "pytesting"}
+            )
+            semantic = bool(
+                re.search(
+                    r"['\"](?:pytest(?:[-_][a-z0-9_.-]+)?|tox|nox|hypothesis)"
+                    r"(?:\[|[<>=!~'\"])",
+                    values,
+                )
+            )
+            if conventional or semantic:
+                names.append(name)
+        return tuple(names)
+
+    @staticmethod
+    def _test_file_metadata(scanned: ScannedProject) -> dict[str, object]:
+        """Return bounded local-test, external-test, and required-secret evidence."""
+
+        test_files: list[str] = []
+        safe_files: list[str] = []
+        external_files: list[str] = []
+        required_environment: list[str] = []
+        for path in scanned.files:
+            pure = PurePosixPath(path)
+            name = pure.name.casefold()
+            in_test_tree = any(part.casefold() in {"test", "tests"} for part in pure.parts[:-1])
+            is_test = path.endswith(".py") and (
+                name.startswith("test_")
+                or name.endswith("_test.py")
+                or (in_test_tree and name == "test.py")
+            )
+            if is_test:
+                test_files.append(path)
+                content = scanned.read_text(path)
+                path_risky = any(_TEST_PATH_RISK.search(part) for part in pure.parts)
+                if path_risky or _TEST_CONTENT_RISK.search(content):
+                    external_files.append(path)
+                else:
+                    safe_files.append(path)
+            if name == "conftest.py":
+                required_environment.extend(
+                    PythonProjectParser._required_environment_literals(
+                        scanned.read_text(path)
+                    )
+                )
+        maximum = 512
+        return {
+            "test_files": tuple(test_files[:maximum]),
+            "safe_test_files": tuple(safe_files[:maximum]),
+            "external_test_files": tuple(external_files[:maximum]),
+            "test_file_count": len(test_files),
+            "safe_test_file_count": len(safe_files),
+            "test_files_truncated": len(test_files) > maximum,
+            "test_required_environment_variables": tuple(
+                dict.fromkeys(required_environment)
+            )[:32],
+        }
+
+    @staticmethod
+    def _required_environment_literals(content: str) -> tuple[str, ...]:
+        """Find literal environment lookups evaluated at module or class scope."""
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return ()
+
+        names: list[str] = []
+
+        class Visitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                return None
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                return None
+
+            def visit_Lambda(self, node: ast.Lambda) -> None:
+                return None
+
+            def visit_Subscript(self, node: ast.Subscript) -> None:
+                value = node.value
+                environment = (
+                    isinstance(value, ast.Attribute)
+                    and isinstance(value.value, ast.Name)
+                    and value.value.id == "os"
+                    and value.attr == "environ"
+                ) or (isinstance(value, ast.Name) and value.id == "environ")
+                key = node.slice
+                if environment and isinstance(key, ast.Constant) and isinstance(key.value, str):
+                    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", key.value):
+                        names.append(key.value)
+                self.generic_visit(node)
+
+        Visitor().visit(tree)
+        return tuple(dict.fromkeys(names))
 
     @staticmethod
     def _system_dependency_hints(
