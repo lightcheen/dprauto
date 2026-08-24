@@ -165,6 +165,19 @@ Python 版本一致的单个环境；lint、docs、fuzz、benchmark、外部服�
 最窄的 test/testing、tox 或 dev requirements 文件。不会把 `requirements-dev.txt`、
 `.[tests]` 和临时测试工具全部作为相互独立的依赖集合重复安装。
 
+Parser 还会在有界文件扫描中记录真实测试文件、明显的 integration/e2e/remote/notebook/
+live-network 文件，以及 conftest 在 module/class scope 强制读取的环境变量名（只记录变量名，
+从不读取值）。存在直接 pytest 证据时，Testability 不会为了运行项目测试而启动同时包含
+lint、mypy 或其他质量任务的完整 tox/nox 环境。安全本地测试文件超过预算，或同一套件混有
+明显外部测试时，会按目录轮转选择最多 8 个真实文件；上限可通过
+`DPRAUTO_VERIFICATION_MAX_TEST_FILES_PER_SLICE` 设置为 1–32。原始命令、选择后的目标、
+数量和原因都会写入 Verification metadata。
+
+coverage 只属于观测能力，因此 `--cov`、`--cov-report` 等 coverage-only 参数不会成为
+Testability 成败的前置条件。若 conftest 在收集阶段明确需要 secret，或者只发现外部服务/
+昂贵测试，Testability 会带 `skip_reason` 明确标记 SKIPPED；系统不会伪造密钥、调用付费
+服务，也不会把未执行测试写成 PASSED。Installability 和 Runnability 仍必须通过。
+
 临时安装的验证 runner 使用固定版本，默认分别为 `pytest==8.3.5`、`tox==4.23.2` 和
 `nox==2024.10.9`，避免上游最新版改变导致同一项目在不同时间得到不同结果。版本可通过
 `DPRAUTO_VERIFICATION_PYTEST_VERSION`、`DPRAUTO_VERIFICATION_TOX_VERSION` 和

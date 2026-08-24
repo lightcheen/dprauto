@@ -433,6 +433,7 @@ def evaluation_policy(config: AppConfig) -> dict[str, Any]:
             "tox_version": config.verification.tox_version,
             "nox_version": config.verification.nox_version,
             "max_parallel_test_workers": config.verification.max_parallel_test_workers,
+            "max_test_files_per_slice": config.verification.max_test_files_per_slice,
         },
         "llm": {
             "provider": config.llm.provider,

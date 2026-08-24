@@ -13,6 +13,7 @@ from evaluations.prompt12.run_evaluation import (
     ensure_docker_networks,
     ensure_poetry_tool_images,
     evaluation_identity,
+    evaluation_policy,
     load_source,
     make_config,
     required_poetry_python_versions,
@@ -314,6 +315,17 @@ class EvaluationHarnessTests(unittest.TestCase):
             )
 
             self.assertNotEqual(before["digest"], after["digest"])
+
+    def test_evaluation_policy_records_test_slice_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = make_config(Path(directory))
+
+            policy = evaluation_policy(config)
+
+        self.assertEqual(
+            policy["verification"]["max_test_files_per_slice"],
+            8,
+        )
 
     def test_evaluation_identity_changes_with_source_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
