@@ -137,18 +137,27 @@ class ListProjectFilesTool:
 class ReadFileTool:
     name = "read_file"
     effect = "observe"
-    description = "Read one UTF-8 project file using a workspace-relative path and size bound."
+    description = (
+        "Read up to 400 lines from one UTF-8 project file using a safe workspace-relative "
+        "path. Use optional inclusive start_line/end_line to page through large files; the "
+        "result reports total_lines, truncation, and next_start_line."
+    )
     argument_schema = {
         "type": "object",
-        "properties": {"path": {"type": "string", "minLength": 1}},
+        "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "start_line": {"type": "integer", "minimum": 1},
+            "end_line": {"type": "integer", "minimum": 1},
+        },
         "required": ["path"],
         "additionalProperties": False,
     }
 
-    def __init__(self, *, max_bytes: int = 256 * 1024) -> None:
-        if max_bytes <= 0:
-            raise ValueError("max_bytes must be positive")
+    def __init__(self, *, max_bytes: int = 256 * 1024, max_lines: int = 400) -> None:
+        if max_bytes <= 0 or max_lines <= 0:
+            raise ValueError("read file bounds must be positive")
         self.max_bytes = max_bytes
+        self.max_lines = max_lines
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
         path = _text_argument(arguments, "path")
@@ -158,11 +167,53 @@ class ReadFileTool:
         if target.stat().st_size > self.max_bytes:
             raise ToolExecutionError(f"project file exceeds read limit: {path}")
         content = target.read_text(encoding="utf-8", errors="replace")
+        lines = content.splitlines(keepends=True)
+        total_lines = len(lines)
+        if not lines:
+            return ToolResult(
+                self.name,
+                True,
+                f"read empty file {path}",
+                data={
+                    "path": path,
+                    "content": "",
+                    "start_line": 0,
+                    "end_line": 0,
+                    "total_lines": 0,
+                    "truncated": False,
+                    "next_start_line": None,
+                },
+            )
+        start_line = int(arguments.get("start_line", 1))
+        requested_end = int(arguments.get("end_line", total_lines))
+        if requested_end < start_line:
+            raise ToolExecutionError("read_file end_line must be >= start_line")
+        if start_line > total_lines:
+            raise ToolExecutionError(
+                f"read_file start_line {start_line} exceeds {path} total lines {total_lines}"
+            )
+        if requested_end - start_line + 1 > self.max_lines:
+            if "end_line" in arguments:
+                raise ToolExecutionError(
+                    f"read_file range exceeds maximum of {self.max_lines} lines"
+                )
+            requested_end = start_line + self.max_lines - 1
+        end_line = min(total_lines, requested_end)
+        selected = "".join(lines[start_line - 1 : end_line])
+        truncated = start_line > 1 or end_line < total_lines
         return ToolResult(
             self.name,
             True,
-            f"read {path} ({len(content.encode('utf-8'))} bytes)",
-            data={"path": path, "content": content},
+            f"read {path} lines {start_line}-{end_line} of {total_lines}",
+            data={
+                "path": path,
+                "content": selected,
+                "start_line": start_line,
+                "end_line": end_line,
+                "total_lines": total_lines,
+                "truncated": truncated,
+                "next_start_line": end_line + 1 if end_line < total_lines else None,
+            },
         )
 
 

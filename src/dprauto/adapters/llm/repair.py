@@ -139,6 +139,8 @@ class LLMRepairPlanner:
                             "build-environment failure. Use only listed read-only tools. Request "
                             "the minimum additional evidence and never request source mutation, "
                             "command execution, builds, secrets, .env files, keys, or credentials. "
+                            "A read_file result with truncated=true is incomplete; use its "
+                            "next_start_line and a bounded end_line to request the needed page. "
                             "Return exactly one JSON object shaped as "
                             '{"complete":false,"rationale":"...","actions":['
                             '{"tool":"read_file","arguments":{"path":"pyproject.toml"},'

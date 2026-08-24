@@ -101,6 +101,7 @@ class LLMRepairPlannerTests(unittest.TestCase):
             "investigate_failure",
         )
         self.assertIn("minimum additional evidence", client.requests[0].messages[0].content)
+        self.assertIn("truncated=true", client.requests[0].messages[0].content)
 
     def test_invalid_investigation_tool_is_corrected_to_completion(self) -> None:
         client = RecordingLLMClient(

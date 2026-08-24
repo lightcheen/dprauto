@@ -176,12 +176,15 @@ class AgentContextManager:
     ) -> tuple[dict[str, Any], ...]:
         """Retain bounded read/search evidence instead of only generated scripts."""
 
+        selected = observations[-12:]
+        per_record_limit = max(400, character_limit // max(1, min(len(selected), 8)))
         records: list[dict[str, Any]] = []
         used = 0
-        for observation in observations:
+        for observation in reversed(selected):
             remaining = character_limit - used
             if remaining <= 100:
                 break
+            record_limit = min(remaining, per_record_limit)
             data: dict[str, Any] = {}
             for key in (
                 "path",
@@ -191,12 +194,19 @@ class AgentContextManager:
                 "files",
                 "truncated",
                 "skipped_files",
+                "start_line",
+                "end_line",
+                "total_lines",
+                "next_start_line",
             ):
                 if key not in observation.data:
                     continue
                 value = observation.data[key]
                 if isinstance(value, str):
-                    data[key] = value[: min(len(value), max(100, remaining // 2))]
+                    data[key] = AgentContextManager._bounded_text(
+                        value,
+                        max(100, record_limit - 300),
+                    )
                 elif isinstance(value, (list, tuple)):
                     data[key] = tuple(value[:100])
                 elif isinstance(value, (bool, int, float)) or value is None:
@@ -207,10 +217,8 @@ class AgentContextManager:
                 "summary": observation.summary,
                 "data": data,
             }
+            record = AgentContextManager._fit_evidence_record(record, record_limit)
             encoded = to_json_bytes(record).decode()
-            if len(encoded) > remaining:
-                record["data"] = {"excerpt": encoded[: max(0, remaining - 200)]}
-                encoded = to_json_bytes(record).decode()
             if len(encoded) > remaining:
                 break
             records.append(record)
@@ -224,21 +232,99 @@ class AgentContextManager:
         character_limit: int,
     ) -> tuple[dict[str, str], ...]:
         scripts: dict[str, str] = {}
+        profile = state.get("project_profile")
+        allowed_paths = {".dprauto/requirements-verification.txt"}
+        if profile:
+            allowed_paths.update(profile.build_files)
+            allowed_paths.update(profile.dockerfiles)
+        plan = state.get("build_plan")
+        if plan:
+            allowed_paths.update(generated.path for generated in plan.generated_files)
         for observation in observations:
             path = observation.data.get("path")
             content = observation.data.get("content")
-            if isinstance(path, str) and isinstance(content, str):
-                scripts[path] = content[-character_limit:]
-        plan = state.get("build_plan")
+            if (
+                isinstance(path, str)
+                and path in allowed_paths
+                and isinstance(content, str)
+            ):
+                scripts[path] = AgentContextManager._bounded_text(
+                    content,
+                    character_limit,
+                )
         if plan:
             for generated in plan.generated_files:
                 name = PurePosixPath(generated.path).name.lower()
                 if name == "setup.sh" or name.startswith("dockerfile"):
-                    scripts.setdefault(generated.path, generated.content[-character_limit:])
+                    scripts.setdefault(
+                        generated.path,
+                        AgentContextManager._bounded_text(
+                            generated.content,
+                            character_limit,
+                        ),
+                    )
         return tuple(
             {"path": path, "content": content}
             for path, content in sorted(scripts.items())
         )
+
+    @staticmethod
+    def _bounded_text(value: str, character_limit: int) -> str:
+        if len(value) <= character_limit:
+            return value
+        if character_limit <= 0:
+            return ""
+        marker = f"\n... <{len(value) - character_limit} characters omitted> ...\n"
+        if len(marker) >= character_limit:
+            return value[:character_limit]
+        available = max(0, character_limit - len(marker))
+        head = (available * 2) // 3
+        tail = available - head
+        return value[:head] + marker + (value[-tail:] if tail else "")
+
+    @staticmethod
+    def _fit_evidence_record(
+        record: dict[str, Any],
+        character_limit: int,
+    ) -> dict[str, Any]:
+        if len(to_json_bytes(record).decode()) <= character_limit:
+            return record
+        data = dict(record["data"])
+        content = data.get("content")
+        if isinstance(content, str):
+            lower = 0
+            upper = len(content)
+            best = ""
+            while lower <= upper:
+                middle = (lower + upper) // 2
+                candidate_data = dict(data)
+                candidate_data["content"] = AgentContextManager._bounded_text(
+                    content,
+                    middle,
+                )
+                candidate = {**record, "data": candidate_data}
+                if len(to_json_bytes(candidate).decode()) <= character_limit:
+                    best = candidate_data["content"]
+                    lower = middle + 1
+                else:
+                    upper = middle - 1
+            data["content"] = best
+            fitted = {**record, "data": data}
+            if len(to_json_bytes(fitted).decode()) <= character_limit:
+                return fitted
+        scalar_data = {
+            key: value
+            for key, value in data.items()
+            if key != "content" and isinstance(value, (str, bool, int, float, type(None)))
+        }
+        return {
+            **record,
+            "summary": AgentContextManager._bounded_text(
+                str(record["summary"]),
+                200,
+            ),
+            "data": scalar_data,
+        }
 
     @staticmethod
     def _failure(

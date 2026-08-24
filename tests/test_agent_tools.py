@@ -310,6 +310,35 @@ class AgentToolTests(unittest.TestCase):
             {".env.example", "README.md"},
         )
 
+    def test_read_file_pages_large_files_by_bounded_line_range(self) -> None:
+        content = "".join(f"line-{number}\n" for number in range(1, 1_001))
+        (self.root / "large.py").write_text(content, encoding="utf-8")
+        tool = ReadFileTool(max_lines=100)
+
+        first = tool.invoke({"path": "large.py"}, self.context)
+        middle = tool.invoke(
+            {"path": "large.py", "start_line": 650, "end_line": 749},
+            self.context,
+        )
+
+        self.assertEqual(first.data["start_line"], 1)
+        self.assertEqual(first.data["end_line"], 100)
+        self.assertEqual(first.data["total_lines"], 1_000)
+        self.assertEqual(first.data["next_start_line"], 101)
+        self.assertTrue(first.data["truncated"])
+        self.assertIn("line-650", middle.data["content"])
+        self.assertIn("line-749", middle.data["content"])
+        with self.assertRaises(ToolExecutionError):
+            tool.invoke(
+                {"path": "large.py", "start_line": 1, "end_line": 101},
+                self.context,
+            )
+        with self.assertRaises(ToolExecutionError):
+            tool.invoke(
+                {"path": "large.py", "start_line": 20, "end_line": 10},
+                self.context,
+            )
+
     def test_list_project_files_is_bounded_and_read_only(self) -> None:
         (self.root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
         (self.root / "README.md").write_text("project\n", encoding="utf-8")

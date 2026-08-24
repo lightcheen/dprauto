@@ -10,6 +10,56 @@ from dprauto.serialization import to_json_bytes
 
 
 class AgentContextManagerTests(unittest.TestCase):
+    def test_recent_source_evidence_keeps_head_and_is_not_a_build_script(self) -> None:
+        manager = AgentContextManager(AgentConfig(max_context_characters=5_000))
+        state = create_agent_state("source-evidence-run")
+        state["project_profile"] = ProjectProfile(
+            "source-evidence-project",
+            SourceReference("fixture"),
+            languages=("Python",),
+            dockerfiles=("Dockerfile",),
+        )
+        observations = (
+            ToolResult(
+                "read_file",
+                True,
+                "read Dockerfile",
+                data={"path": "Dockerfile", "content": "FROM python:3.11-slim\n"},
+            ),
+            ToolResult(
+                "read_file",
+                True,
+                "read large source",
+                data={
+                    "path": "src/project/common.py",
+                    "content": (
+                        "sys.stdout = io.TextIOWrapper(sys.stdout.buffer)\n"
+                        + "middle = True\n" * 2_000
+                        + "END = True\n"
+                    ),
+                    "start_line": 1,
+                    "end_line": 400,
+                    "total_lines": 2_002,
+                    "truncated": True,
+                    "next_start_line": 401,
+                },
+            ),
+        )
+
+        context = manager.build_llm_context(state, observations)
+
+        self.assertEqual(
+            tuple(item["path"] for item in context["current_build_scripts"]),
+            ("Dockerfile",),
+        )
+        self.assertEqual(context["evidence"][0]["data"]["start_line"], 1)
+        self.assertEqual(context["evidence"][0]["data"]["next_start_line"], 401)
+        self.assertIn(
+            "sys.stdout = io.TextIOWrapper",
+            context["evidence"][0]["data"]["content"],
+        )
+        self.assertIn("characters omitted", context["evidence"][0]["data"]["content"])
+
     def test_large_history_is_compacted_to_a_fixed_llm_context(self) -> None:
         config = AgentConfig(
             max_context_characters=5_000,
