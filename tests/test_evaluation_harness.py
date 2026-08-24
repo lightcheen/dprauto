@@ -410,6 +410,48 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertEqual(summary["repair_quality"]["regression_count"], 1)
         self.assertEqual(summary["repair_quality"]["regression_rate"], 1.0)
 
+    def test_summarize_separates_policy_skip_from_test_failure(self) -> None:
+        record = {
+            "repo": "example/requires-secret",
+            "source_path": "/tmp/source",
+            "workspace_path": "/tmp/workspace",
+            "historical_cnb_status": "failure",
+            "standard_build": {
+                "status": "succeeded",
+                "started_at": "2026-08-24T00:00:00+00:00",
+                "finished_at": "2026-08-24T00:00:01+00:00",
+            },
+            "elapsed_seconds": 2.0,
+            "final_result": {
+                "agent_participated": False,
+                "final_status": "succeeded",
+                "repair_attempts": 0,
+                "installability": {"status": "passed"},
+                "testability": {"status": "skipped"},
+                "runnability": {"status": "passed"},
+            },
+            "initial_failure": None,
+            "state_metrics": {
+                "stop_reason": "",
+                "ineffective_modifications": 0,
+                "duplicate_repair_plan": 0,
+            },
+            "llm": {
+                "calls": 0,
+                "api_seconds": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+            },
+        }
+
+        summary = summarize([record])
+
+        self.assertEqual(summary["verification"]["testability_pass"], 0)
+        self.assertEqual(summary["verification"]["testability_skipped"], 1)
+        self.assertEqual(summary["verification"]["testability_failed_or_error"], 0)
+        self.assertEqual(summary["verification"]["build_success_test_failure"], 0)
+
     def test_summarize_uses_terminal_failure_for_unresolved_infrastructure(self) -> None:
         record = {
             "repo": "example/network-after-repair",

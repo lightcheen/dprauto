@@ -733,9 +733,13 @@ def build_duration(build_result: dict[str, Any]) -> float:
     return max(0.0, (finished - started).total_seconds())
 
 
-def passed(record, level):
+def verification_status(record: dict[str, Any], level: str) -> str:
     result = (record.get("final_result") or {}).get(level)
-    return bool(result and result.get("status") == VerificationStatus.PASSED.value)
+    return str(result.get("status", "")) if isinstance(result, dict) else ""
+
+
+def passed(record, level):
+    return verification_status(record, level) == VerificationStatus.PASSED.value
 
 
 def terminal_failure(record: dict[str, Any]) -> dict[str, Any]:
@@ -836,10 +840,21 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         "verification": {
             "installability_pass": sum(passed(r, "installability") for r in completed),
             "testability_pass": sum(passed(r, "testability") for r in completed),
+            "testability_skipped": sum(
+                verification_status(r, "testability")
+                == VerificationStatus.SKIPPED.value
+                for r in completed
+            ),
+            "testability_failed_or_error": sum(
+                verification_status(r, "testability")
+                in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
+                for r in completed
+            ),
             "runnability_pass": sum(passed(r, "runnability") for r in completed),
             "build_success_test_failure": sum(
                 (r.get("standard_build") or {}).get("status") == "succeeded"
-                and not passed(r, "testability")
+                and verification_status(r, "testability")
+                in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
                 for r in completed
             ),
             "test_success_run_failure": sum(
