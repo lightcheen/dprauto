@@ -581,6 +581,37 @@ class VerificationPolicyTests(unittest.TestCase):
             )
         )
 
+    def test_testability_records_capture_compatibility_command_and_reason(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest tests/unit", CommandPurpose.TEST, "README.rst"),
+            metadata={
+                "test_files": (
+                    "tests/unit/test_common.py",
+                    "tests/unit/test_util.py",
+                ),
+                "safe_test_files": (
+                    "tests/unit/test_common.py",
+                    "tests/unit/test_util.py",
+                ),
+                "pytest_capture_incompatible_files": ("src/sample/common.py",),
+            },
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.metadata["original_command"], "pytest tests/unit")
+        self.assertEqual(
+            result.metadata["selection_kind"],
+            "pytest-capture-disabled",
+        )
+        self.assertEqual(result.metadata["selection_targets"], ())
+        self.assertIn("rewraps sys.stdout/sys.stderr", result.metadata["selection_reason"])
+        self.assertTrue(result.metadata["command"].endswith("pytest tests/unit -s"))
+        self.assertTrue(self.runtime.commands[0].display.endswith("pytest tests/unit -s"))
+
     def test_testability_skips_required_secret_without_running_a_container(self) -> None:
         project = profile(
             ProjectType.LIBRARY,
