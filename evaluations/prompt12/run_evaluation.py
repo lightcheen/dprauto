@@ -441,6 +441,9 @@ def evaluation_policy(config: AppConfig) -> dict[str, Any]:
             "temperature": config.llm.temperature,
             "timeout_seconds": config.llm.timeout_seconds,
             "timeout_retries_per_model": config.llm.timeout_retries_per_model,
+            "max_timeout_attempts_per_operation": (
+                config.llm.max_timeout_attempts_per_operation
+            ),
             "max_output_tokens": config.llm.max_output_tokens,
             "model_pool": model_pool,
         },

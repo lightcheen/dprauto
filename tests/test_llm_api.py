@@ -141,7 +141,7 @@ class APILLMClientTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
                 ),
                 HourlyLLMCallLogger(root / "logs"),
-                timeout_seconds=2,
+                timeout_seconds=10,
             )
             try:
                 with patch.dict(

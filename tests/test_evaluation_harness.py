@@ -327,6 +327,17 @@ class EvaluationHarnessTests(unittest.TestCase):
             8,
         )
 
+    def test_evaluation_policy_records_llm_timeout_attempt_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = make_config(Path(directory))
+
+            policy = evaluation_policy(config)
+
+        self.assertEqual(
+            policy["llm"]["max_timeout_attempts_per_operation"],
+            2,
+        )
+
     def test_evaluation_identity_changes_with_source_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

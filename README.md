@@ -339,9 +339,14 @@ LLM 请求不包含完整历史日志，只包含：
 }
 ```
 
-单模型旧格式仍兼容。一次请求超时后先用当前模型重试一次；再次超时后切换到下一个
-模型，只有模型池全部超时才向工作流返回错误。默认输出上限为 4096 token，避免简单
-修复计划生成过长响应。对应配置为 `DPRAUTO_LLM_TIMEOUT_RETRIES_PER_MODEL`、
+单模型旧格式仍兼容。生产 HTTP 请求在可终止的隔离进程中执行；父进程按配置 timeout 和
+Agent 剩余总预算的较小值执行绝对墙钟回收，因此代理握手、状态行读取或持续少量响应不能
+绕过截止时间。响应体上限为 8 MiB，超时和强制回收仍进入同一小时审计日志。
+
+一次请求超时后先切换下一个配置模型，模型池轮转一遍后才重试同一模型。调查、失败分析和
+修复规划的每次 LLM 调用默认最多尝试 2 个模型，避免一次故障转移遍历整个模型池；上限可
+通过 `DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION` 设置为 1–8。默认输出上限为 4096
+token。其他对应配置为 `DPRAUTO_LLM_TIMEOUT_RETRIES_PER_MODEL`、
 `DPRAUTO_LLM_MAX_OUTPUT_TOKENS` 和 `DPRAUTO_LLM_TIMEOUT_SECONDS`。
 
 `myapi.json` 已加入 `.gitignore`，建议权限保持为 `0600`。API key 只进入 Authorization
