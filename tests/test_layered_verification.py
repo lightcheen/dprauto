@@ -849,6 +849,7 @@ class VerificationPolicyTests(unittest.TestCase):
         pdm_project = profile(
             ProjectType.LIBRARY,
             command,
+            dependency_files=("pdm.lock", "pyproject.toml"),
             package_managers=("pdm",),
             metadata={
                 "test_dependency_extras": ("testing",),
@@ -858,6 +859,20 @@ class VerificationPolicyTests(unittest.TestCase):
         TestabilityVerifier(self.runtime).verify(build_context(pdm_project, self.workspace))
         pdm_command = self.runtime.commands[-1].display
         self.assertIn("pdm sync --no-editable -G test -G testing", pdm_command)
+
+        unlocked_pdm_project = profile(
+            ProjectType.LIBRARY,
+            command,
+            dependency_files=("pyproject.toml",),
+            package_managers=("pdm",),
+            metadata={"test_dependency_manager_groups": ("test",)},
+        )
+        TestabilityVerifier(self.runtime).verify(
+            build_context(unlocked_pdm_project, self.workspace)
+        )
+        unlocked_pdm_command = self.runtime.commands[-1].display
+        self.assertIn("pdm install --no-editable -G test", unlocked_pdm_command)
+        self.assertNotIn("pdm sync", unlocked_pdm_command)
 
     def test_installability_records_all_four_checks(self) -> None:
         project = profile(

@@ -229,6 +229,17 @@ class BuildStrategyTests(unittest.TestCase):
         pdm_setup = next(item.content for item in pdm.generated_files if item.path == "setup.sh")
         self.assertIn("pdm sync --prod --no-editable", pdm_setup)
 
+        unlocked_pdm = TemplateStrategy(self.runner, self.config).create_plan(
+            python_profile(managers=("pdm",), dependencies=("pyproject.toml",))
+        )
+        unlocked_setup = next(
+            item.content
+            for item in unlocked_pdm.generated_files
+            if item.path == "setup.sh"
+        )
+        self.assertIn("pdm install --prod --no-editable", unlocked_setup)
+        self.assertNotIn("pdm sync", unlocked_setup)
+
     def test_poetry_tool_image_is_versioned_and_skips_per_project_bootstrap(self) -> None:
         config = BuildConfig(
             poetry_version="1.8.5",

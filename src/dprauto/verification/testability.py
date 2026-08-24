@@ -303,8 +303,16 @@ class TestabilityVerifier:
             return [" ".join(parts)]
         elif "pdm" in managers and (manager_groups or extras):
             groups = tuple(dict.fromkeys((*manager_groups, *extras)))
+            pdm_command = (
+                "pdm sync"
+                if any(
+                    PurePosixPath(path).name.casefold() == "pdm.lock"
+                    for path in profile.dependency_files
+                )
+                else "pdm install"
+            )
             return [
-                "pdm sync --no-editable "
+                f"{pdm_command} --no-editable "
                 + " ".join(f"-G {shlex.quote(group)}" for group in groups)
             ]
         elif extras:

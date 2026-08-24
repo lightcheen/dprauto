@@ -268,13 +268,21 @@ class TemplateStrategy:
             )
             return tuple(commands)
         if "pdm" in managers:
+            pdm_command = (
+                "pdm sync"
+                if any(
+                    PurePosixPath(path).name.casefold() == "pdm.lock"
+                    for path in profile.dependency_files
+                )
+                else "pdm install"
+            )
             return (
                 *system_commands,
                 "python -m pip install pdm",
                 (
-                    "pdm sync --no-editable"
+                    f"{pdm_command} --no-editable"
                     if include_test_dependencies
-                    else "pdm sync --prod --no-editable"
+                    else f"{pdm_command} --prod --no-editable"
                 ),
             )
         if "pipenv" in managers:
