@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-multilang-m0-20260825",
+  "description": "Frozen, reviewable seed corpus for extending DPRAuto beyond single-container Python projects.",
+  "frozen_on": "2026-08-25",
+  "legacy_python_baseline": "evaluations/baselines/python-21-m9-20260824.json",
+  "ground_truth": "evaluations/multilang/ground-truth/cases.json",
+  "datasets": {
+    "envbench_python": {
+      "project": "HerAgent/CNB",
+      "catalog": "/home/master/auto-build/CNB/cnb-benchmark/datasets/envbench-python.txt",
+      "source_root": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos"
+    },
+    "installamatic": {
+      "project": "HerAgent/CNB",
+      "catalog": "/home/master/auto-build/CNB/cnb-benchmark/datasets/installamatic_dataset.txt",
+      "source_root": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos"
+    },
+    "execution_agent": {
+      "project": "HerAgent/CNB",
+      "catalog": "/home/master/auto-build/HerAgent-main/projects/executionAgent.txt",
+      "source_root": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos"
+    },
+    "cxxcrafter_top100": {
+      "project": "CXXCrafter",
+      "catalog": "/home/master/auto-build/CXXCrafter/CXXCrafter-Community-Edition/data/top100_dataset.csv",
+      "source_root": "/home/master/auto-build/CXXCrafter/datasets/top100-src"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "py-yubikey-manager",
+      "repo": "yubico/yubikey-manager",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "long_tail",
+      "focus": ["optional-test-imports", "command-semantics", "hardware-boundary"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-yubico-yubikey-manager-fbdae2bc12ba",
+        "state": "ready",
+        "revision": "fbdae2bc12ba0451bcfc62372bc9191c10ecad0c"
+      }
+    },
+    {
+      "case_id": "py-dagshub-client",
+      "repo": "dagshub/client",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "long_tail",
+      "focus": ["minimal-test-dependency-closure", "bounded-network"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-dagshub-client-f8d89c53c733",
+        "state": "ready",
+        "revision": "f8d89c53c733e58edf36f409f7a27cd30d80eced"
+      }
+    },
+    {
+      "case_id": "py-piccolo",
+      "repo": "piccolo-orm/piccolo",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "service",
+      "focus": ["postgresql-service", "database-initialization", "test-slicing"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-piccolo-orm-piccolo-17c0a8859c19",
+        "state": "ready",
+        "revision": "17c0a8859c19da48b33a19bb5a15d44d91bb6278"
+      }
+    },
+    {
+      "case_id": "py-hknweb",
+      "repo": "compserv/hknweb",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "framework",
+      "focus": ["django-settings", "migration", "framework-initialization"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-compserv-hknweb-422acacc4b1a",
+        "state": "ready",
+        "revision": "422acacc4b1a9a56fd6b5da07491662a114a97a8"
+      }
+    },
+    {
+      "case_id": "py-donation-tracker",
+      "repo": "gamesdonequick/donation-tracker",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "framework",
+      "focus": ["django-settings", "fixture-data", "project-test-runner"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-gamesdonequick-donation-tracker-63411a9fd9d8",
+        "state": "ready",
+        "revision": "63411a9fd9d803b5dd85507682b79835b99a99b0"
+      }
+    },
+    {
+      "case_id": "py-tmuxp",
+      "repo": "tmux-python/tmuxp",
+      "primary_language": "python",
+      "dataset": "envbench_python",
+      "tier": "system_executable",
+      "focus": ["system-executable", "multiprocess", "test-runtime-contract"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-tmux-python-tmuxp-3e0fec3596cc",
+        "state": "ready",
+        "revision": "3e0fec3596cc557456af4f51e66a72aebbfe7ff8"
+      }
+    },
+    {
+      "case_id": "py-fastapi",
+      "repo": "tiangolo/fastapi",
+      "primary_language": "python",
+      "dataset": "installamatic",
+      "tier": "package",
+      "focus": ["pdm-no-lock", "stable-test-command", "optional-test-imports"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/installamatic-tiangolo-fastapi-212fd5e",
+        "state": "ready",
+        "revision": "212fd5e",
+        "revision_note": "The upstream Installamatic catalog provides an abbreviated revision."
+      }
+    },
+    {
+      "case_id": "py-django",
+      "repo": "django/django",
+      "primary_language": "python",
+      "dataset": "execution_agent",
+      "tier": "framework",
+      "focus": ["framework-test-runner", "settings-matrix", "database-services"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-django-django-e95468ed97b1",
+        "state": "ready",
+        "revision": "e95468ed97b1c250939da316218c39dad577ba32"
+      }
+    },
+    {
+      "case_id": "java-commons-csv",
+      "repo": "apache/commons-csv",
+      "primary_language": "java",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["maven", "java-toolchain", "test-command"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-apache-commons-csv-2d44689ec75e",
+        "state": "ready",
+        "revision": "2d44689ec75eb7291438973a188d26037990c29e"
+      }
+    },
+    {
+      "case_id": "java-mybatis",
+      "repo": "mybatis/mybatis-3",
+      "primary_language": "java",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["maven-wrapper", "testcontainers", "profile-selection"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-mybatis-mybatis-3-58e2d5e9b035",
+        "state": "ready",
+        "revision": "58e2d5e9b0359116ebdc7ea2ea0a88d55545d4e2"
+      }
+    },
+    {
+      "case_id": "java-rxjava",
+      "repo": "ReactiveX/RxJava",
+      "primary_language": "java",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["gradle-wrapper", "java-toolchain", "test-command"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-reactivex-rxjava-6b28009fd085",
+        "state": "ready",
+        "revision": "6b28009fd08563eed648334d3d030acdd12818d3"
+      }
+    },
+    {
+      "case_id": "java-spring-security",
+      "repo": "spring-projects/spring-security",
+      "primary_language": "java",
+      "dataset": "execution_agent",
+      "tier": "monorepo",
+      "focus": ["gradle-multimodule", "subproject-selection", "working-directory"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-spring-projects-spring-security-0d5f42f8529c",
+        "state": "ready",
+        "revision": "0d5f42f8529c1e56886e91616b6ca7d30f15c65e"
+      }
+    },
+    {
+      "case_id": "cpp-ccache",
+      "repo": "ccache/ccache",
+      "primary_language": "cpp",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["cmake", "native-dependencies", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-ccache-ccache-7f3e822efb1b",
+        "state": "ready",
+        "revision": "7f3e822efb1bee779f8a520c5efb48ce33d1bfef"
+      }
+    },
+    {
+      "case_id": "c-json-c",
+      "repo": "json-c/json-c",
+      "primary_language": "c",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["cmake", "meson", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-json-c-json-c-a1249bfda0f6",
+        "state": "ready",
+        "revision": "a1249bfda0f6adf0363d5ab42d9ca816b3366ff2"
+      }
+    },
+    {
+      "case_id": "cpp-nlohmann-json",
+      "repo": "nlohmann/json",
+      "primary_language": "cpp",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["cmake-options", "test-target", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-nlohmann-json-55f93686c015",
+        "state": "ready",
+        "revision": "55f93686c01528224f448c19128836e7df245f72"
+      }
+    },
+    {
+      "case_id": "c-libevent",
+      "repo": "libevent/libevent",
+      "primary_language": "c",
+      "dataset": "execution_agent",
+      "tier": "package",
+      "focus": ["cmake", "openssl", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-libevent-libevent-a994a52d5373",
+        "state": "ready",
+        "revision": "a994a52d5373d6284b27576efa617aff2baa7bd3"
+      }
+    },
+    {
+      "case_id": "c-distcc",
+      "repo": "distcc/distcc",
+      "primary_language": "c",
+      "dataset": "execution_agent",
+      "tier": "system",
+      "focus": ["autotools", "make-check", "multiprocess"],
+      "source": {
+        "path": "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-distcc-distcc-a627b26f08cd",
+        "state": "ready",
+        "revision": "a627b26f08cd08542f63829f7fd9cd0fea0523fd"
+      }
+    },
+    {
+      "case_id": "c-8cc",
+      "repo": "rui314/8cc",
+      "primary_language": "c",
+      "dataset": "cxxcrafter_top100",
+      "tier": "compiler",
+      "focus": ["make", "compiler-bootstrap", "test-target"],
+      "source": {
+        "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/8cc",
+        "state": "fetch_required",
+        "revision": null,
+        "url": "https://github.com/rui314/8cc.git",
+        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+      }
+    },
+    {
+      "case_id": "cpp-mold",
+      "repo": "rui314/mold",
+      "primary_language": "cpp",
+      "dataset": "cxxcrafter_top100",
+      "tier": "linker",
+      "focus": ["cmake", "system-toolchain", "integration-tests"],
+      "source": {
+        "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/mold",
+        "state": "fetch_required",
+        "revision": null,
+        "url": "https://github.com/rui314/mold.git",
+        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+      }
+    },
+    {
+      "case_id": "cpp-leveldb",
+      "repo": "google/leveldb",
+      "primary_language": "cpp",
+      "dataset": "cxxcrafter_top100",
+      "tier": "package",
+      "focus": ["cmake", "native-library", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/leveldb",
+        "state": "fetch_required",
+        "revision": null,
+        "url": "https://github.com/google/leveldb.git",
+        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+      }
+    },
+    {
+      "case_id": "cpp-simdjson",
+      "repo": "simdjson/simdjson",
+      "primary_language": "cpp",
+      "dataset": "cxxcrafter_top100",
+      "tier": "package",
+      "focus": ["cmake", "cpu-features", "ctest"],
+      "source": {
+        "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/simdjson",
+        "state": "fetch_required",
+        "revision": null,
+        "url": "https://github.com/simdjson/simdjson.git",
+        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+      }
+    }
+  ]
+}

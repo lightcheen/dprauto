@@ -28,3 +28,9 @@ Expected pre-change metrics are:
 - 2 Testability checks passed
 - 9 Runnability checks passed
 - 4 repairs ended as regressions
+
+`python-21-m9-20260824.json` freezes the latest complete 21-project Python
+run before the multilingual work starts. It intentionally does not merge the
+later M10 targeted reruns into a fictional full-corpus result. The M9 baseline
+records 19 successful standard builds and 8 successful final environments;
+Testability remains the main gap, with only 7 passes and 1 policy skip.

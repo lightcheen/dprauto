@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-multilang-m0-20260825",
+  "review_status": "seed_ground_truth",
+  "policy": {
+    "test_selection": "Use the repository's ordinary, repeatable unit/integration test entrypoint. Do not count lint, fuzz, download, packaging, docs, or release commands as Testability.",
+    "command_semantics": ["build", "test", "run", "setup"],
+    "success_requires": ["build", "test"],
+    "run_optional_for_libraries": true,
+    "forbidden_test_categories": ["download-only", "lint-only", "format-only", "fuzz-only", "docs-only", "release-only"]
+  },
+  "cases": [
+    {
+      "case_id": "py-yubikey-manager",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["pep517", "tox"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python -m pytest"],
+        "run": ["ykman --help"],
+        "setup": []
+      },
+      "test_contract": {
+        "python_imports": ["pytest", "sybil"],
+        "system_executables": [],
+        "services": [],
+        "environment": {},
+        "hardware": "Hardware-backed tests must be excluded or explicitly marked unavailable when no YubiKey is attached."
+      },
+      "evidence": ["tox.ini", "pyproject.toml"],
+      "false_targets": ["pip download -r cryptography.txt"],
+      "notes": "pip download is CI dependency preparation, not an application run target."
+    },
+    {
+      "case_id": "py-dagshub-client",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["setuptools", "pytest"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python -m pytest"],
+        "run": [],
+        "setup": []
+      },
+      "test_contract": {
+        "python_imports": ["pytest", "aiohttp", "requests_cache"],
+        "system_executables": [],
+        "services": [],
+        "environment": {},
+        "dependency_rule": "Compute imports for the selected test slice; do not install the entire requirements-dev.txt when it pulls unrelated FiftyOne/PyArrow dependencies."
+      },
+      "evidence": ["pytest.ini", ".github/workflows/python-package.yml"],
+      "false_targets": [],
+      "notes": "This case guards the minimal test dependency closure."
+    },
+    {
+      "case_id": "py-piccolo",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["poetry", "pytest"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python -m pytest"],
+        "run": [],
+        "setup": ["create PostgreSQL role/database/extensions declared by the selected CI job"]
+      },
+      "test_contract": {
+        "python_imports": ["pytest", "asyncpg", "psycopg"],
+        "system_executables": ["psql"],
+        "services": ["postgresql"],
+        "environment": {"PG_PASSWORD": "postgres"},
+        "service_healthcheck": "pg_isready"
+      },
+      "evidence": ["pyproject.toml", ".github/workflows/tests.yaml"],
+      "false_targets": [],
+      "notes": "The exact database setup must follow the selected SQLite/PostgreSQL test slice rather than provisioning every CI matrix service."
+    },
+    {
+      "case_id": "py-hknweb",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["poetry", "django"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python manage.py test"],
+        "run": ["python manage.py check"],
+        "setup": ["select the project settings module", "run only migrations required by the selected tests"]
+      },
+      "test_contract": {
+        "python_imports": ["django"],
+        "system_executables": [],
+        "services": [],
+        "environment": {"DJANGO_SETTINGS_MODULE": "project-specific; discover from manage.py"},
+        "framework_initialization": ["django.setup", "settings validation"]
+      },
+      "evidence": ["manage.py", "pyproject.toml"],
+      "false_targets": ["python -m pytest without Django settings discovery"],
+      "notes": "Generic pytest is not accepted when it bypasses the repository's Django bootstrap."
+    },
+    {
+      "case_id": "py-donation-tracker",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["pep517", "django"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python runtests.py"],
+        "run": [],
+        "setup": ["allow runtests.py to configure Django before collection"]
+      },
+      "test_contract": {
+        "python_imports": ["django", "xmlrunner"],
+        "system_executables": [],
+        "services": [],
+        "environment": {},
+        "framework_initialization": ["settings.configure", "django.setup"]
+      },
+      "evidence": ["runtests.py", "pyproject.toml"],
+      "false_targets": ["python -m pytest"],
+      "notes": "The repository-owned runner is the stable test entrypoint."
+    },
+    {
+      "case_id": "py-tmuxp",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["poetry", "pytest"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python -m pytest"],
+        "run": ["tmuxp --help"],
+        "setup": ["install a supported tmux executable"]
+      },
+      "test_contract": {
+        "python_imports": ["pytest", "libtmux"],
+        "system_executables": ["tmux"],
+        "services": [],
+        "environment": {},
+        "process_model": "Tests spawn and control tmux server/client processes."
+      },
+      "evidence": ["pyproject.toml", ".github/workflows/tests.yml"],
+      "false_targets": [],
+      "notes": "Passing import checks without the tmux executable does not satisfy Testability."
+    },
+    {
+      "case_id": "py-fastapi",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["pdm", "pytest"],
+      "commands": {
+        "build": ["pdm install", "pdm build"],
+        "test": ["pdm run pytest"],
+        "run": [],
+        "setup": []
+      },
+      "test_contract": {
+        "python_imports": ["pytest", "httpx"],
+        "system_executables": [],
+        "services": [],
+        "environment": {},
+        "dependency_rule": "Use pdm install when no lockfile exists; pdm sync is not a valid substitute."
+      },
+      "evidence": ["pyproject.toml", ".github/workflows/test.yml"],
+      "false_targets": [],
+      "notes": "The full ordinary pytest suite is preferred over redistribution or documentation workflows."
+    },
+    {
+      "case_id": "py-django",
+      "review_state": "reviewed",
+      "workspace": "tests",
+      "build_systems": ["setuptools", "django-test-runner"],
+      "commands": {
+        "build": ["python -m build"],
+        "test": ["python runtests.py --verbosity=1"],
+        "run": ["python -m django --version"],
+        "setup": ["select test_sqlite unless a database-specific slice is requested"]
+      },
+      "test_contract": {
+        "python_imports": [],
+        "system_executables": [],
+        "services": [],
+        "environment": {},
+        "framework_initialization": ["Django tests/runtests.py configures the test environment"]
+      },
+      "evidence": ["tox.ini", "tests/runtests.py", ".github/workflows/coverage_tests.yml"],
+      "false_targets": ["pytest"],
+      "notes": "Workspace is tests because tox changes into that directory before invoking runtests.py."
+    },
+    {
+      "case_id": "java-commons-csv",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["maven"],
+      "commands": {"build": ["mvn -B -DskipTests package"], "test": ["mvn -B test"], "run": [], "setup": []},
+      "test_contract": {"java_version": "discover from pom.xml", "system_executables": ["java", "mvn"], "services": [], "environment": {}},
+      "evidence": ["pom.xml"],
+      "false_targets": [],
+      "notes": "A library has no required application run command."
+    },
+    {
+      "case_id": "java-mybatis",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["maven-wrapper"],
+      "commands": {"build": ["./mvnw -B -DskipTests package"], "test": ["./mvnw test -B -V --no-transfer-progress -Dlicense.skip=true"], "run": [], "setup": []},
+      "test_contract": {"java_version": "17", "system_executables": ["java"], "services": [], "environment": {}, "optional_profile": "-PtestContainers requires a Docker service and is not part of the minimal default test contract."},
+      "evidence": ["pom.xml", "mvnw", ".github/workflows/ci.yaml"],
+      "false_targets": [],
+      "notes": "Use the wrapper and do not activate service profiles unless selected tests require them."
+    },
+    {
+      "case_id": "java-rxjava",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["gradle-wrapper"],
+      "commands": {"build": ["./gradlew assemble"], "test": ["./gradlew test"], "run": [], "setup": []},
+      "test_contract": {"java_version": "discover from Gradle toolchain", "system_executables": ["java"], "services": [], "environment": {}},
+      "evidence": ["build.gradle", "gradlew", ".github/workflows/gradle_pr.yml"],
+      "false_targets": [],
+      "notes": "Use Gradle tasks, not example snippets from README."
+    },
+    {
+      "case_id": "java-spring-security",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "subprojects": ["spring-security-core", "spring-security-web", "spring-security-config", "spring-security-test"],
+      "build_systems": ["gradle-wrapper", "gradle-multimodule"],
+      "commands": {"build": ["./gradlew assemble"], "test": ["./gradlew test"], "run": [], "setup": []},
+      "test_contract": {"java_version": "17", "system_executables": ["java"], "services": [], "environment": {}, "selection_rule": "Map changed/selected test files to their owning Gradle subproject before narrowing the task."},
+      "evidence": ["settings.gradle", "build.gradle", "README.adoc", "gradlew"],
+      "false_targets": ["./gradlew publishToMavenLocal", "./gradlew :spring-security-docs:antora"],
+      "notes": "Publishing and docs are build/release tasks, not Testability."
+    },
+    {
+      "case_id": "cpp-ccache",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["cmake"],
+      "commands": {"build": ["cmake -S . -B build -DDEP_FMT=DOWNLOAD -DDEP_XXHASH=DOWNLOAD -DDEP_DOCTEST=DOWNLOAD", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": ["build/ccache --version"], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
+      "evidence": ["CMakeLists.txt", ".github/workflows/build.yaml"],
+      "false_targets": [],
+      "notes": "Dependency download flags are build setup and are never run targets."
+    },
+    {
+      "case_id": "c-json-c",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["cmake", "meson"],
+      "commands": {"build": ["cmake -S . -B build", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "cc", "ctest"], "services": [], "environment": {}},
+      "evidence": ["README.md", "CMakeLists.txt", "tests/CMakeLists.txt"],
+      "false_targets": [],
+      "notes": "CMake is the seed path; Meson remains an alternate build strategy."
+    },
+    {
+      "case_id": "cpp-nlohmann-json",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["cmake"],
+      "commands": {"build": ["cmake -S . -B build -DJSON_BuildTests=ON", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
+      "evidence": ["CMakeLists.txt", ".github/workflows/windows.yml"],
+      "false_targets": [],
+      "notes": "JSON_BuildTests must be enabled; compiling only the header library is insufficient."
+    },
+    {
+      "case_id": "c-libevent",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["cmake", "autotools"],
+      "commands": {"build": ["cmake -S . -B build", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "cc", "ctest"], "services": [], "environment": {}, "native_dependencies": ["openssl development headers unless EVENT__DISABLE_OPENSSL=ON"]},
+      "evidence": ["README.md", "CMakeLists.txt", ".github/workflows/build.yml"],
+      "false_targets": [],
+      "notes": "The selected OpenSSL option determines the native dependency closure."
+    },
+    {
+      "case_id": "c-distcc",
+      "review_state": "reviewed",
+      "workspace": ".",
+      "build_systems": ["autotools", "make"],
+      "commands": {"build": ["./autogen.sh", "./configure", "make -j2"], "test": ["make check"], "run": ["src/distcc --version"], "setup": []},
+      "test_contract": {"system_executables": ["autoconf", "automake", "make", "cc", "python3"], "services": [], "environment": {}, "process_model": "Some tests coordinate compiler client/server processes locally."},
+      "evidence": ["autogen.sh", "configure.ac", ".github/workflows/c-build.yml"],
+      "false_targets": [],
+      "notes": "Remote hosts are not required for the ordinary local make check target."
+    },
+    {
+      "case_id": "c-8cc",
+      "review_state": "provisional_source_missing",
+      "workspace": ".",
+      "build_systems": ["make"],
+      "commands": {"build": ["make"], "test": ["make test"], "run": ["./8cc --help"], "setup": []},
+      "test_contract": {"system_executables": ["make", "cc"], "services": [], "environment": {}},
+      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
+      "false_targets": [],
+      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+    },
+    {
+      "case_id": "cpp-mold",
+      "review_state": "provisional_source_missing",
+      "workspace": ".",
+      "build_systems": ["cmake"],
+      "commands": {"build": ["cmake -S . -B build", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": ["build/mold --version"], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
+      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
+      "false_targets": [],
+      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+    },
+    {
+      "case_id": "cpp-leveldb",
+      "review_state": "provisional_source_missing",
+      "workspace": ".",
+      "build_systems": ["cmake"],
+      "commands": {"build": ["cmake -S . -B build -DLEVELDB_BUILD_TESTS=ON", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
+      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
+      "false_targets": [],
+      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+    },
+    {
+      "case_id": "cpp-simdjson",
+      "review_state": "provisional_source_missing",
+      "workspace": ".",
+      "build_systems": ["cmake"],
+      "commands": {"build": ["cmake -S . -B build -DSIMDJSON_DEVELOPER_MODE=ON", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}, "platform": "CPU feature detection must remain enabled and observable."},
+      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
+      "false_targets": [],
+      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+    }
+  ]
+}
