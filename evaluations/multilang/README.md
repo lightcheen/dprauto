@@ -60,3 +60,21 @@ test command must use an ordinary repository test runner. Download, lint,
 format, fuzz, docs, and release commands cannot satisfy Testability. Service,
 framework, executable, and process prerequisites are part of the test
 contract rather than implicit repair hints.
+
+## M1 parser baseline
+
+M1 replaces the production composition root's Python-only parser with a
+priority-ordered multilingual parser registry. All 17 locally ready M0 source
+snapshots parse without executing project code: 8 select `python-rules-v1`, 4
+select `jvm-rules-v1`, and 5 select `native-rules-v1`.
+
+JVM profiles cover Maven/Gradle wrappers, Java toolchains, modules, and real
+working directories. Native profiles cover CMake, Meson, Autotools, Make,
+language standards, subdirectories, ordered build pipelines, and ordinary
+test entrypoints. Command candidates are capped per semantic purpose; common
+inferred commands remain first so a large CI matrix cannot dominate the Agent
+search space.
+
+M1 is parsing and command intelligence only. It does not yet provide
+Java/C/C++ container strategies, Tree-sitter AST indexing, Neo4j persistence,
+semantic embeddings, or service orchestration.

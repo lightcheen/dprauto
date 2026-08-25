@@ -14,17 +14,24 @@ _COMMAND_TOKENS = {
     "./",
     "apt",
     "apt-get",
+    "autoreconf",
     "bash",
     "conda",
     "coverage",
     "docker",
     "docker-compose",
+    "cmake",
+    "ctest",
     "flask",
+    "gradle",
+    "mvn",
     "gunicorn",
     "hatch",
     "make",
+    "meson",
     "mypy",
     "nox",
+    "ninja",
     "npm",
     "pdm",
     "pip",
@@ -348,20 +355,61 @@ class CommandExtractor:
             command_lower,
         ):
             return CommandPurpose.INSTALL
+        if re.search(r"\bpip3?\s+download\b", command_lower):
+            return CommandPurpose.INSTALL
         if re.search(r"\bmake\s+(?:install|setup|dependencies|deps)\b", command_lower):
             return CommandPurpose.INSTALL
-        if re.search(r"\b(pytest|unittest|tox|nox|make\s+(?:test|tests|check)|coverage\s+run)\b", command_lower):
-            return CommandPurpose.TEST
-        if re.search(r"\b(?:ruff|mypy)\s+(?:check|\.)(?:\s|$)", command_lower):
-            return CommandPurpose.TEST
-        if re.search(r"\bmake\s+(?:lint|typecheck)\b", command_lower):
+
+        # These commands can be useful CI gates, but they do not demonstrate
+        # that the project's ordinary tests can execute. Classify them before
+        # context fallback so a workflow or heading containing "test" cannot
+        # turn lint/docs/fuzz/download preparation into Testability evidence.
+        if re.search(
+            r"(?:^|\s)(?:\./)?(?:ruff|mypy|black|isort|flake8|pylint|actionlint)\b",
+            command_lower,
+        ) or re.search(
+            r"\b(?:tox\s+-e|nox\s+-s|make|meson|ninja|gradlew?|gradle|mvnw?|mvn)\b[^\n]*"
+            r"(?:lint|format|spotless|fuzz|docs?|javadoc|release|publish)",
+            command_lower,
+        ):
+            return CommandPurpose.OTHER
+
+        if re.search(
+            r"\b(pytest|unittest|tox|nox|ctest|make\s+(?:test|tests|check)|"
+            r"meson\s+test|ninja\s+test|coverage\s+run)\b",
+            command_lower,
+        ):
             return CommandPurpose.TEST
         if re.search(
-            r"\b(docker\s+build|python\d*\s+-m\s+build|make\s+(?:build|doc|docs|package|wheel))\b",
+            r"\b(?:mvnw?|mvn)\b[^\n]*(?:^|\s)(?:test|verify|integration-test)(?:\s|$)",
+            command_lower,
+        ):
+            return CommandPurpose.TEST
+        gradle_test_excluded = re.search(
+            r"(?:-x|--exclude-task)\s+(?::[\w.-]+:)*test(?:\s|$)",
+            command_lower,
+        )
+        if not gradle_test_excluded and re.search(
+            r"\b(?:gradlew?|gradle)\b[^\n]*(?:^|\s)(?::[\w.-]+:)*"
+            r"(?:test|check)(?:\s|$)",
+            command_lower,
+        ):
+            return CommandPurpose.TEST
+        if re.search(
+            r"\b(docker\s+build|python\d*\s+-m\s+build|cmake(?:\s|$)|"
+            r"make(?:\s|$)|meson\s+(?:setup|compile)|ninja(?:\s|$)|autoreconf(?:\s|$)|"
+            r"(?:mvnw?|mvn)\b[^\n]*(?:package|install)|"
+            r"(?:gradlew?|gradle)\b[^\n]*(?:assemble|build))",
             command_lower,
         ):
             return CommandPurpose.BUILD
-        if re.search(r"\b(uvicorn|gunicorn|flask\s+run|runserver|streamlit\s+run|docker\s+(?:run|compose\s+up))\b", command_lower):
+        if re.search(r"(?:^|\s)\./(?:configure|autogen\.sh)(?:\s|$)", command_lower):
+            return CommandPurpose.BUILD
+        if re.search(
+            r"\b(uvicorn|gunicorn|flask\s+run|runserver|streamlit\s+run|"
+            r"docker\s+(?:run|compose\s+up))\b",
+            command_lower,
+        ):
             return CommandPurpose.RUN
         if any(word in combined for word in ("test", "testing", "check")):
             return CommandPurpose.TEST

@@ -11,7 +11,8 @@ from dprauto.adapters.llm import (
 )
 from dprauto.adapters.persistence import SQLiteAgentPersistence
 from dprauto.adapters.preflight import DockerRepairPreflight
-from dprauto.adapters.python import PythonEnvironmentDiffer, PythonProjectParser
+from dprauto.adapters.multilang import MultiLanguageProjectParser
+from dprauto.adapters.python import PythonEnvironmentDiffer
 from dprauto.agent.tools import (
     BuildImageTool,
     GetBuildLogTool,
@@ -49,7 +50,7 @@ def create_agent_workflow(
     """Wire production tools while preserving Port/Adapter boundaries."""
 
     app_config = config or AppConfig()
-    parser = PythonProjectParser()
+    parser = MultiLanguageProjectParser()
     executor = SubprocessCommandExecutor(storage)
     builder = create_deterministic_builder(storage, app_config.build)
     verifier = create_layered_verifier(

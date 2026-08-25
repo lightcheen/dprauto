@@ -1,7 +1,7 @@
 # dprauto
 
 `dprauto` 是面向可复现环境构建的 Agent 工程。当前已包含通用领域模型、配置、错误
-体系、Python 项目解析、确定性 Docker 构建、规则优先的失败分类，以及基于 LangGraph
+体系、Python/JVM/C/C++ 项目解析、Python 确定性 Docker 构建、规则优先的失败分类，以及基于 LangGraph
 的受控环境修复闭环。
 
 预期主流程：
@@ -25,6 +25,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `domain`：与框架和外部工具无关的领域数据结构。
 - `ports`：ProjectParser、BuildStrategy 等外部能力接口。
 - `inspection`：语言无关、有扫描边界的文件发现和命令提取。
+- `adapters/multilang`：语言检测、parser registry、Maven/Gradle/CMake/Meson/Autotools 画像。
 - `adapters/python`：Python 清单、版本、包管理器和项目类型识别规则。
 - `adapters/execution`：本地子进程执行和完整合并日志采集。
 - `adapters/storage`：带 SHA-256 校验的本地不可变构建产物存储。
@@ -39,24 +40,27 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `errors.py`：统一错误代码和异常类型。
 - `tests`：独立的标准库单元测试。
 
-## Python 项目解析
+## 多语言项目解析
 
 解析只读取目标目录，不会安装依赖或执行目标项目中的命令：
 
 ```python
 from pathlib import Path
 
-from dprauto.adapters.python import PythonProjectParser
+from dprauto.adapters.multilang import MultiLanguageProjectParser
 from dprauto.domain.models import SourceReference
 
-profile = PythonProjectParser().parse(
+profile = MultiLanguageProjectParser().parse(
     SourceReference("local-project"),
     Path("/path/to/project"),
 )
 ```
 
-结果统一写入 `ProjectProfile`，包括 Python 版本约束、依赖与构建文件、包管理器、
-Dockerfile、README、CI 文件、安装/测试/启动命令及项目类型。
+结果统一写入 `ProjectProfile`。生产 parser registry 当前识别 Python、Maven/Gradle JVM 和
+CMake/Meson/Autotools/Make Native 根项目，记录语言、版本/标准、真实子项目与工作目录、
+依赖与构建文件、包管理器以及按 build/test/run/install 分类的有界命令候选。JVM/Native
+解析不会被仓库中的辅助 Python 脚本抢占；这一阶段只建立项目智能画像，实际确定性容器构建
+仍仅支持 Python，Java/C/C++ 构建策略在后续阶段接入。
 
 ## 确定性构建
 

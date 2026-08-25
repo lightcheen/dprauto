@@ -1,0 +1,302 @@
+"""Rule-first Java/Kotlin/Groovy project inspection."""
+
+from __future__ import annotations
+
+import re
+from pathlib import PurePosixPath
+
+from dprauto.adapters.multilang.common import (
+    ci_files,
+    depth,
+    dockerfiles,
+    extracted_commands,
+    project_commands,
+    readme_files,
+    safe_subproject,
+)
+from dprauto.adapters.multilang.detector import RepositoryLanguageDetector
+from dprauto.domain.enums import CommandPurpose, ProjectType
+from dprauto.domain.models import ProjectProfile, SourceReference
+from dprauto.errors import ProjectParsingError
+from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
+from dprauto.inspection.scanner import ScannedProject
+
+
+JVM_ROOT_MARKERS = {
+    "build.gradle",
+    "build.gradle.kts",
+    "gradlew",
+    "mvnw",
+    "pom.xml",
+    "settings.gradle",
+    "settings.gradle.kts",
+}
+
+
+class JVMProjectParser:
+    """Create a language-neutral profile for Maven and Gradle repositories."""
+
+    name = "jvm-rules-v1"
+    priority = 300
+
+    def __init__(
+        self,
+        command_extractor: CommandExtractor | None = None,
+        language_detector: RepositoryLanguageDetector | None = None,
+    ) -> None:
+        self.command_extractor = command_extractor or CommandExtractor()
+        self.language_detector = language_detector or RepositoryLanguageDetector()
+
+    def supports(self, scanned: ScannedProject) -> bool:
+        return any(
+            depth(path) == 1 and PurePosixPath(path).name.casefold() in JVM_ROOT_MARKERS
+            for path in scanned.files
+        )
+
+    def parse_scanned(
+        self,
+        source: SourceReference,
+        scanned: ScannedProject,
+    ) -> ProjectProfile:
+        if not self.supports(scanned):
+            raise ProjectParsingError(f"no root Maven or Gradle indicators found in {scanned.root}")
+
+        build_systems = self._build_systems(scanned)
+        build_files = self._build_files(scanned)
+        dependencies = self._dependency_files(scanned)
+        readmes = readme_files(scanned)
+        workflows = ci_files(scanned)
+        inferred = self._inferred_commands(scanned, build_systems)
+        commands = project_commands(
+            (*extracted_commands(scanned, readmes, workflows, self.command_extractor), *inferred)
+        )
+        project_name = self._project_name(scanned, build_systems) or scanned.root.name
+        subprojects = self._subprojects(scanned, build_systems)
+        java_version, version_evidence = self._java_version(scanned, build_systems)
+        language_counts = self.language_detector.counts(scanned)
+        languages = tuple(
+            language
+            for language in self.language_detector.languages(scanned)
+            if language in {"Java", "Kotlin", "Groovy"}
+        ) or ("Java",)
+        runtime_constraints = {"java": java_version} if java_version else {}
+        project_id = f"{project_name}@{source.revision}" if source.revision else project_name
+        test_commands = tuple(
+            command.command.display
+            for command in commands
+            if command.command.purpose is CommandPurpose.TEST
+        )
+        return ProjectProfile(
+            project_id=project_id,
+            source=source,
+            languages=languages,
+            project_type=ProjectType.LIBRARY,
+            runtime_constraints=runtime_constraints,
+            package_managers=build_systems,
+            dependency_files=dependencies,
+            build_files=build_files,
+            dockerfiles=dockerfiles(scanned),
+            readme_files=readmes,
+            ci_files=workflows,
+            commands=commands,
+            metadata={
+                "parser": self.name,
+                "project_name": project_name,
+                "build_systems": build_systems,
+                "primary_build_system": build_systems[0],
+                "subprojects": subprojects,
+                "working_directories": (".", *subprojects),
+                "java_version_evidence": version_evidence,
+                "language_file_counts": language_counts,
+                "test_commands": test_commands,
+                "scan_file_count": len(scanned.files),
+                "scan_skipped_files": scanned.skipped_files,
+                "scan_truncated": scanned.truncated,
+            },
+        )
+
+    @staticmethod
+    def _build_systems(scanned: ScannedProject) -> tuple[str, ...]:
+        root_names = {
+            PurePosixPath(path).name.casefold()
+            for path in scanned.files
+            if depth(path) == 1
+        }
+        systems = []
+        if "pom.xml" in root_names:
+            systems.append("maven")
+        if root_names & {
+            "build.gradle",
+            "build.gradle.kts",
+            "settings.gradle",
+            "settings.gradle.kts",
+        }:
+            systems.append("gradle")
+        return tuple(systems)
+
+    @staticmethod
+    def _build_files(scanned: ScannedProject) -> tuple[str, ...]:
+        names = {
+            "build.gradle",
+            "build.gradle.kts",
+            "gradle.properties",
+            "gradlew",
+            "mvnw",
+            "pom.xml",
+            "settings.gradle",
+            "settings.gradle.kts",
+        }
+        return tuple(
+            path
+            for path in scanned.files
+            if depth(path) <= 4 and PurePosixPath(path).name.casefold() in names
+        )
+
+    @staticmethod
+    def _dependency_files(scanned: ScannedProject) -> tuple[str, ...]:
+        names = {
+            "build.gradle",
+            "build.gradle.kts",
+            "gradle.properties",
+            "libs.versions.toml",
+            "pom.xml",
+            "settings.gradle",
+            "settings.gradle.kts",
+        }
+        return tuple(
+            path
+            for path in scanned.files
+            if depth(path) <= 4 and PurePosixPath(path).name.casefold() in names
+        )
+
+    @staticmethod
+    def _project_name(scanned: ScannedProject, systems: tuple[str, ...]) -> str:
+        if "gradle" in systems:
+            settings = scanned.read_text("settings.gradle") or scanned.read_text(
+                "settings.gradle.kts"
+            )
+            match = re.search(r"rootProject\.name\s*=\s*['\"]([^'\"]+)", settings)
+            if match:
+                return match.group(1).strip()
+        if "maven" in systems:
+            pom = re.sub(
+                r"<parent\b[^>]*>.*?</parent>",
+                "",
+                scanned.read_text("pom.xml"),
+                flags=re.DOTALL,
+            )
+            match = re.search(r"<artifactId>\s*([^<]+?)\s*</artifactId>", pom)
+            if match:
+                return match.group(1).strip()
+        return ""
+
+    @staticmethod
+    def _subprojects(scanned: ScannedProject, systems: tuple[str, ...]) -> tuple[str, ...]:
+        selected: list[str] = []
+        if "maven" in systems:
+            for value in re.findall(
+                r"<module>\s*([^<]+?)\s*</module>", scanned.read_text("pom.xml")
+            ):
+                normalized = safe_subproject(value)
+                if normalized:
+                    selected.append(normalized)
+        if "gradle" in systems:
+            settings = scanned.read_text("settings.gradle") or scanned.read_text(
+                "settings.gradle.kts"
+            )
+            for line in settings.splitlines():
+                if not re.match(r"^\s*include(?:\s|\()", line):
+                    continue
+                for value in re.findall(r"['\"]([^'\"]+)['\"]", line):
+                    normalized = safe_subproject(value)
+                    if normalized:
+                        selected.append(normalized)
+            # Some large Gradle repositories (including Spring Security) use
+            # a FileTree loop and dynamic include(projectPath). The build-file
+            # parent is the real working directory in that convention.
+            for path in scanned.files:
+                build_path = PurePosixPath(path)
+                if (
+                    len(build_path.parts) <= 1
+                    or len(build_path.parts) > 5
+                    or build_path.parts[0] in {"buildSrc", "gradle"}
+                    or not build_path.name.endswith((".gradle", ".gradle.kts"))
+                ):
+                    continue
+                normalized = safe_subproject(build_path.parent.as_posix())
+                if normalized:
+                    selected.append(normalized)
+        return tuple(dict.fromkeys(selected))
+
+    @staticmethod
+    def _java_version(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> tuple[str, str]:
+        if "maven" in systems:
+            pom = scanned.read_text("pom.xml")
+            for tag in (
+                "maven.compiler.release",
+                "java.version",
+                "maven.compiler.source",
+            ):
+                match = re.search(rf"<{re.escape(tag)}>\s*([^<]+?)\s*</{re.escape(tag)}>", pom)
+                if match and re.fullmatch(r"(?:1\.)?\d+", match.group(1).strip()):
+                    return match.group(1).removeprefix("1."), f"pom.xml:{tag}"
+        if "gradle" in systems:
+            for path in ("build.gradle", "build.gradle.kts", "gradle.properties"):
+                text = scanned.read_text(path)
+                match = re.search(
+                    r"(?:JavaLanguageVersion\.of\s*\(|sourceCompatibility\s*=\s*"
+                    r"(?:JavaVersion\.VERSION_|['\"])?)(\d+)",
+                    text,
+                )
+                if match:
+                    return match.group(1), path
+        return "", ""
+
+    @staticmethod
+    def _inferred_commands(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> tuple[ExtractedCommand, ...]:
+        commands: list[ExtractedCommand] = []
+        if "maven" in systems:
+            executable = "./mvnw" if scanned.has("mvnw") else "mvn"
+            source = "inferred:mvnw" if scanned.has("mvnw") else "inferred:pom.xml"
+            commands.extend(
+                (
+                    ExtractedCommand(
+                        f"{executable} -B -DskipTests package",
+                        CommandPurpose.BUILD,
+                        source,
+                        0.9,
+                    ),
+                    ExtractedCommand(
+                        f"{executable} -B test",
+                        CommandPurpose.TEST,
+                        source,
+                        0.9,
+                    ),
+                )
+            )
+        if "gradle" in systems:
+            executable = "./gradlew" if scanned.has("gradlew") else "gradle"
+            source = "inferred:gradlew" if scanned.has("gradlew") else "inferred:build.gradle"
+            commands.extend(
+                (
+                    ExtractedCommand(
+                        f"{executable} assemble",
+                        CommandPurpose.BUILD,
+                        source,
+                        0.9,
+                    ),
+                    ExtractedCommand(
+                        f"{executable} test",
+                        CommandPurpose.TEST,
+                        source,
+                        0.9,
+                    ),
+                )
+            )
+        return tuple(commands)

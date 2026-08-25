@@ -41,7 +41,7 @@ steps:
 
         self.assertEqual(by_text["pip install -r requirements.txt"], CommandPurpose.INSTALL)
         self.assertEqual(by_text["python -m pytest -q"], CommandPurpose.TEST)
-        self.assertEqual(by_text["ruff check ."], CommandPurpose.TEST)
+        self.assertEqual(by_text["ruff check ."], CommandPurpose.OTHER)
 
     def test_ci_context_does_not_turn_every_command_into_a_test(self) -> None:
         workflow = """
@@ -57,7 +57,7 @@ steps:
 
         self.assertEqual(by_text["pip install black pytest"], CommandPurpose.INSTALL)
         self.assertEqual(by_text["python generate_badges.py"], CommandPurpose.OTHER)
-        self.assertEqual(by_text["ruff check"], CommandPurpose.TEST)
+        self.assertEqual(by_text["ruff check"], CommandPurpose.OTHER)
         self.assertNotIn("ruff check &&", by_text)
 
     def test_ci_matrix_commands_are_expanded_to_bounded_literal_values(self) -> None:
@@ -95,6 +95,58 @@ Run it::
 
         self.assertEqual(commands[0].text, "python -m example --help")
         self.assertEqual(commands[0].purpose, CommandPurpose.RUN)
+
+    def test_multilang_build_and_test_commands_are_classified_semantically(self) -> None:
+        workflow = """
+steps:
+  - run: mvn -B -DskipTests package
+  - run: mvn -B test
+  - run: ./gradlew assemble
+  - run: ./gradlew :core:test
+  - run: ./gradlew build -x test
+  - run: cmake -S . -B build
+  - run: cmake --build build
+  - run: ctest --test-dir build
+  - run: make check
+  - run: meson setup build
+  - run: meson test -C build
+  - run: ninja test
+"""
+
+        commands = CommandExtractor().extract_ci(".github/workflows/ci.yml", workflow)
+        by_text = {command.text: command.purpose for command in commands}
+
+        self.assertEqual(by_text["mvn -B -DskipTests package"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["mvn -B test"], CommandPurpose.TEST)
+        self.assertEqual(by_text["./gradlew assemble"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["./gradlew :core:test"], CommandPurpose.TEST)
+        self.assertEqual(by_text["./gradlew build -x test"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["cmake -S . -B build"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["cmake --build build"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["ctest --test-dir build"], CommandPurpose.TEST)
+        self.assertEqual(by_text["make check"], CommandPurpose.TEST)
+        self.assertEqual(by_text["meson setup build"], CommandPurpose.BUILD)
+        self.assertEqual(by_text["meson test -C build"], CommandPurpose.TEST)
+        self.assertEqual(by_text["ninja test"], CommandPurpose.TEST)
+
+    def test_special_ci_targets_cannot_masquerade_as_tests(self) -> None:
+        workflow = """
+steps:
+  - run: pip download -r cryptography.txt
+  - run: tox -e lint
+  - run: nox -s docs
+  - run: ./gradlew spotlessCheck
+  - run: make fuzz
+"""
+
+        commands = CommandExtractor().extract_ci(".github/workflows/tests.yml", workflow)
+        by_text = {command.text: command.purpose for command in commands}
+
+        self.assertEqual(by_text["pip download -r cryptography.txt"], CommandPurpose.INSTALL)
+        self.assertEqual(by_text["tox -e lint"], CommandPurpose.OTHER)
+        self.assertEqual(by_text["nox -s docs"], CommandPurpose.OTHER)
+        self.assertEqual(by_text["./gradlew spotlessCheck"], CommandPurpose.OTHER)
+        self.assertEqual(by_text["make fuzz"], CommandPurpose.OTHER)
 
 
 if __name__ == "__main__":
