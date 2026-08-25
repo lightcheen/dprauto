@@ -25,7 +25,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `domain`：与框架和外部工具无关的领域数据结构。
 - `ports`：ProjectParser、BuildStrategy 等外部能力接口。
 - `inspection`：语言无关、有扫描边界的文件发现和命令提取。
+- `intelligence`：后端无关的全仓库 AST/文本知识图谱模型和有界构建器。
 - `adapters/multilang`：语言检测、parser registry、Maven/Gradle/CMake/Meson/Autotools 画像。
+- `adapters/intelligence`：Tree-sitter、内存图存储和 Neo4j 图存储实现。
 - `adapters/python`：Python 清单、版本、包管理器和项目类型识别规则。
 - `adapters/execution`：本地子进程执行和完整合并日志采集。
 - `adapters/storage`：带 SHA-256 校验的本地不可变构建产物存储。
@@ -61,6 +63,34 @@ CMake/Meson/Autotools/Make Native 根项目，记录语言、版本/标准、真
 依赖与构建文件、包管理器以及按 build/test/run/install 分类的有界命令候选。JVM/Native
 解析不会被仓库中的辅助 Python 脚本抢占；这一阶段只建立项目智能画像，实际确定性容器构建
 仍仅支持 Python，Java/C/C++ 构建策略在后续阶段接入。
+
+## Tree-sitter 全仓库知识图谱
+
+仓库智能服务只读扫描代码、配置和文档，为目录、文件、AST named node、声明/import 与文本
+分块建立稳定 ID 和有类型的边。当前 Tree-sitter bundle 覆盖 Bash、C、C++、C#、Go、Java、
+JavaScript、Kotlin、PHP、Python、Ruby、Rust、SQL、TypeScript/TSX 和 YAML。单文件大小、扫描
+深度、AST 深度、每文件 AST 节点数及全图节点数均有硬上限；语法错误与截断记录在图元数据中，
+不会伪装成完整索引。
+
+```python
+from pathlib import Path
+
+from dprauto.application import create_repository_intelligence
+from dprauto.domain.models import SourceReference
+from dprauto.intelligence import KnowledgeNodeKind, KnowledgeQuery
+
+service = create_repository_intelligence()
+graph = service.index(SourceReference("local-project"), Path("/path/to/project"))
+declarations = service.query(
+    graph.graph_id,
+    KnowledgeQuery(kinds=(KnowledgeNodeKind.DECLARATION,), text="settings"),
+)
+```
+
+默认工厂使用进程内存存储；生产环境可向工厂传入 `Neo4jKnowledgeGraphStore`。图模型与查询
+port 不依赖 Neo4j，写入按 `graph_id` 隔离并在单事务中替换，节点和边按批次参数化写入。
+本阶段提供结构化文本/路径/语言/节点类型查询，尚未把 embedding 语义检索和多轮 Agent 上下文
+接入修复闭环；Java/C/C++ 的确定性容器构建也仍属于后续阶段。
 
 ## 确定性构建
 

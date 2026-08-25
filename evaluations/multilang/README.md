@@ -78,3 +78,21 @@ search space.
 M1 is parsing and command intelligence only. It does not yet provide
 Java/C/C++ container strategies, Tree-sitter AST indexing, Neo4j persistence,
 semantic embeddings, or service orchestration.
+
+## M2 Tree-sitter and repository knowledge graph
+
+M2 adds a bounded, backend-neutral repository graph with directory/file,
+Tree-sitter named AST node, declaration/import, and configuration/document text
+nodes. The production adapter loads 16 Tree-sitter grammars, while the storage
+port supports both an in-memory implementation and isolated, transactional
+Neo4j persistence.
+
+Real syntax parsing is exercised against these M0 directories:
+
+- Python: `/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/envbench-python-paper-yubico-yubikey-manager-fbdae2bc12ba`
+- Java: `/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-apache-commons-csv-2d44689ec75e`
+- C++: `/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-ccache-ccache-7f3e822efb1b`
+
+See `M2_TREE_SITTER_KNOWLEDGE_GRAPH_2026-08-25.md` for limits, measured graph
+sizes, dependency compatibility, and the explicit boundary between structured
+graph retrieval and later embedding/multi-turn retrieval work.

@@ -19,6 +19,10 @@ from dprauto.application.verification import (
     create_layered_verifier,
 )
 from dprauto.application.regression import PersistedRegressionChecker
+from dprauto.application.intelligence import (
+    RepositoryIntelligenceService,
+    create_repository_intelligence,
+)
 
 __all__ = [
     "BuildExecution",
@@ -26,6 +30,7 @@ __all__ = [
     "DeterministicBuildService",
     "LayeredVerificationService",
     "PersistedRegressionChecker",
+    "RepositoryIntelligenceService",
     "create_agent_workflow",
     "create_api_agent_workflow",
     "create_api_llm_client",
@@ -33,4 +38,5 @@ __all__ = [
     "create_api_environment_build_workflow",
     "create_deterministic_builder",
     "create_layered_verifier",
+    "create_repository_intelligence",
 ]
