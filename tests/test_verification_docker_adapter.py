@@ -36,6 +36,7 @@ class DockerVerificationAdapterTests(unittest.TestCase):
             command = CommandSpec(
                 ("python -m pytest -q",),
                 purpose=CommandPurpose.TEST,
+                cwd="modules/api",
                 shell=True,
             )
             with patch("dprauto.adapters.verification.docker.subprocess.run", side_effect=fake_run):
@@ -63,6 +64,10 @@ class DockerVerificationAdapterTests(unittest.TestCase):
                 create.index("fixture:image-with-entrypoint"),
             )
             self.assertEqual(create[create.index("--entrypoint") + 1], "/bin/sh")
+            self.assertEqual(
+                create[create.index("--workdir") + 1],
+                "/workspace/modules/api",
+            )
 
     def test_disabled_build_cache_is_not_mounted_for_verification(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -127,7 +132,12 @@ class DockerVerificationAdapterTests(unittest.TestCase):
             ):
                 runtime.probe_web(
                     "fixture:web",
-                    None,
+                    CommandSpec(
+                        ("./gradlew bootRun",),
+                        purpose=CommandPurpose.RUN,
+                        cwd="services/web",
+                        shell=True,
+                    ),
                     container_port=8000,
                     timeout_seconds=1,
                 )
@@ -135,6 +145,10 @@ class DockerVerificationAdapterTests(unittest.TestCase):
             create = calls[0]
             self.assertEqual(create[create.index("--network") + 1], "dprauto-eval")
             self.assertLess(create.index("--network"), create.index("fixture:web"))
+            self.assertEqual(
+                create[create.index("--workdir") + 1],
+                "/workspace/services/web",
+            )
 
 
 if __name__ == "__main__":

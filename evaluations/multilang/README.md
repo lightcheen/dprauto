@@ -109,3 +109,12 @@ directories plus the CNB corpus's Testfixtures snapshot for its actual
 `conftest.py` Sybil imports. All five long-tail probes place an expected file at
 rank 1. See `M3_SEMANTIC_CONTEXT_RETRIEVAL_2026-08-25.md` for exact directories,
 graph sizes, scores, limits, and current persistence boundaries.
+
+## M4 deterministic JVM and native builds
+
+M4 adds parser-owned Maven/Gradle and CMake/Meson/Autotools/Make container strategies,
+language-neutral dependency contracts, compiled-library runtime probes, ordinary test-command
+preference, and monorepo-aware Docker working directories. All nine ready Java/C/C++ snapshots
+produce deterministic plans. json-c completes a real build plus Installability, CTest Testability,
+and Runnability; the Java execution probe is explicitly infrastructure-blocked by container DNS.
+See `M4_JVM_NATIVE_BUILD_VERIFICATION_2026-08-25.md` for every source directory and exact evidence.

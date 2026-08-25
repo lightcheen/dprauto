@@ -24,6 +24,8 @@ from dprauto.serialization import to_json_bytes
 from dprauto.strategies import (
     CNBStrategy,
     DockerStrategy,
+    JVMTemplateStrategy,
+    NativeTemplateStrategy,
     RecordedBuildRunner,
     StrategyRegistry,
     TemplateStrategy,
@@ -211,13 +213,15 @@ def create_deterministic_builder(
     storage: Storage,
     config: BuildConfig | None = None,
 ) -> DeterministicBuildService:
-    """Wire the ordered Docker, Python Template, then optional CNB portfolio."""
+    """Wire project-owned Docker, language templates, then optional CNB."""
 
     build_config = config or BuildConfig()
     runner = RecordedBuildRunner(SubprocessCommandExecutor(storage), storage)
     registry = StrategyRegistry(
         (
             DockerStrategy(runner, build_config),
+            JVMTemplateStrategy(runner, build_config),
+            NativeTemplateStrategy(runner, build_config),
             TemplateStrategy(runner, build_config),
             CNBStrategy(runner, build_config),
         )

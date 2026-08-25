@@ -41,6 +41,14 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.build.poetry_version, "1.8.5")
         self.assertEqual(config.build.poetry_tool_image, "")
         self.assertEqual(config.build.poetry_tool_timeout_seconds, 900)
+        self.assertEqual(config.build.default_java_version, "17")
+        self.assertEqual(
+            config.build.maven_base_image,
+            "maven:3.9.9-eclipse-temurin-{version}",
+        )
+        self.assertEqual(config.build.gradle_base_image, "gradle:8.12.1-jdk{version}")
+        self.assertEqual(config.build.native_base_image, "debian:bookworm-slim")
+        self.assertEqual(config.build.max_build_jobs, 2)
         self.assertEqual(config.verification.docker_network, "")
         self.assertEqual(config.storage.root, Path("runs"))
 
@@ -60,6 +68,11 @@ class ConfigurationTests(unittest.TestCase):
                     "tools/poetry:python-{version}-poetry-{poetry_version}"
                 ),
                 "DPRAUTO_BUILD_POETRY_TOOL_TIMEOUT_SECONDS": "700",
+                "DPRAUTO_BUILD_DEFAULT_JAVA_VERSION": "21",
+                "DPRAUTO_BUILD_MAVEN_BASE_IMAGE": "example/maven:jdk-{version}",
+                "DPRAUTO_BUILD_GRADLE_BASE_IMAGE": "example/gradle:jdk-{version}",
+                "DPRAUTO_BUILD_NATIVE_BASE_IMAGE": "example/native:fixed",
+                "DPRAUTO_BUILD_MAX_BUILD_JOBS": "5",
                 "DPRAUTO_AGENT_MAX_ATTEMPTS": "3",
                 "DPRAUTO_AGENT_MAX_CONTEXT_CHARACTERS": "8000",
                 "DPRAUTO_AGENT_MAX_FAILED_METHODS": "4",
@@ -104,6 +117,11 @@ class ConfigurationTests(unittest.TestCase):
             "tools/poetry:python-{version}-poetry-{poetry_version}",
         )
         self.assertEqual(config.build.poetry_tool_timeout_seconds, 700)
+        self.assertEqual(config.build.default_java_version, "21")
+        self.assertEqual(config.build.maven_base_image, "example/maven:jdk-{version}")
+        self.assertEqual(config.build.gradle_base_image, "example/gradle:jdk-{version}")
+        self.assertEqual(config.build.native_base_image, "example/native:fixed")
+        self.assertEqual(config.build.max_build_jobs, 5)
         self.assertEqual(config.agent.max_attempts, 3)
         self.assertEqual(config.agent.max_context_characters, 8_000)
         self.assertEqual(config.agent.max_failed_methods, 4)
@@ -163,6 +181,12 @@ class ConfigurationTests(unittest.TestCase):
             {"DPRAUTO_BUILD_POETRY_VERSION": ">=1.8"},
             {"DPRAUTO_BUILD_POETRY_TOOL_IMAGE": "tool:{unknown}"},
             {"DPRAUTO_BUILD_POETRY_TOOL_TIMEOUT_SECONDS": "0"},
+            {"DPRAUTO_BUILD_DEFAULT_JAVA_VERSION": ">=17"},
+            {"DPRAUTO_BUILD_MAVEN_BASE_IMAGE": "maven:{unknown}"},
+            {"DPRAUTO_BUILD_GRADLE_BASE_IMAGE": "gradle jdk-{version}"},
+            {"DPRAUTO_BUILD_NATIVE_BASE_IMAGE": ""},
+            {"DPRAUTO_BUILD_MAX_BUILD_JOBS": "0"},
+            {"DPRAUTO_BUILD_MAX_BUILD_JOBS": "33"},
             {"DPRAUTO_LLM_TEMPERATURE": "3"},
             {"DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION": "0"},
             {"DPRAUTO_LLM_MAX_TIMEOUT_ATTEMPTS_PER_OPERATION": "9"},

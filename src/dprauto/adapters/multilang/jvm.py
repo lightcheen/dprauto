@@ -21,7 +21,6 @@ from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
 from dprauto.inspection.scanner import ScannedProject
 
-
 JVM_ROOT_MARKERS = {
     "build.gradle",
     "build.gradle.kts",
@@ -72,7 +71,12 @@ class JVMProjectParser:
         )
         project_name = self._project_name(scanned, build_systems) or scanned.root.name
         subprojects = self._subprojects(scanned, build_systems)
-        java_version, version_evidence = self._java_version(scanned, build_systems)
+        (
+            java_version,
+            version_evidence,
+            java_target_version,
+            target_version_evidence,
+        ) = self._java_version(scanned, build_systems)
         language_counts = self.language_detector.counts(scanned)
         languages = tuple(
             language
@@ -107,6 +111,8 @@ class JVMProjectParser:
                 "subprojects": subprojects,
                 "working_directories": (".", *subprojects),
                 "java_version_evidence": version_evidence,
+                "java_target_version": java_target_version,
+                "java_target_version_evidence": target_version_evidence,
                 "language_file_counts": language_counts,
                 "test_commands": test_commands,
                 "scan_file_count": len(scanned.files),
@@ -232,7 +238,9 @@ class JVMProjectParser:
     def _java_version(
         scanned: ScannedProject,
         systems: tuple[str, ...],
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str, str]:
+        target = ""
+        target_evidence = ""
         if "maven" in systems:
             pom = scanned.read_text("pom.xml")
             for tag in (
@@ -242,8 +250,10 @@ class JVMProjectParser:
             ):
                 match = re.search(rf"<{re.escape(tag)}>\s*([^<]+?)\s*</{re.escape(tag)}>", pom)
                 if match and re.fullmatch(r"(?:1\.)?\d+", match.group(1).strip()):
-                    return match.group(1).removeprefix("1."), f"pom.xml:{tag}"
-        if "gradle" in systems:
+                    target = match.group(1).removeprefix("1.")
+                    target_evidence = f"pom.xml:{tag}"
+                    break
+        elif "gradle" in systems:
             for path in ("build.gradle", "build.gradle.kts", "gradle.properties"):
                 text = scanned.read_text(path)
                 match = re.search(
@@ -252,8 +262,38 @@ class JVMProjectParser:
                     text,
                 )
                 if match:
-                    return match.group(1), path
-        return "", ""
+                    target = match.group(1)
+                    target_evidence = path
+                    break
+
+        build_candidates: list[tuple[int, str]] = []
+        if "maven" in systems:
+            profile_versions = re.findall(
+                r"<jdk>\s*\[\s*(?:1\.)?(\d{1,2})\s*,",
+                scanned.read_text("pom.xml"),
+            )
+            for value in profile_versions:
+                build_candidates.append((int(value), "pom.xml:profile-jdk-lower-bound"))
+        for path in ci_files(scanned):
+            text = scanned.read_text(path)
+            for match in re.finditer(
+                r"(?im)^\s*(?:java|jdk|java-version)\s*:\s*\[([^\]]+)\]",
+                text,
+            ):
+                for value in re.findall(r"(?<![\d.])(?:1\.)?(\d{1,2})(?!\d)", match.group(1)):
+                    build_candidates.append((int(value), f"{path}:jdk-matrix"))
+            for value in re.findall(
+                r"(?im)^\s*java-version\s*:\s*['\"]?(?:1\.)?(\d{1,2})(?!\d)",
+                text,
+            ):
+                build_candidates.append((int(value), f"{path}:java-version"))
+        plausible = [item for item in build_candidates if 8 <= item[0] <= 30]
+        if plausible:
+            minimum, evidence = min(plausible, key=lambda item: item[0])
+            if target and int(target) > minimum:
+                return target, target_evidence, target, target_evidence
+            return str(minimum), evidence, target, target_evidence
+        return target, target_evidence, target, target_evidence
 
     @staticmethod
     def _inferred_commands(

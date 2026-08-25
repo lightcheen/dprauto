@@ -12,13 +12,23 @@ from dprauto.ports.verification import VerificationContext
 from dprauto.time_budget import time_budget_exhausted
 from dprauto.verification.common import aggregate_status, verification_id
 
-
 _INSTALL_PATTERN = re.compile(
     r"\b(?:pip(?:3)?\s+install|python\d*\s+-m\s+pip\s+install|"
     r"poetry\s+install|uv\s+sync|pdm\s+(?:install|sync)|pipenv\s+(?:install|sync)|"
-    r"conda\s+env\s+create)\b",
+    r"conda\s+env\s+create|(?:\./)?mvnw?\s+.*\b(?:package|install)\b|"
+    r"(?:\./)?gradlew?\s+.*\b(?:assemble|build|classes)\b|"
+    r"apt-get\s+.*\binstall\b)\b",
     re.IGNORECASE,
 )
+
+_DEPENDENCY_BUILD_SYSTEMS = {
+    "autotools",
+    "cmake",
+    "gradle",
+    "make",
+    "maven",
+    "meson",
+}
 
 
 class InstallabilityVerifier:
@@ -43,12 +53,27 @@ class InstallabilityVerifier:
             evidence=result.logs,
         )
 
-        dependency_required = bool(context.profile.metadata.get("dependency_names")) or any(
-            PurePosixPath(path).name.lower() in {"pyproject.toml", "setup.py", "setup.cfg"}
-            for path in context.profile.dependency_files
+        contract_commands = self._dependency_contract_commands(context)
+        dependency_required = (
+            bool(contract_commands)
+            or bool(context.profile.metadata.get("dependency_names"))
+            or bool(
+                {manager.casefold() for manager in context.profile.package_managers}
+                & _DEPENDENCY_BUILD_SYSTEMS
+            )
+            or any(
+                PurePosixPath(path).name.lower()
+                in {"pyproject.toml", "setup.py", "setup.cfg"}
+                for path in context.profile.dependency_files
+            )
         )
         setup_text = self._setup_text(context)
-        dependency_ok = not dependency_required or bool(_INSTALL_PATTERN.search(setup_text))
+        if contract_commands:
+            dependency_ok = all(command in setup_text for command in contract_commands)
+            contract_source = "build-plan"
+        else:
+            dependency_ok = not dependency_required or bool(_INSTALL_PATTERN.search(setup_text))
+            contract_source = "definition-scan" if dependency_required else "none"
         dependency_check = VerificationCheck(
             "dependency-installation",
             VerificationStatus.PASSED if dependency_ok else VerificationStatus.FAILED,
@@ -59,7 +84,11 @@ class InstallabilityVerifier:
                 if not dependency_required
                 else "dependency manifests exist but no installation step was found"
             ),
-            metadata={"required": dependency_required},
+            metadata={
+                "required": dependency_required,
+                "contract_source": contract_source,
+                "contract_commands": contract_commands,
+            },
         )
 
         image_reference = result.image_reference or ""
@@ -121,3 +150,17 @@ class InstallabilityVerifier:
                 if context.workspace.resolve() in target.parents and target.is_file():
                     chunks.append(target.read_text(encoding="utf-8", errors="replace"))
         return "\n".join(chunks)
+
+    @staticmethod
+    def _dependency_contract_commands(context: VerificationContext) -> tuple[str, ...]:
+        plan = context.build_plan
+        if plan is None:
+            return ()
+        values = plan.metadata.get("dependency_installation_commands", ())
+        if not isinstance(values, (list, tuple)):
+            return ()
+        return tuple(
+            value.strip()
+            for value in values[:32]
+            if isinstance(value, str) and value.strip()
+        )

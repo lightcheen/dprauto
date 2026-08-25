@@ -120,6 +120,7 @@ class TemplateStrategy:
                 ),
                 "dockerfile": "Dockerfile",
                 "setup_script": "setup.sh",
+                "dependency_installation_commands": setup_commands,
                 "deterministic_fixes": deterministic_fixes,
                 "scm_pretend_version": (
                     dict((scm_pretend_version,)) if scm_pretend_version else {}

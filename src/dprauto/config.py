@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import os
 import re
-from string import Formatter
 from dataclasses import dataclass, field
 from pathlib import Path
+from string import Formatter
 from typing import Mapping
 
 from dprauto.errors import ConfigurationError
-
 
 _DOCKER_NETWORK_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _TOOL_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+-]*$")
@@ -45,6 +44,26 @@ def _validate_poetry_tool_image(value: str) -> None:
     if not rendered.strip() or any(character.isspace() for character in rendered):
         raise ConfigurationError(
             "build.poetry_tool_image must render to a non-empty Docker image reference"
+        )
+
+
+def _validate_versioned_image(value: str, name: str) -> None:
+    if not value.strip():
+        raise ConfigurationError(f"build.{name} must not be empty")
+    fields = {
+        field_name
+        for _, field_name, _, _ in Formatter().parse(value)
+        if field_name is not None
+    }
+    if not fields <= {"version"}:
+        raise ConfigurationError(f"build.{name} may only format {{version}}")
+    try:
+        rendered = value.format(version="17")
+    except (KeyError, ValueError) as exc:
+        raise ConfigurationError(f"build.{name} may only format {{version}}") from exc
+    if not rendered.strip() or any(character.isspace() for character in rendered):
+        raise ConfigurationError(
+            f"build.{name} must render to a non-empty Docker image reference"
         )
 
 
@@ -90,6 +109,11 @@ class BuildConfig:
     image_repository: str = "dprauto"
     default_python_version: str = "3.11"
     python_base_image: str = "python:{version}-slim"
+    default_java_version: str = "17"
+    maven_base_image: str = "maven:3.9.9-eclipse-temurin-{version}"
+    gradle_base_image: str = "gradle:8.12.1-jdk{version}"
+    native_base_image: str = "debian:bookworm-slim"
+    max_build_jobs: int = 2
     pack_binary: str = "pack"
     cnb_builder: str = "paketobuildpacks/builder-jammy-full"
     cnb_lifecycle_image: str = ""
@@ -105,6 +129,8 @@ class BuildConfig:
             raise ConfigurationError("build.timeout_seconds must be positive")
         if self.max_strategy_attempts <= 0:
             raise ConfigurationError("build.max_strategy_attempts must be positive")
+        if not 1 <= self.max_build_jobs <= 32:
+            raise ConfigurationError("build.max_build_jobs must be between 1 and 32")
         if self.poetry_tool_timeout_seconds <= 0:
             raise ConfigurationError("build.poetry_tool_timeout_seconds must be positive")
         for name, value in (
@@ -112,12 +138,20 @@ class BuildConfig:
             ("image_repository", self.image_repository),
             ("default_python_version", self.default_python_version),
             ("python_base_image", self.python_base_image),
+            ("default_java_version", self.default_java_version),
+            ("native_base_image", self.native_base_image),
             ("pack_binary", self.pack_binary),
             ("cnb_builder", self.cnb_builder),
         ):
             if not value.strip():
                 raise ConfigurationError(f"build.{name} must not be empty")
         _validate_docker_network(self.docker_network, "build.docker_network")
+        if not re.fullmatch(r"\d{1,2}", self.default_java_version):
+            raise ConfigurationError(
+                "build.default_java_version must be a Java feature version"
+            )
+        _validate_versioned_image(self.maven_base_image, "maven_base_image")
+        _validate_versioned_image(self.gradle_base_image, "gradle_base_image")
         if not _TOOL_VERSION.fullmatch(self.poetry_version):
             raise ConfigurationError(
                 f"build.poetry_version must be a fixed version, got {self.poetry_version!r}"
@@ -330,6 +364,15 @@ def load_config(
         image_repository=get("BUILD_IMAGE_REPOSITORY", "dprauto"),
         default_python_version=get("BUILD_DEFAULT_PYTHON_VERSION", "3.11"),
         python_base_image=get("BUILD_PYTHON_BASE_IMAGE", "python:{version}-slim"),
+        default_java_version=get("BUILD_DEFAULT_JAVA_VERSION", "17"),
+        maven_base_image=get(
+            "BUILD_MAVEN_BASE_IMAGE", "maven:3.9.9-eclipse-temurin-{version}"
+        ),
+        gradle_base_image=get("BUILD_GRADLE_BASE_IMAGE", "gradle:8.12.1-jdk{version}"),
+        native_base_image=get("BUILD_NATIVE_BASE_IMAGE", "debian:bookworm-slim"),
+        max_build_jobs=_read_int(
+            get("BUILD_MAX_BUILD_JOBS", "2"), "BUILD_MAX_BUILD_JOBS"
+        ),
         pack_binary=get("BUILD_PACK_BINARY", "pack"),
         cnb_builder=get("BUILD_CNB_BUILDER", "paketobuildpacks/builder-jammy-full"),
         cnb_lifecycle_image=get("BUILD_CNB_LIFECYCLE_IMAGE", ""),

@@ -21,7 +21,6 @@ from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
 from dprauto.inspection.scanner import ScannedProject
 
-
 NATIVE_ROOT_MARKERS = {
     "CMakeLists.txt",
     "Makefile",
@@ -80,6 +79,8 @@ class NativeProjectParser:
         )
         standards = self._language_standards(scanned)
         subprojects = self._subprojects(scanned, build_systems)
+        cmake_arguments = self._cmake_configuration_arguments(scanned, build_systems)
+        system_packages = self._system_dependency_packages(scanned, build_systems)
         project_id = f"{project_name}@{source.revision}" if source.revision else project_name
         build_pipeline = tuple(
             command.command.display
@@ -114,6 +115,8 @@ class NativeProjectParser:
                 "working_directories": (".", *subprojects),
                 "language_file_counts": language_counts,
                 "build_pipeline": build_pipeline,
+                "cmake_configuration_arguments": cmake_arguments,
+                "system_dependency_packages": system_packages,
                 "test_commands": test_commands,
                 "scan_file_count": len(scanned.files),
                 "scan_skipped_files": scanned.skipped_files,
@@ -219,6 +222,64 @@ class NativeProjectParser:
         if cpp_standard:
             constraints["cpp_standard"] = cpp_standard.group(1)
         return constraints
+
+    @staticmethod
+    def _cmake_configuration_arguments(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        if "cmake" not in systems:
+            return ()
+        cmake = scanned.read_text("CMakeLists.txt")
+        selected: list[str] = []
+        for match in re.finditer(
+            r"(?is)\boption\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+"
+            r"(?:\"([^\"]*)\"|'([^']*)')",
+            cmake,
+        ):
+            name = match.group(1)
+            normalized_name = name.casefold()
+            if "test" not in normalized_name and "regress" not in normalized_name:
+                continue
+            value = "OFF" if "disable" in normalized_name else "ON"
+            selected.append(f"-D{name}={value}")
+        dependency_files = "\n".join(
+            scanned.read_text(path)
+            for path in scanned.files
+            if len(PurePosixPath(path).parts) <= 3
+            and path.casefold().endswith((".cmake", "cmakelists.txt"))
+        )
+        if re.search(r"(?is)\bset\s*\(\s*DEPS\s+.*?CACHE\s+STRING", dependency_files) and re.search(
+            r"(?is)\bDEPS\b.*?\bDOWNLOAD\b", dependency_files
+        ):
+            selected.append("-DDEPS=DOWNLOAD")
+        return tuple(dict.fromkeys(selected))
+
+    @staticmethod
+    def _system_dependency_packages(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        selected: list[str] = []
+        if "cmake" in systems:
+            cmake = "\n".join(
+                scanned.read_text(path)
+                for path in scanned.files
+                if len(PurePosixPath(path).parts) <= 3
+                and path.casefold().endswith((".cmake", "cmakelists.txt"))
+            )
+            for package, apt_package in (
+                ("OpenSSL", "libssl-dev"),
+                ("ZLIB", "zlib1g-dev"),
+                ("LibLZMA", "liblzma-dev"),
+            ):
+                if re.search(rf"(?i)\bfind_package\s*\(\s*{package}\b", cmake):
+                    selected.append(apt_package)
+        if "autotools" in systems:
+            configure = scanned.read_text("configure.ac") or scanned.read_text("configure.in")
+            if re.search(r"\b(?:AM_PATH_PYTHON|PYTHON)\b", configure):
+                selected.append("python3")
+        return tuple(dict.fromkeys(selected))
 
     @staticmethod
     def _subprojects(

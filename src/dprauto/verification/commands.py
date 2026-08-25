@@ -12,7 +12,6 @@ from dprauto.adapters.python.test_matrix import matrix_entry, preferred_matrix_n
 from dprauto.domain.enums import CommandPurpose
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile
 
-
 _SMOKE_PATTERN = re.compile(
     r"(?:^|\s)(?:(?i:--help|-h|--version)|-V)(?:\s|$)|"
     r"(?i:python\d*\s+-c\s+.*\bimport\b)|"
@@ -294,11 +293,25 @@ class TestCommandSelector:
 
     @staticmethod
     def _has_unresolved_variables(command: str) -> bool:
-        return bool(re.search(r"\$\{\{|\$\{?[A-Za-z_][A-Za-z0-9_.-]*\}?", command))
+        return bool(
+            re.search(
+                r"\$\{\{|\$\{?[A-Za-z_][A-Za-z0-9_.-]*\}?|"
+                r"%[A-Za-z_][A-Za-z0-9_]*%",
+                command,
+            )
+        )
 
     @staticmethod
     def _command_rank(command: str) -> int:
         text = command.lower()
+        if re.fullmatch(
+            r"(?:\./)?mvnw?\s+-b\s+test|"
+            r"(?:\./)?gradlew?\s+(?:--no-daemon\s+)?test|"
+            r"ctest\s+--test-dir\s+build\s+--output-on-failure|"
+            r"meson\s+test\s+-c\s+build\s+--print-errorlogs",
+            text.strip(),
+        ):
+            return 0
         if re.search(r"\b(pytest|py\.test)\b", text):
             return 0
         if re.search(r"\bpython\S*\s+[^ ]*(?:u?tests?)/[^ ]+\.py\b", text):
@@ -311,6 +324,8 @@ class TestCommandSelector:
             return 1
         if re.search(r"\b(integration|postgres|mysql|cockroach|redis)\b", text):
             return 3
+        if re.fullmatch(r"make\s+(?:test|check)", text.strip()):
+            return 1
         if re.search(r"\b(ruff|mypy|format|typecheck|docs?)\b", text):
             return 4
         return 2

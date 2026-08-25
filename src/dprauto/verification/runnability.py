@@ -5,7 +5,12 @@ from __future__ import annotations
 import re
 
 from dprauto.config import VerificationConfig
-from dprauto.domain.enums import ProjectType, VerificationLevel, VerificationStatus
+from dprauto.domain.enums import (
+    CommandPurpose,
+    ProjectType,
+    VerificationLevel,
+    VerificationStatus,
+)
 from dprauto.domain.models import CommandSpec, VerificationCheck, VerificationResult
 from dprauto.ports.runtime import ContainerRuntime
 from dprauto.ports.verification import VerificationContext
@@ -187,6 +192,9 @@ class RunnabilityVerifier:
         return self._result(checks, command_result=execution.command_result)
 
     def _verify_library(self, context: VerificationContext, image: str) -> VerificationResult:
+        compiled_probe = self._compiled_library_probe(context)
+        if compiled_probe is not None:
+            return self._verify_compiled_library(context, image, *compiled_probe)
         modules = tuple(context.profile.metadata.get("import_modules", ()))
         project_name = str(context.profile.metadata.get("project_name", "")).replace("-", "_")
         module = modules[0] if modules else project_name
@@ -266,6 +274,106 @@ class RunnabilityVerifier:
             ),
         )
         return self._result(checks, command_result=execution.command_result, metadata={"module": module})
+
+    def _verify_compiled_library(
+        self,
+        context: VerificationContext,
+        image: str,
+        probe: str,
+        marker: str,
+        probe_type: str,
+    ) -> VerificationResult:
+        timeout_seconds = self._timeout_or_zero(self.config.command_timeout_seconds, context)
+        if timeout_seconds <= 0:
+            return self._single_error(
+                "library-artifact",
+                "workflow time budget exceeded before compiled library probe",
+            )
+        command = CommandSpec(
+            (probe,),
+            purpose=CommandPurpose.RUN,
+            timeout_seconds=timeout_seconds,
+            shell=True,
+        )
+        execution = self.runtime.run_image(image, command, timeout_seconds=timeout_seconds)
+        output = execution.output_excerpt
+        probe_ok = execution.command_result.succeeded and marker in output
+        count_match = re.search(r"DPRAUTO_(?:API|ARTIFACT)_COUNT=(\d+)", output)
+        artifact_count = int(count_match.group(1)) if count_match else 0
+        tests_passed = any(
+            result.level is VerificationLevel.TESTABILITY and result.passed
+            for result in context.prior_results
+        )
+        observable_ok = artifact_count > 0 or tests_passed
+        checks = (
+            VerificationCheck(
+                "library-artifact",
+                VerificationStatus.PASSED if probe_ok else VerificationStatus.FAILED,
+                (
+                    f"compiled library probe passed: {probe_type}"
+                    if probe_ok
+                    else f"compiled library probe failed: {probe_type}"
+                ),
+                command_result=execution.command_result,
+                evidence=(
+                    (execution.command_result.stdout,)
+                    if execution.command_result.stdout
+                    else ()
+                ),
+                metadata={"output_excerpt": output},
+            ),
+            VerificationCheck(
+                "library-artifact-or-tests",
+                VerificationStatus.PASSED if observable_ok else VerificationStatus.FAILED,
+                (
+                    "compiled artifact content was observed or project tests passed"
+                    if observable_ok
+                    else "no compiled artifact content or passing project tests were observed"
+                ),
+                metadata={
+                    "artifact_count": artifact_count,
+                    "project_tests_passed": tests_passed,
+                },
+            ),
+        )
+        return self._result(
+            checks,
+            command_result=execution.command_result,
+            metadata={
+                "runtime_probe_type": probe_type,
+                "artifact_count": artifact_count,
+                "project_tests_passed": tests_passed,
+            },
+        )
+
+    @staticmethod
+    def _compiled_library_probe(
+        context: VerificationContext,
+    ) -> tuple[str, str, str] | None:
+        plan = context.build_plan
+        if plan is None:
+            return None
+        expected_markers = {
+            "jvm-template": "DPRAUTO_JVM_ARTIFACT_OK",
+            "native-template": "DPRAUTO_NATIVE_BUILD_OK",
+        }
+        expected = expected_markers.get(plan.strategy)
+        if expected is None:
+            return None
+        probe = plan.metadata.get("runtime_probe_command", "")
+        marker = plan.metadata.get("runtime_probe_marker", "")
+        probe_type = plan.metadata.get("runtime_probe_type", "")
+        if (
+            not isinstance(probe, str)
+            or not isinstance(marker, str)
+            or not isinstance(probe_type, str)
+            or marker != expected
+            or not probe.strip()
+            or len(probe) > 4096
+            or "\x00" in probe
+        ):
+            return None
+        return probe, marker, probe_type
 
     def _result(self, checks, *, command_result=None, metadata=None) -> VerificationResult:
         checks = tuple(checks)

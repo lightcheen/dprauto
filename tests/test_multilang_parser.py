@@ -12,7 +12,8 @@ from dprauto.domain.enums import CommandPurpose
 from dprauto.domain.models import SourceReference
 from dprauto.inspection.scanner import FileScanner
 from dprauto.ports.parser import ProjectParser
-
+from dprauto.strategies import JVMTemplateStrategy, NativeTemplateStrategy, StrategyRegistry
+from dprauto.verification.commands import TestCommandSelector
 
 M0_SOURCE_ROOT = Path(
     "/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos"
@@ -277,6 +278,59 @@ add_subdirectory(tests)
                             for command in download_commands
                         )
                     )
+
+    def test_all_m0_ready_jvm_and_native_sources_get_deterministic_build_plans(self) -> None:
+        manifest = json.loads(M0_MANIFEST.read_text(encoding="utf-8"))
+        cases = [
+            case
+            for case in manifest["cases"]
+            if case["source"]["state"] == "ready"
+            and case["primary_language"] in {"java", "c", "cpp"}
+        ]
+        registry = StrategyRegistry(
+            (JVMTemplateStrategy(None), NativeTemplateStrategy(None))  # type: ignore[arg-type]
+        )
+
+        self.assertEqual(len(cases), 9)
+        for case in cases:
+            with self.subTest(case_id=case["case_id"]):
+                source_path = Path(case["source"]["path"])
+                profile = self.parser.parse(
+                    SourceReference(str(source_path), case["source"]["revision"]),
+                    source_path,
+                )
+                plan = registry.select(profile).create_plan(profile)
+                selected_test = TestCommandSelector().select(profile)
+
+                self.assertIn(plan.strategy, {"jvm-template", "native-template"})
+                self.assertTrue(
+                    str(plan.metadata["build_command_source"]).startswith("deterministic:")
+                )
+                self.assertTrue(plan.metadata["dependency_installation_commands"])
+                self.assertIn("DPRAUTO_", plan.metadata["runtime_probe_command"])
+                self.assertIsNotNone(selected_test)
+                self.assertNotIn("pip download", selected_test.command.display.casefold())
+                self.assertNotRegex(selected_test.command.display, r"%[A-Za-z_][A-Za-z0-9_]*%")
+                if case["case_id"] == "cpp-ccache":
+                    self.assertEqual(
+                        selected_test.command.display,
+                        "ctest --test-dir build --output-on-failure",
+                    )
+                    self.assertIn(
+                        "-DDEPS=DOWNLOAD",
+                        plan.metadata["build_commands"][0],
+                    )
+                elif case["case_id"] == "cpp-nlohmann-json":
+                    self.assertIn(
+                        "-DJSON_BuildTests=ON",
+                        plan.metadata["build_commands"][0],
+                    )
+                elif case["case_id"] == "c-distcc":
+                    self.assertIn("python3", plan.metadata["system_packages"])
+                elif case["case_id"] == "java-mybatis":
+                    self.assertEqual(profile.runtime_constraints["java"], "17")
+                    self.assertEqual(profile.metadata["java_target_version"], "11")
+                    self.assertEqual(plan.metadata["java_version"], "17")
 
 
 if __name__ == "__main__":

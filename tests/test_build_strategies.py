@@ -18,6 +18,8 @@ from dprauto.ports import BuildStrategy
 from dprauto.strategies import (
     CNBStrategy,
     DockerStrategy,
+    JVMTemplateStrategy,
+    NativeTemplateStrategy,
     RecordedBuildRunner,
     StrategyRegistry,
     TemplateStrategy,
@@ -60,6 +62,41 @@ def python_profile(
     )
 
 
+def jvm_profile(*, system="maven", wrapper=True, java="17", commands=()):
+    wrapper_file = "mvnw" if system == "maven" else "gradlew"
+    root_file = "pom.xml" if system == "maven" else "build.gradle"
+    return ProjectProfile(
+        "example-jvm",
+        SourceReference("fixture", revision="def456"),
+        languages=("Java",),
+        project_type=ProjectType.LIBRARY,
+        runtime_constraints={"java": java},
+        package_managers=(system,),
+        dependency_files=(root_file,),
+        build_files=((wrapper_file, root_file) if wrapper else (root_file,)),
+        commands=commands,
+        metadata={"primary_build_system": system},
+    )
+
+
+def native_profile(*, system="cmake", languages=("C++",), build_files=()):
+    defaults = {
+        "cmake": ("CMakeLists.txt",),
+        "meson": ("meson.build",),
+        "autotools": ("configure.ac",),
+        "make": ("Makefile",),
+    }
+    return ProjectProfile(
+        "example-native",
+        SourceReference("fixture", revision="789abc"),
+        languages=languages,
+        project_type=ProjectType.LIBRARY,
+        package_managers=(system,),
+        build_files=build_files or defaults[system],
+        metadata={"primary_build_system": system},
+    )
+
+
 class BuildStrategyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -88,6 +125,76 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertEqual(len(result.logs), 1)
         self.assertTrue((self.root / "artifacts" / result.metadata["result_artifact"]).is_file())
         self.assertFalse(any("__DPRAUTO_GENERATED__" in arg for arg in self.executor.commands[0].argv))
+
+    def test_jvm_maven_plan_uses_wrapper_and_retains_dependency_state(self) -> None:
+        untrusted = ProjectCommand(
+            "download only",
+            CommandSpec(
+                ("pip download -r cryptography.txt",),
+                purpose=CommandPurpose.BUILD,
+                shell=True,
+            ),
+            ".github/workflows/special.yml",
+            1.0,
+        )
+        strategy = JVMTemplateStrategy(self.runner, self.config)
+        first = strategy.create_plan(jvm_profile(commands=(untrusted,)))
+        second = strategy.create_plan(jvm_profile(commands=(untrusted,)))
+        dockerfile = first.generated_files[0].content
+
+        self.assertEqual(first.plan_id, second.plan_id)
+        self.assertEqual(first.strategy, "jvm-template")
+        self.assertEqual(first.metadata["base_image"], "maven:3.9.9-eclipse-temurin-17")
+        self.assertEqual(first.metadata["build_command"], "./mvnw -B -DskipTests package")
+        self.assertEqual(first.metadata["build_command_source"], "deterministic:maven-root-marker")
+        self.assertTrue(first.metadata["dependency_state_retained_in_image"])
+        self.assertIn("RUN chmod +x ./mvnw", dockerfile)
+        self.assertIn("RUN ./mvnw -B -DskipTests package", dockerfile)
+        self.assertIn("DPRAUTO_JVM_ARTIFACT_OK", dockerfile)
+        self.assertNotIn("pip download", dockerfile)
+        self.assertNotIn("type=cache,id=dprauto-maven", dockerfile)
+
+    def test_jvm_gradle_plan_uses_fixed_tool_image_and_no_daemon(self) -> None:
+        plan = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(system="gradle", wrapper=False, java="11")
+        )
+
+        self.assertEqual(plan.metadata["base_image"], "gradle:8.12.1-jdk11")
+        self.assertEqual(plan.metadata["build_command"], "gradle --no-daemon assemble")
+        self.assertIn("*/build/libs/*.jar", plan.metadata["runtime_probe_command"])
+
+    def test_native_cmake_plan_installs_bounded_toolchain_and_pipeline(self) -> None:
+        plan = NativeTemplateStrategy(self.runner, self.config).create_plan(native_profile())
+        dockerfile = plan.generated_files[0].content
+
+        self.assertEqual(plan.strategy, "native-template")
+        self.assertEqual(plan.metadata["build_system"], "cmake")
+        self.assertEqual(
+            plan.metadata["build_commands"],
+            ("cmake -S . -B build", "cmake --build build --parallel 2"),
+        )
+        self.assertEqual(
+            plan.metadata["system_packages"],
+            ("ca-certificates", "g++", "make", "pkg-config", "cmake"),
+        )
+        self.assertIn("apt-get", dockerfile)
+        self.assertIn("DPRAUTO_NATIVE_BUILD_OK", dockerfile)
+
+    def test_native_autotools_bootstraps_only_when_root_requires_it(self) -> None:
+        generated = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(system="autotools", languages=("C",), build_files=("configure.ac",))
+        )
+        configured = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(system="autotools", languages=("C",), build_files=("configure",))
+        )
+
+        self.assertIn("autoconf", generated.metadata["system_packages"])
+        self.assertEqual(generated.metadata["build_commands"][0], "autoreconf -fi && ./configure")
+        self.assertNotIn("autoconf", configured.metadata["system_packages"])
+        self.assertEqual(
+            configured.metadata["build_commands"][0],
+            "chmod +x ./configure && ./configure",
+        )
 
     def test_runner_clamps_command_timeout_to_remaining_budget(self) -> None:
         strategy = TemplateStrategy(self.runner, self.config)

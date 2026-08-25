@@ -37,7 +37,6 @@ from dprauto.verification import (
     TestCommandSelector,
 )
 
-
 NOW = datetime.now(timezone.utc)
 BUILD_COMMAND = CommandSpec(("docker", "build", "."), purpose=CommandPurpose.BUILD)
 
@@ -121,14 +120,17 @@ def build_context(
     *,
     setup="python --version",
     runtime_base_image="",
+    strategy="template",
+    plan_metadata=None,
 ):
     metadata = {"image_reference": "example:latest"}
     if runtime_base_image:
         metadata["runtime_base_image"] = runtime_base_image
+    metadata.update(plan_metadata or {})
     plan = BuildPlan(
         "plan",
         project.project_id,
-        "template",
+        strategy,
         (BuildStep("docker-build", BuildStage.BUILD, BUILD_COMMAND),),
         metadata=metadata,
         generated_files=(GeneratedFile("setup.sh", setup),),
@@ -148,6 +150,61 @@ def build_context(
 
 
 class CommandSelectionTests(unittest.TestCase):
+    def test_standard_jvm_test_beats_special_ci_test_target(self) -> None:
+        selected = TestCommandSelector().select(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                commands=(
+                    project_command(
+                        "./mvnw -B -Pslow verify",
+                        CommandPurpose.TEST,
+                        ".github/workflows/full.yml",
+                        1.0,
+                    ),
+                    project_command(
+                        "./mvnw -B test",
+                        CommandPurpose.TEST,
+                        "inferred:mvnw",
+                        0.9,
+                    ),
+                ),
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.command.display, "./mvnw -B test")
+
+    def test_windows_ci_variable_does_not_override_portable_ctest(self) -> None:
+        selected = TestCommandSelector().select(
+            ProjectProfile(
+                "native-project",
+                SourceReference("fixture://native"),
+                languages=("C++",),
+                commands=(
+                    project_command(
+                        'pytest test/msvc --ccache "%GITHUB_WORKSPACE%/build/ccache.exe"',
+                        CommandPurpose.TEST,
+                        ".github/workflows/build.yml",
+                        0.99,
+                    ),
+                    project_command(
+                        "ctest --test-dir build --output-on-failure",
+                        CommandPurpose.TEST,
+                        "inferred:CMakeLists.txt:test-layout",
+                        0.85,
+                    ),
+                ),
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(
+            selected.command.display,
+            "ctest --test-dir build --output-on-failure",
+        )
+
     def test_lowercase_pytest_verbose_flag_is_not_a_version_smoke_probe(self) -> None:
         selected = TestCommandSelector().select(
             ProjectProfile(
@@ -498,6 +555,50 @@ class VerificationPolicyTests(unittest.TestCase):
             ).status,
             VerificationStatus.FAILED,
         )
+
+    def test_installability_uses_language_neutral_plan_dependency_contract(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("Java",),
+            package_managers=("maven",),
+            dependency_files=("pom.xml",),
+        )
+        command = "./mvnw -B -DskipTests package"
+        context = build_context(
+            project,
+            self.workspace,
+            setup=f"FROM fixed\nRUN {command}\n",
+            strategy="jvm-template",
+            plan_metadata={"dependency_installation_commands": (command,)},
+        )
+
+        result = InstallabilityVerifier(self.runtime).verify(context)
+        dependency = next(
+            check for check in result.checks if check.name == "dependency-installation"
+        )
+
+        self.assertEqual(result.status, VerificationStatus.PASSED)
+        self.assertEqual(dependency.metadata["contract_source"], "build-plan")
+        self.assertEqual(dependency.metadata["contract_commands"], (command,))
+
+    def test_jvm_testability_runs_standard_runner_without_python_bootstrap(self) -> None:
+        project = replace(
+            profile(
+                ProjectType.LIBRARY,
+                project_command("./gradlew test", CommandPurpose.TEST, "inferred:gradlew"),
+            ),
+            languages=("Java",),
+            package_managers=("gradle",),
+            dependency_files=("build.gradle",),
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, strategy="jvm-template")
+        )
+
+        self.assertEqual(result.status, VerificationStatus.PASSED)
+        self.assertEqual(self.runtime.commands[0].display, "./gradlew test")
+        self.assertEqual(result.metadata["timeout_policy"], "test-only")
 
     def test_testability_uses_build_runtime_to_bound_nox_python_matrix(self) -> None:
         project = profile(
@@ -984,6 +1085,69 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual([command.display for command in self.runtime.commands], ["sample", "sample --help"])
         self.assertTrue(result.metadata["empty_output_help_fallback"])
+
+    def test_jvm_library_uses_strategy_owned_artifact_probe(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("Java",),
+            package_managers=("maven",),
+        )
+        probe = "jar tf /workspace/target/sample.jar"
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_JVM_ARTIFACT_OK\nDPRAUTO_API_COUNT=14\n"
+        )
+        context = build_context(
+            project,
+            self.workspace,
+            strategy="jvm-template",
+            plan_metadata={
+                "runtime_probe_command": probe,
+                "runtime_probe_marker": "DPRAUTO_JVM_ARTIFACT_OK",
+                "runtime_probe_type": "jvm-jar-classes",
+            },
+        )
+
+        result = RunnabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["artifact_count"], 14)
+        self.assertEqual(self.runtime.commands[0].display, probe)
+
+    def test_native_library_requires_artifact_or_passing_project_tests(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+        probe = "test -d build"
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_NATIVE_BUILD_OK\nDPRAUTO_ARTIFACT_COUNT=0\n"
+        )
+        context = build_context(
+            project,
+            self.workspace,
+            strategy="native-template",
+            plan_metadata={
+                "runtime_probe_command": probe,
+                "runtime_probe_marker": "DPRAUTO_NATIVE_BUILD_OK",
+                "runtime_probe_type": "native-build-artifacts",
+            },
+        )
+
+        failed = RunnabilityVerifier(self.runtime).verify(context)
+        self.assertEqual(failed.status, VerificationStatus.FAILED)
+
+        passed_tests = VerificationResult(
+            "native-tests",
+            VerificationLevel.TESTABILITY,
+            VerificationStatus.PASSED,
+            summary="native project tests passed",
+        )
+        passed = RunnabilityVerifier(self.runtime).verify(
+            replace(context, prior_results=(passed_tests,))
+        )
+        self.assertTrue(passed.passed)
+        self.assertTrue(passed.metadata["project_tests_passed"])
 
     def test_library_import_alone_is_not_enough_without_api_or_tests(self) -> None:
         project = profile(ProjectType.LIBRARY, import_modules=("sample",))

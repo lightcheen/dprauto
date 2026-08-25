@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import PurePosixPath
 
 from dprauto.config import BuildConfig, VerificationConfig
 from dprauto.domain.enums import CommandPurpose
@@ -88,6 +89,8 @@ class DockerContainerRuntime:
         if command is not None:
             for key, value in command.environment.items():
                 create.extend(("--env", f"{key}={value}"))
+            if command.cwd:
+                create.extend(("--workdir", self._container_workdir(command.cwd)))
             # Docker treats arguments after the image as arguments to the
             # image ENTRYPOINT.  Override it so an explicit verification
             # command is executed by the shell instead of being appended to
@@ -182,6 +185,8 @@ class DockerContainerRuntime:
         if command is not None:
             for key, value in command.environment.items():
                 create.extend(("--env", f"{key}={value}"))
+            if command.cwd:
+                create.extend(("--workdir", self._container_workdir(command.cwd)))
             create.extend(("--entrypoint", "/bin/sh"))
         create.append(image_reference)
         if command is not None:
@@ -272,6 +277,11 @@ class DockerContainerRuntime:
             return int(inspected.stdout.strip()) if inspected.returncode == 0 else fallback
         except ValueError:
             return fallback
+
+    @staticmethod
+    def _container_workdir(relative: str) -> str:
+        path = PurePosixPath(relative)
+        return "/workspace" if path.as_posix() == "." else f"/workspace/{path.as_posix()}"
 
     def _is_running(self, name: str) -> bool:
         completed = subprocess.run(
