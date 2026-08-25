@@ -189,7 +189,11 @@ class AgentContextManager:
             for key in (
                 "path",
                 "query",
+                "graph_id",
+                "session_id",
+                "turn",
                 "content",
+                "context",
                 "matches",
                 "files",
                 "truncated",
@@ -198,6 +202,10 @@ class AgentContextManager:
                 "end_line",
                 "total_lines",
                 "next_start_line",
+                "new_context_characters",
+                "seen_node_count",
+                "graph_truncated",
+                "scan_truncated",
             ):
                 if key not in observation.data:
                     continue
@@ -291,32 +299,41 @@ class AgentContextManager:
         if len(to_json_bytes(record).decode()) <= character_limit:
             return record
         data = dict(record["data"])
-        content = data.get("content")
-        if isinstance(content, str):
+        text_key = next(
+            (
+                key
+                for key in ("content", "context")
+                if isinstance(data.get(key), str)
+            ),
+            None,
+        )
+        content = data.get(text_key) if text_key is not None else None
+        if isinstance(content, str) and text_key is not None:
             lower = 0
             upper = len(content)
             best = ""
             while lower <= upper:
                 middle = (lower + upper) // 2
                 candidate_data = dict(data)
-                candidate_data["content"] = AgentContextManager._bounded_text(
+                candidate_data[text_key] = AgentContextManager._bounded_text(
                     content,
                     middle,
                 )
                 candidate = {**record, "data": candidate_data}
                 if len(to_json_bytes(candidate).decode()) <= character_limit:
-                    best = candidate_data["content"]
+                    best = candidate_data[text_key]
                     lower = middle + 1
                 else:
                     upper = middle - 1
-            data["content"] = best
+            data[text_key] = best
             fitted = {**record, "data": data}
             if len(to_json_bytes(fitted).decode()) <= character_limit:
                 return fitted
         scalar_data = {
             key: value
             for key, value in data.items()
-            if key != "content" and isinstance(value, (str, bool, int, float, type(None)))
+            if key not in {"content", "context"}
+            and isinstance(value, (str, bool, int, float, type(None)))
         }
         return {
             **record,

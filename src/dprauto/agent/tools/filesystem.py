@@ -17,6 +17,7 @@ from dprauto.domain.enums import ChangeKind, RiskLevel
 from dprauto.domain.models import EnvironmentDiff, FileChange, SourceReference, ValueChange
 from dprauto.errors import PolicyViolationError, ToolExecutionError
 from dprauto.inspection.scanner import FileScanner
+from dprauto.inspection.security import is_sensitive_repository_path
 from dprauto.ports.parser import ProjectParser
 from dprauto.ports.storage import Storage
 
@@ -50,11 +51,7 @@ def _safe_target(workspace: str, relative_path: str, *, require_file: bool) -> t
 
 
 def _is_sensitive_project_path(relative_path: str) -> bool:
-    name = PurePosixPath(relative_path).name.casefold()
-    safe_example = name.endswith((".example", ".sample", ".template"))
-    if name == ".env" or (name.startswith(".env.") and not safe_example):
-        return True
-    return PurePosixPath(name).suffix in {".key", ".pem", ".p12", ".pfx"}
+    return is_sensitive_repository_path(relative_path)
 
 
 class InspectProjectTool:

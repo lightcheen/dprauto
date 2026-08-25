@@ -1,7 +1,7 @@
 """Ports for repository syntax parsing and knowledge graph persistence."""
 
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 from dprauto.intelligence.models import (
     KnowledgeNode,
@@ -41,4 +41,11 @@ class KnowledgeGraphStore(Protocol):
 
     def delete(self, graph_id: str) -> None:
         """Delete exactly one graph identity."""
+        ...
+
+
+@runtime_checkable
+class SemanticEncoder(Protocol):
+    def encode(self, text: str) -> Mapping[int, float]:
+        """Return a stable, normalized sparse semantic vector for bounded text."""
         ...

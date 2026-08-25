@@ -89,8 +89,42 @@ declarations = service.query(
 
 默认工厂使用进程内存存储；生产环境可向工厂传入 `Neo4jKnowledgeGraphStore`。图模型与查询
 port 不依赖 Neo4j，写入按 `graph_id` 隔离并在单事务中替换，节点和边按批次参数化写入。
-本阶段提供结构化文本/路径/语言/节点类型查询，尚未把 embedding 语义检索和多轮 Agent 上下文
-接入修复闭环；Java/C/C++ 的确定性容器构建也仍属于后续阶段。
+M2 的结构化查询仍保留；M3 在其上增加下述离线语义检索和多轮 Agent 上下文。
+Java/C/C++ 的确定性容器构建仍属于后续阶段。
+
+## 离线语义检索与多轮上下文
+
+`RepositoryContextRetrievalService` 将结构化图过滤、代码感知 feature-hashing 向量、字面词项
+证据和图邻域传播组合为稳定排序。编码器拆分路径、snake_case、camelCase，并对 build/test/run、
+依赖/import、settings/environment、PostgreSQL/Redis、workdir/monorepo 等环境构建概念做对称
+扩展。默认实现不下载模型、不访问外部 API；`SemanticEncoder` port 可替换为部署方的密集向量
+模型。
+
+```python
+from pathlib import Path
+
+from dprauto.application import create_repository_context_retrieval
+from dprauto.domain.models import SourceReference
+from dprauto.intelligence import SemanticSearchQuery
+
+service = create_repository_context_retrieval()
+graph = service.index(SourceReference("local-project"), Path("/path/to/project"))
+first = service.query(
+    graph.graph_id,
+    "repair-session",
+    SemanticSearchQuery("test file optional dependency imports"),
+)
+second = service.query(
+    graph.graph_id,
+    "repair-session",
+    SemanticSearchQuery("framework settings initialization"),
+)
+```
+
+同一 session 默认最多 4 轮、32 个唯一节点和 12,000 个上下文字符；重复查询不会再次返回已经
+见过的节点。生产 Agent 的 `query_repository_context` 是只读调查 Tool，索引最多 2,000 个文件
+和 20,000 个图节点，不执行候选代码。`.env`、私钥、keystore、credentials/secrets 配置不会
+进入图或普通文本搜索，example/sample/template 文件仍可作为无凭据证据。
 
 ## 确定性构建
 

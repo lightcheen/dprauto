@@ -96,3 +96,16 @@ Real syntax parsing is exercised against these M0 directories:
 See `M2_TREE_SITTER_KNOWLEDGE_GRAPH_2026-08-25.md` for limits, measured graph
 sizes, dependency compatibility, and the explicit boundary between structured
 graph retrieval and later embedding/multi-turn retrieval work.
+
+## M3 offline semantic and multi-turn retrieval
+
+M3 combines code-aware sparse vectors, literal term evidence, graph-neighbor
+propagation, structured filters, and per-path diversification. It adds a
+replaceable `SemanticEncoder` port, bounded multi-turn sessions, and the
+read-only `query_repository_context` Agent investigation tool.
+
+The real-data probes include the M0 Django, Apache Commons CSV, and ccache
+directories plus the CNB corpus's Testfixtures snapshot for its actual
+`conftest.py` Sybil imports. All five long-tail probes place an expected file at
+rank 1. See `M3_SEMANTIC_CONTEXT_RETRIEVAL_2026-08-25.md` for exact directories,
+graph sizes, scores, limits, and current persistence boundaries.

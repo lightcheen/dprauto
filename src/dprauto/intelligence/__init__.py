@@ -8,6 +8,13 @@ from dprauto.intelligence.models import (
     KnowledgeQuery,
     RepositoryKnowledgeGraph,
 )
+from dprauto.intelligence.retrieval_models import (
+    ContextRetrievalResult,
+    ContextRetrievalTurn,
+    RepositoryContextSession,
+    SemanticSearchHit,
+    SemanticSearchQuery,
+)
 
 __all__ = [
     "KnowledgeEdge",
@@ -16,4 +23,9 @@ __all__ = [
     "KnowledgeNodeKind",
     "KnowledgeQuery",
     "RepositoryKnowledgeGraph",
+    "ContextRetrievalResult",
+    "ContextRetrievalTurn",
+    "RepositoryContextSession",
+    "SemanticSearchHit",
+    "SemanticSearchQuery",
 ]

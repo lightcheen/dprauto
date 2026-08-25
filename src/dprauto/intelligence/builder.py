@@ -10,6 +10,7 @@ from typing import Any
 
 from dprauto.domain.models import SourceReference
 from dprauto.inspection.scanner import FileScanner
+from dprauto.inspection.security import is_sensitive_repository_path
 from dprauto.intelligence.models import (
     KnowledgeEdge,
     KnowledgeEdgeKind,
@@ -134,15 +135,30 @@ class RepositoryKnowledgeGraphBuilder:
         workspace: Path,
     ) -> RepositoryKnowledgeGraph:
         scanned = self.scanner.scan(workspace)
-        selected_paths = tuple(
+        supported_paths = tuple(
             path for path in scanned.files if self._supports_path(Path(path))
+        )
+        sensitive_paths = tuple(
+            path for path in supported_paths if is_sensitive_repository_path(path)
+        )
+        selected_paths = tuple(
+            path for path in supported_paths if path not in sensitive_paths
         )
         fingerprint, readable_paths, skipped_large = self._fingerprint(
             scanned.root,
             selected_paths,
         )
+        build_contract = self._build_contract()
         graph_id = hashlib.sha256(
-            "\0".join((source.locator, source.revision or "", fingerprint)).encode("utf-8")
+            "\0".join(
+                (
+                    source.locator,
+                    source.revision or "",
+                    source.subdirectory or "",
+                    fingerprint,
+                    build_contract,
+                )
+            ).encode("utf-8")
         ).hexdigest()
         nodes: list[KnowledgeNode] = []
         edges: list[KnowledgeEdge] = []
@@ -242,7 +258,9 @@ class RepositoryKnowledgeGraphBuilder:
             edges=tuple(edges),
             metadata={
                 "builder": "tree-sitter-knowledge-graph-v1",
+                "build_contract": build_contract,
                 "selected_file_count": len(selected_paths),
+                "sensitive_file_count": len(sensitive_paths),
                 "indexed_file_count": len(readable_paths),
                 "text_file_count": text_file_count,
                 "language_file_counts": dict(sorted(language_counts.items())),
@@ -482,3 +500,18 @@ class RepositoryKnowledgeGraphBuilder:
     @staticmethod
     def _node_id(graph_id: str, identity: str) -> str:
         return hashlib.sha256(f"{graph_id}\0{identity}".encode("utf-8")).hexdigest()
+
+    def _build_contract(self) -> str:
+        values = (
+            "tree-sitter-knowledge-graph-v1",
+            self.config.max_files,
+            self.config.max_depth,
+            self.config.max_file_bytes,
+            self.config.max_ast_depth,
+            self.config.max_ast_nodes_per_file,
+            self.config.max_total_nodes,
+            self.config.max_node_text_characters,
+            self.config.text_chunk_characters,
+            self.config.text_chunk_overlap,
+        )
+        return hashlib.sha256(repr(values).encode("utf-8")).hexdigest()

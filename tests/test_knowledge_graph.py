@@ -161,6 +161,31 @@ class KnowledgeGraphTests(unittest.TestCase):
             self.assertNotEqual(original.source_fingerprint, changed.source_fingerprint)
             self.assertNotEqual(original.graph_id, changed.graph_id)
 
+    def test_index_contract_change_invalidates_graph_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "example.py").write_text(
+                "def demo():\n    return 1\n",
+                encoding="utf-8",
+            )
+            source = SourceReference("fixture://contract")
+
+            small = RepositoryKnowledgeGraphBuilder(
+                FakeSyntaxParser(),
+                KnowledgeGraphBuildConfig(max_ast_nodes_per_file=1),
+            ).build(source, root)
+            large = RepositoryKnowledgeGraphBuilder(
+                FakeSyntaxParser(),
+                KnowledgeGraphBuildConfig(max_ast_nodes_per_file=20),
+            ).build(source, root)
+
+            self.assertEqual(small.source_fingerprint, large.source_fingerprint)
+            self.assertNotEqual(small.graph_id, large.graph_id)
+            self.assertNotEqual(
+                small.metadata["build_contract"],
+                large.metadata["build_contract"],
+            )
+
     def test_in_memory_store_supports_structured_bounded_queries(self):
         with tempfile.TemporaryDirectory() as directory:
             graph = self._build_fixture(Path(directory))

@@ -4,7 +4,11 @@ from dprauto.ports.build import BuildStrategy
 from dprauto.ports.execution import CommandExecutor
 from dprauto.ports.environment import EnvironmentDiffer
 from dprauto.ports.failure import FailureClassifier, FailureFallbackClassifier
-from dprauto.ports.intelligence import KnowledgeGraphStore, SyntaxTreeParser
+from dprauto.ports.intelligence import (
+    KnowledgeGraphStore,
+    SemanticEncoder,
+    SyntaxTreeParser,
+)
 from dprauto.ports.llm import LLMClient, LLMMessage, LLMRequest, LLMResponse
 from dprauto.ports.parser import ProjectParser
 from dprauto.ports.persistence import AgentPersistence
@@ -27,6 +31,7 @@ __all__ = [
     "LLMRequest",
     "LLMResponse",
     "KnowledgeGraphStore",
+    "SemanticEncoder",
     "ProjectParser",
     "RepairPreflightRunner",
     "RepairPlanner",

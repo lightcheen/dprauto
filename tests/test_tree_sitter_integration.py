@@ -3,13 +3,21 @@ import unittest
 import warnings
 from pathlib import Path
 
-from dprauto.adapters.intelligence import TreeSitterSyntaxParser
+from dprauto.adapters.intelligence import (
+    CodeAwareHashingEncoder,
+    TreeSitterSyntaxParser,
+)
 from dprauto.domain.models import SourceReference
 from dprauto.intelligence import KnowledgeNodeKind
 from dprauto.intelligence.builder import (
     KnowledgeGraphBuildConfig,
     RepositoryKnowledgeGraphBuilder,
 )
+from dprauto.intelligence.retrieval import (
+    RepositoryRetrievalConfig,
+    RepositorySemanticRetriever,
+)
+from dprauto.intelligence.retrieval_models import SemanticSearchQuery
 
 
 TREE_SITTER_AVAILABLE = importlib.util.find_spec("tree_sitter_languages") is not None
@@ -118,6 +126,110 @@ class TreeSitterIntegrationTests(unittest.TestCase):
             )
         )
         self.assertLessEqual(len(graph.nodes), 3_000)
+
+    def test_real_python_java_and_cpp_semantic_queries_find_expected_files(self):
+        cases = (
+            (
+                "python-django",
+                SOURCE_ROOT
+                / "executionagent-django-django-e95468ed97b1"
+                / "django/db/backends/postgresql",
+                "optional PostgreSQL database driver import",
+                {"base.py", "psycopg_any.py"},
+            ),
+            (
+                "java-commons-csv",
+                SOURCE_ROOT
+                / "executionagent-apache-commons-csv-2d44689ec75e"
+                / "src/main/java/org/apache/commons/csv",
+                "duplicate header names strictness mode",
+                {"CSVFormat.java", "DuplicateHeaderMode.java"},
+            ),
+            (
+                "cpp-ccache",
+                SOURCE_ROOT
+                / "executionagent-ccache-ccache-7f3e822efb1b"
+                / "unittest",
+                "dependency arguments compiler test",
+                {"test_argprocessing.cpp"},
+            ),
+        )
+        for name, workspace, query, expected_paths in cases:
+            with self.subTest(name=name):
+                graph = RepositoryKnowledgeGraphBuilder(
+                    self.parser,
+                    KnowledgeGraphBuildConfig(
+                        max_files=20,
+                        max_ast_depth=10,
+                        max_ast_nodes_per_file=700,
+                        max_total_nodes=12_000,
+                    ),
+                ).build(SourceReference(f"dataset://{name}"), workspace)
+                retriever = RepositorySemanticRetriever(
+                    CodeAwareHashingEncoder(),
+                    RepositoryRetrievalConfig(
+                        max_index_nodes=10_000,
+                        max_results_per_path=3,
+                    ),
+                )
+
+                hits = retriever.search(
+                    graph,
+                    SemanticSearchQuery(query, limit=6),
+                )
+
+                self.assertTrue(hits)
+                self.assertTrue(
+                    expected_paths & {hit.node.path for hit in hits},
+                    [(hit.node.path, hit.score) for hit in hits],
+                )
+
+    def test_real_test_import_and_django_settings_queries_cover_long_tail_context(self):
+        cases = (
+            (
+                "python-testfixtures",
+                SOURCE_ROOT
+                / "envbench-python-paper-simplistix-testfixtures-608b0532dbbe",
+                KnowledgeGraphBuildConfig(
+                    max_files=80,
+                    max_ast_depth=8,
+                    max_ast_nodes_per_file=400,
+                    max_total_nodes=10_000,
+                ),
+                "test file optional sybil dependency import",
+                "conftest.py",
+            ),
+            (
+                "python-django-settings",
+                SOURCE_ROOT
+                / "executionagent-django-django-e95468ed97b1"
+                / "tests/settings_tests",
+                KnowledgeGraphBuildConfig(
+                    max_files=20,
+                    max_ast_depth=10,
+                    max_ast_nodes_per_file=700,
+                    max_total_nodes=8_000,
+                ),
+                "Django settings initialization environment configure",
+                "tests.py",
+            ),
+        )
+        for name, workspace, graph_config, query, expected_path in cases:
+            with self.subTest(name=name):
+                graph = RepositoryKnowledgeGraphBuilder(
+                    self.parser,
+                    graph_config,
+                ).build(SourceReference(f"dataset://{name}"), workspace)
+                hits = RepositorySemanticRetriever(
+                    CodeAwareHashingEncoder(),
+                    RepositoryRetrievalConfig(max_index_nodes=8_000),
+                ).search(graph, SemanticSearchQuery(query, limit=8))
+
+                self.assertIn(
+                    expected_path,
+                    {hit.node.path for hit in hits},
+                    [(hit.node.path, hit.score) for hit in hits],
+                )
 
 
 if __name__ == "__main__":

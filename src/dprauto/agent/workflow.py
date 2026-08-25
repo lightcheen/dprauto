@@ -43,6 +43,7 @@ from dprauto.domain.models import (
     RepairPreflightResult,
 )
 from dprauto.errors import AgentWorkflowError, DPRAutoError
+from dprauto.inspection.security import is_sensitive_repository_path
 from dprauto.ports.repair import InvestigationPlanner, RepairPlanner
 from dprauto.ports.environment import EnvironmentDiffer
 from dprauto.ports.regression import RegressionChecker
@@ -65,7 +66,12 @@ class AgentWorkflow:
 
     _REQUIRED_TOOLS = frozenset({"read_file", "get_build_log", "build_image"})
     _INVESTIGATION_TOOLS = frozenset(
-        {"list_project_files", "read_file", "search_project"}
+        {
+            "list_project_files",
+            "query_repository_context",
+            "read_file",
+            "search_project",
+        }
     )
 
     def __init__(
@@ -1440,18 +1446,7 @@ class AgentWorkflow:
         value = arguments.get("path")
         if not isinstance(value, str) or not value.strip():
             return "investigation read_file requires a non-empty path"
-        name = Path(value).name.casefold()
-        safe_example = name.endswith((".example", ".sample", ".template"))
-        sensitive_environment = name == ".env" or (
-            name.startswith(".env.") and not safe_example
-        )
-        sensitive_suffix = Path(name).suffix in {
-            ".key",
-            ".pem",
-            ".p12",
-            ".pfx",
-        }
-        if sensitive_environment or sensitive_suffix:
+        if is_sensitive_repository_path(value):
             return f"investigation refused sensitive project file: {value}"
         return ""
 
