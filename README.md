@@ -261,6 +261,29 @@ Testability 成败的前置条件。若 conftest 在收集阶段明确需要 sec
 含复合 shell 控制符时均不会重写。tox 4 的 `env_list` 和旧版 `envlist` 都会静态解析，大型
 brace factor 矩阵会优先保留短的、覆盖不同 Python 版本的代表环境。
 
+Testability 的前置条件由所选测试命令单独规划。Parser 会记录 CI 中 PostgreSQL/Redis
+服务证据，但 `available_test_services` 不等于当前测试需要服务；只有
+`test_service_requirements` 或精确的 `test_service_requirements_by_command` 绑定才会触发编排。
+这使 Piccolo 的普通 SQLite pytest 不会因为同一 CI 文件存在 PostgreSQL job 而被扩大成
+数据库测试。需要服务时，Docker adapter 创建唯一 bridge network，启动最多 2 个白名单
+服务容器，执行 `pg_isready`/`redis-cli ping` 健康检查，再把测试容器接入同一网络；测试完成、
+超时或初始化失败都会在 `finally` 中删除临时容器和网络，不会复用或修改宿主机已有服务。
+默认服务镜像为固定的 `postgres:16-alpine` 和 `redis:7-alpine`，可通过
+`DPRAUTO_VERIFICATION_POSTGRES_SERVICE_IMAGE`、`DPRAUTO_VERIFICATION_REDIS_SERVICE_IMAGE`
+覆盖；服务启动超时和容器上限分别由
+`DPRAUTO_VERIFICATION_SERVICE_STARTUP_TIMEOUT_SECONDS` 与
+`DPRAUTO_VERIFICATION_MAX_SERVICE_CONTAINERS` 控制。
+
+Django 项目优先使用仓库自己的 bootstrap：根目录 `manage.py` 会产生
+`python manage.py test` 并静态提取 `DJANGO_SETTINGS_MODULE`；包含 `django.setup()` 或
+`settings.configure()` 的根目录 `runtests.py` 会优先于通用 pytest；Django 源码仓库则根据
+tox 的 `changedir = tests` 选择 `python runtests.py --verbosity=1` 和真实工作目录。默认不盲目
+执行 migration；只有显式、受限的 `test_setup_commands` 契约才允许 `manage.py migrate`、
+`loaddata` 或 `check`。`libtmux` 与 CI 的 `tmux -V` 同时出现时，构建策略安装白名单系统包
+`tmux`，从而满足会启动 tmux server/client 多进程的测试，而不把 import 成功误报为
+Testability 成功。运行测试前还会以 `command -v` 验证契约中的 executable，缺失时测试明确
+失败，不会只依赖 Python import probe。
+
 ## 失败日志分类
 
 `RuleBasedBuildFailureClassifier` 最多读取配置上限内的日志尾部，去除 ANSI/CNB 前缀，

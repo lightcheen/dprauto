@@ -136,6 +136,19 @@ class PythonProjectParser:
             entry_points,
         )
         commands = self._project_commands((*extracted_commands, *inferred_commands))
+        framework_commands, framework_metadata = self._framework_contract(scanned)
+        if framework_commands:
+            framework_keys = {
+                (item.command.display.casefold(), item.command.purpose)
+                for item in framework_commands
+            }
+            commands = framework_commands + tuple(
+                item
+                for item in commands
+                if (item.command.display.casefold(), item.command.purpose)
+                not in framework_keys
+            )
+        service_metadata = self._ci_service_metadata(scanned, ci_files)
         project_type, type_evidence = self._project_type(
             scanned,
             dependencies,
@@ -189,6 +202,11 @@ class PythonProjectParser:
                 "entry_points": entry_points,
                 "dependency_names": tuple(sorted(dependencies)),
                 "system_dependency_hints": system_dependency_hints,
+                "test_required_executables": tuple(
+                    hint.removesuffix("-executable")
+                    for hint in system_dependency_hints
+                    if hint.endswith("-executable")
+                ),
                 "test_dependency_groups": test_dependency_groups,
                 "test_dependency_extras": test_dependency_extras,
                 "test_dependency_manager_groups": test_dependency_manager_groups,
@@ -200,6 +218,8 @@ class PythonProjectParser:
                 "pytest_capture_incompatible_files": pytest_capture_files,
                 "pytest_capture_scan_truncated": pytest_capture_scan_truncated,
                 "scm_versioning": scm_versioning,
+                **framework_metadata,
+                **service_metadata,
                 **test_file_metadata,
                 "project_type_evidence": type_evidence,
                 "scan_file_count": len(scanned.files),
@@ -490,7 +510,179 @@ class PythonProjectParser:
             hints.append("git-vcs")
         if "pyscard" in dependency_names:
             hints.append("pyscard-native")
+        ci_content = "\n".join(
+            scanned.read_text(path)
+            for path in scanned.files
+            if path.lower().startswith(".github/workflows/")
+            or PurePosixPath(path).name.lower() in _CI_ROOT_FILES
+        )
+        if (
+            "libtmux" in dependency_names
+            and re.search(r"(?m)^\s*(?:run:\s*)?(?:.*\s)?tmux\s+-V\s*$", ci_content)
+        ):
+            hints.append("tmux-executable")
         return tuple(hints)
+
+    @staticmethod
+    def _framework_contract(
+        scanned: ScannedProject,
+    ) -> tuple[tuple[ProjectCommand, ...], dict[str, object]]:
+        """Prefer repository-owned Django bootstraps over a generic pytest guess."""
+
+        commands: list[ProjectCommand] = []
+        metadata: dict[str, object] = {}
+        manage = scanned.read_text("manage.py")
+        if manage and "execute_from_command_line" in manage:
+            settings_match = re.search(
+                r"DJANGO_SETTINGS_MODULE[\"']?\s*,\s*[\"']([^\"']+)",
+                manage,
+            )
+            environment = (
+                {"DJANGO_SETTINGS_MODULE": settings_match.group(1)}
+                if settings_match
+                else {}
+            )
+            commands.extend(
+                (
+                    ProjectCommand(
+                        "test-django-manage",
+                        CommandSpec(
+                            ("python", "manage.py", "test"),
+                            purpose=CommandPurpose.TEST,
+                            environment=environment,
+                        ),
+                        "framework:manage.py",
+                        0.98,
+                    ),
+                    ProjectCommand(
+                        "run-django-check",
+                        CommandSpec(
+                            ("python", "manage.py", "check"),
+                            purpose=CommandPurpose.RUN,
+                            environment=environment,
+                        ),
+                        "framework:manage.py",
+                        0.95,
+                    ),
+                )
+            )
+            metadata.update(
+                {
+                    "framework": "django",
+                    "framework_test_runner": "manage.py",
+                    "framework_initialization_owner": "repository-runner",
+                    "test_environment_variables": environment,
+                    "test_prerequisite_evidence": ("manage.py:DJANGO_SETTINGS_MODULE",),
+                }
+            )
+
+        runner = scanned.read_text("runtests.py")
+        if runner and re.search(r"django\.setup\(\)|settings\.configure\(", runner):
+            commands.append(
+                ProjectCommand(
+                    "test-django-runner",
+                    CommandSpec(("python", "runtests.py"), purpose=CommandPurpose.TEST),
+                    "framework:runtests.py",
+                    0.99,
+                )
+            )
+            metadata.update(
+                {
+                    "framework": "django",
+                    "framework_test_runner": "runtests.py",
+                    "framework_initialization_owner": "repository-runner",
+                    "test_prerequisite_evidence": ("runtests.py:django-bootstrap",),
+                }
+            )
+
+        nested_runner = scanned.read_text("tests/runtests.py")
+        tox = scanned.read_text("tox.ini")
+        if (
+            nested_runner
+            and "runtests.py" in tox
+            and re.search(
+                r"(?m)^\s*changedir\s*=\s*(?:\{toxinidir\}/)?tests\s*$",
+                tox,
+            )
+        ):
+            commands.append(
+                ProjectCommand(
+                    "test-django-source-runner",
+                    CommandSpec(
+                        ("python", "runtests.py", "--verbosity=1"),
+                        purpose=CommandPurpose.TEST,
+                        cwd="tests",
+                    ),
+                    "framework:tox.ini+tests/runtests.py",
+                    0.99,
+                )
+            )
+            metadata.update(
+                {
+                    "framework": "django",
+                    "framework_test_runner": "tests/runtests.py",
+                    "framework_initialization_owner": "repository-runner",
+                    "framework_workspace": "tests",
+                    "test_prerequisite_evidence": (
+                        "tox.ini:changedir=tests",
+                        "tests/runtests.py:django-bootstrap",
+                    ),
+                }
+            )
+        return tuple(commands), metadata
+
+    @staticmethod
+    def _ci_service_metadata(
+        scanned: ScannedProject,
+        ci_files: tuple[str, ...],
+    ) -> dict[str, object]:
+        """Record service choices without applying them to unrelated test commands."""
+
+        services: list[str] = []
+        evidence: list[str] = []
+        by_command: dict[str, tuple[str, ...]] = {}
+        for path in ci_files:
+            content = scanned.read_text(path)
+            has_postgres = bool(re.search(
+                r"(?ms)^\s*services:\s*$.*?^\s+postgres:\s*$.*?"
+                r"^\s+image:\s*postgres(?::[^\s#]+)?",
+                content,
+            ))
+            has_redis = bool(re.search(
+                r"(?ms)^\s*services:\s*$.*?^\s+redis:\s*$.*?"
+                r"^\s+image:\s*redis(?::[^\s#]+)?",
+                content,
+            ))
+            if has_postgres:
+                services.append("postgresql")
+                evidence.append(f"{path}:services.postgres")
+            if has_redis:
+                services.append("redis")
+                evidence.append(f"{path}:services.redis")
+            for match in re.finditer(
+                r"(?m)^\s*(?:-\s*)?run:\s*([^\n#]*(?:test|pytest)[^\n#]*)\s*$",
+                content,
+                re.IGNORECASE,
+            ):
+                command = match.group(1).strip()
+                required: list[str] = []
+                lowered = command.casefold()
+                if has_postgres and "postgres" in lowered:
+                    required.append("postgresql")
+                if has_redis and "redis" in lowered:
+                    required.append("redis")
+                if required and not re.search(r"\$\{|\$\{\{", command):
+                    by_command[command] = tuple(required)
+        if not services:
+            return {}
+        result: dict[str, object] = {
+            "available_test_services": tuple(dict.fromkeys(services)),
+            "available_test_service_evidence": tuple(dict.fromkeys(evidence)),
+            "service_selection_policy": "selected-command-only",
+        }
+        if by_command:
+            result["test_service_requirements_by_command"] = by_command
+        return result
 
     @staticmethod
     def _ini_section(text: str, name: str) -> str:

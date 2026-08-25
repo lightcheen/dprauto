@@ -209,6 +209,11 @@ class VerificationConfig:
     nox_version: str = "2024.10.9"
     max_parallel_test_workers: int = 4
     max_test_files_per_slice: int = 8
+    service_orchestration_enabled: bool = True
+    service_startup_timeout_seconds: int = 30
+    max_service_containers: int = 2
+    postgres_service_image: str = "postgres:16-alpine"
+    redis_service_image: str = "redis:7-alpine"
 
     def __post_init__(self) -> None:
         if self.command_timeout_seconds <= 0:
@@ -246,6 +251,18 @@ class VerificationConfig:
             raise ConfigurationError(
                 "verification.max_test_files_per_slice must be between 1 and 32"
             )
+        if self.service_startup_timeout_seconds <= 0:
+            raise ConfigurationError(
+                "verification.service_startup_timeout_seconds must be positive"
+            )
+        if not 1 <= self.max_service_containers <= 4:
+            raise ConfigurationError(
+                "verification.max_service_containers must be between 1 and 4"
+            )
+        _validate_versioned_image(
+            self.postgres_service_image, "postgres_service_image"
+        )
+        _validate_versioned_image(self.redis_service_image, "redis_service_image")
 
 
 @dataclass(frozen=True)
@@ -458,6 +475,26 @@ def load_config(
             get("VERIFICATION_MAX_TEST_FILES_PER_SLICE", "8"),
             "VERIFICATION_MAX_TEST_FILES_PER_SLICE",
             minimum=1,
+        ),
+        service_orchestration_enabled=_read_bool(
+            get("VERIFICATION_SERVICE_ORCHESTRATION_ENABLED", "true"),
+            "VERIFICATION_SERVICE_ORCHESTRATION_ENABLED",
+        ),
+        service_startup_timeout_seconds=_read_int(
+            get("VERIFICATION_SERVICE_STARTUP_TIMEOUT_SECONDS", "30"),
+            "VERIFICATION_SERVICE_STARTUP_TIMEOUT_SECONDS",
+            minimum=1,
+        ),
+        max_service_containers=_read_int(
+            get("VERIFICATION_MAX_SERVICE_CONTAINERS", "2"),
+            "VERIFICATION_MAX_SERVICE_CONTAINERS",
+            minimum=1,
+        ),
+        postgres_service_image=get(
+            "VERIFICATION_POSTGRES_SERVICE_IMAGE", "postgres:16-alpine"
+        ),
+        redis_service_image=get(
+            "VERIFICATION_REDIS_SERVICE_IMAGE", "redis:7-alpine"
         ),
     )
     llm = LLMConfig(

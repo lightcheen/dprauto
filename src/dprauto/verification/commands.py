@@ -192,11 +192,14 @@ class TestCommandSelector:
         values = profile.metadata.get("test_required_environment_variables", ())
         if not isinstance(values, (list, tuple)):
             return ()
+        supplied = profile.metadata.get("test_environment_variables", {})
+        supplied_names = set(supplied) if isinstance(supplied, Mapping) else set()
         return tuple(
             value
             for value in values[:32]
             if isinstance(value, str)
             and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value)
+            and value not in supplied_names
         )
 
     @staticmethod
@@ -314,6 +317,8 @@ class TestCommandSelector:
             return 0
         if re.search(r"\b(pytest|py\.test)\b", text):
             return 0
+        if re.search(r"\bpython\S*\s+(?:manage\.py\s+test|runtests\.py)\b", text):
+            return 0
         if re.search(r"\bpython\S*\s+[^ ]*(?:u?tests?)/[^ ]+\.py\b", text):
             return 0
         if re.search(r"\bunittest\b", text):
@@ -389,6 +394,8 @@ class TestCommandSelector:
     @staticmethod
     def _source_rank(profile: ProjectProfile, command: ProjectCommand) -> int:
         source = command.source.lower()
+        if source.startswith("framework:"):
+            return 0
         if command.source in profile.ci_files or source.startswith((".github/", ".circleci/")):
             return 0
         if command.source in profile.readme_files or "readme" in source:

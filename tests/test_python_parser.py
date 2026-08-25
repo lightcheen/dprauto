@@ -549,6 +549,91 @@ def tests(session):
         self.assertEqual(profile.metadata["default_nox_session"], "tests")
         self.assertIn("nox -s tests", command_texts(profile, CommandPurpose.TEST))
 
+    def test_django_manage_runner_owns_settings_and_test_entrypoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "manage.py").write_text(
+                """import os
+from django.core.management import execute_from_command_line
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sample.settings")
+execute_from_command_line([])
+""",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "sample"\ndependencies = ["django"]\n',
+                encoding="utf-8",
+            )
+            (root / "tests").mkdir()
+            (root / "tests" / "test_view.py").write_text(
+                "def test_view(): pass\n", encoding="utf-8"
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://django"), root)
+
+        django_test = next(
+            item for item in profile.commands if item.name == "test-django-manage"
+        )
+        self.assertEqual(django_test.command.display, "python manage.py test")
+        self.assertEqual(
+            django_test.command.environment,
+            {"DJANGO_SETTINGS_MODULE": "sample.settings"},
+        )
+        self.assertEqual(profile.metadata["framework_initialization_owner"], "repository-runner")
+        self.assertEqual(
+            profile.metadata["test_environment_variables"],
+            {"DJANGO_SETTINGS_MODULE": "sample.settings"},
+        )
+
+    def test_ci_services_are_available_but_only_bound_to_matching_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "sample"\n', encoding="utf-8"
+            )
+            (root / "test_sample.py").write_text(
+                "def test_ok(): pass\n", encoding="utf-8"
+            )
+            (root / ".github" / "workflows" / "tests.yml").write_text(
+                """jobs:
+  database:
+    services:
+      postgres:
+        image: postgres:16
+    steps:
+      - run: ./scripts/test-postgres.sh
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://services"), root)
+
+        self.assertEqual(profile.metadata["available_test_services"], ("postgresql",))
+        self.assertNotIn("test_service_requirements", profile.metadata)
+        self.assertEqual(
+            profile.metadata["test_service_requirements_by_command"],
+            {"./scripts/test-postgres.sh": ("postgresql",)},
+        )
+
+    def test_libtmux_and_ci_version_probe_require_tmux_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "tmux-fixture"\ndependencies = ["libtmux"]\n',
+                encoding="utf-8",
+            )
+            (root / "fixture.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (root / ".github" / "workflows" / "tests.yml").write_text(
+                "steps:\n  - run: tmux -V\n", encoding="utf-8"
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://tmux"), root)
+
+        self.assertIn("tmux-executable", profile.metadata["system_dependency_hints"])
+        self.assertEqual(profile.metadata["test_required_executables"], ("tmux",))
+
 
 if __name__ == "__main__":
     unittest.main()

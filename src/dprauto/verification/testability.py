@@ -15,6 +15,7 @@ from dprauto.time_budget import clamped_timeout_seconds
 from dprauto.verification.commands import TestCommandSelector
 from dprauto.verification.common import verification_id
 from dprauto.verification.overlay import load_verification_requirements
+from dprauto.verification.prerequisites import TestEnvironmentPlanner
 
 
 class TestabilityVerifier:
@@ -26,11 +27,15 @@ class TestabilityVerifier:
         runtime: ContainerRuntime,
         selector: TestCommandSelector | None = None,
         config: VerificationConfig | None = None,
+        environment_planner: TestEnvironmentPlanner | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config or VerificationConfig()
         self.selector = selector or TestCommandSelector(
             max_test_files=self.config.max_test_files_per_slice
+        )
+        self.environment_planner = environment_planner or TestEnvironmentPlanner(
+            self.config
         )
 
     def supports(self, profile, level: VerificationLevel) -> bool:
@@ -121,6 +126,28 @@ class TestabilityVerifier:
             overlay_requirements=overlay_requirements,
         )
         dependency_setup = command.display != test_command.display
+        environment = self.environment_planner.plan(context.profile, selected)
+        if environment.services and not self.config.service_orchestration_enabled:
+            service_kinds = tuple(service.kind for service in environment.services)
+            summary = (
+                "project tests require disabled verification service(s): "
+                + ", ".join(service_kinds)
+            )
+            check = VerificationCheck(
+                "project-tests", VerificationStatus.SKIPPED, summary
+            )
+            return VerificationResult(
+                verification_id(self.level),
+                self.level,
+                VerificationStatus.SKIPPED,
+                summary=summary,
+                metadata={
+                    "command_kind": "project-test",
+                    "skip_reason": "service-orchestration-disabled",
+                    "required_services": service_kinds,
+                },
+                checks=(check,),
+            )
         timeout_policy = (
             "dependency-and-test"
             if dependency_setup
@@ -148,11 +175,43 @@ class TestabilityVerifier:
                 summary=check.summary,
                 checks=(check,),
             )
-        execution = self.runtime.run_image(
-            image,
-            command,
-            timeout_seconds=timeout_seconds,
-        )
+        environment_runner = getattr(self.runtime, "run_environment", None)
+        if (
+            environment.services
+            or environment.setup_commands
+            or environment.command_environment
+            or environment.required_executables
+        ):
+            if not callable(environment_runner):
+                summary = "container runtime cannot orchestrate required test prerequisites"
+                check = VerificationCheck(
+                    "project-tests", VerificationStatus.ERROR, summary
+                )
+                return VerificationResult(
+                    verification_id(self.level),
+                    self.level,
+                    VerificationStatus.ERROR,
+                    summary=summary,
+                    metadata={
+                        "command_kind": "project-test",
+                        "required_services": tuple(
+                            service.kind for service in environment.services
+                        ),
+                    },
+                    checks=(check,),
+                )
+            execution = environment_runner(
+                image,
+                command,
+                environment,
+                timeout_seconds=timeout_seconds,
+            )
+        else:
+            execution = self.runtime.run_image(
+                image,
+                command,
+                timeout_seconds=timeout_seconds,
+            )
         passed = execution.command_result.succeeded
         check = VerificationCheck(
             "project-tests",
@@ -186,6 +245,21 @@ class TestabilityVerifier:
                 "requested_timeout_seconds": requested_timeout_seconds,
                 "effective_timeout_seconds": timeout_seconds,
                 "verification_overlay_packages": overlay_requirements,
+                "required_services": tuple(
+                    service.kind for service in environment.services
+                ),
+                "service_images": tuple(
+                    service.image_reference for service in environment.services
+                ),
+                "test_environment_variable_names": tuple(
+                    environment.command_environment
+                ),
+                "test_setup_commands": tuple(
+                    item.display for item in environment.setup_commands
+                ),
+                "required_executables": environment.required_executables,
+                "prerequisite_evidence": environment.evidence,
+                "runtime_environment": dict(execution.metadata),
             },
             checks=(check,),
         )

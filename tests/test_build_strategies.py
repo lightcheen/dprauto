@@ -422,6 +422,20 @@ class BuildStrategyTests(unittest.TestCase):
             ),
         )
 
+    def test_tmux_executable_hint_installs_bounded_system_package(self) -> None:
+        # The executable is a project test prerequisite, not a Python import.
+        tmux_plan = TemplateStrategy(self.runner, self.config).create_plan(
+            python_profile(
+                build_files=("pyproject.toml",),
+                metadata={"system_dependency_hints": ("tmux-executable",)},
+            )
+        )
+        tmux_setup = next(
+            item.content for item in tmux_plan.generated_files if item.path == "setup.sh"
+        )
+        self.assertIn("install -y --no-install-recommends tmux", tmux_setup)
+        self.assertIn("apk add --no-cache tmux", tmux_setup)
+
     def test_setuptools_scm_uses_project_specific_revision_version(self) -> None:
         profile = ProjectProfile(
             "scm-project",

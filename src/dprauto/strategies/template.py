@@ -330,6 +330,9 @@ class TemplateStrategy:
         if "pyscard-native" in hints:
             apt_packages.extend(("gcc", "libc6-dev", "libpcsclite-dev", "swig"))
             apk_packages.extend(("gcc", "musl-dev", "pcsc-lite-dev", "swig"))
+        if "tmux-executable" in hints:
+            apt_packages.append("tmux")
+            apk_packages.append("tmux")
         apt_packages = list(dict.fromkeys(apt_packages))
         apk_packages = list(dict.fromkeys(apk_packages))
         if not apt_packages:

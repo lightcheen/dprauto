@@ -50,6 +50,7 @@ class FakeRuntime:
         self.web = WebProbe(True, True, True, 8000, 43210, 200)
         self.commands = []
         self.output_by_command = {}
+        self.environments = []
 
     def inspect_image(self, image_reference: str) -> ImageInspection:
         return ImageInspection(
@@ -73,6 +74,16 @@ class FakeRuntime:
             timed_out=False,
         )
         return ContainerExecution(result, output, self.filesystem_changes)
+
+    def run_environment(
+        self, image_reference, command, environment, *, timeout_seconds
+    ):
+        self.environments.append(environment)
+        return self.run_image(
+            image_reference,
+            command,
+            timeout_seconds=timeout_seconds,
+        )
 
     def probe_web(self, image_reference, command, *, container_port, timeout_seconds, path="/"):
         return self.web
@@ -752,6 +763,61 @@ class VerificationPolicyTests(unittest.TestCase):
         )
         self.assertIn("SERVICE_TOKEN", result.summary)
         self.assertFalse(self.runtime.commands)
+
+    def test_testability_orchestrates_only_explicit_selected_test_services(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m unittest", CommandPurpose.TEST, "README.md"),
+            metadata={
+                "available_test_services": ("postgresql", "redis"),
+                "test_service_requirements": ("postgresql",),
+                "test_environment_variables": {"PG_DATABASE": "fixture"},
+                "test_prerequisite_evidence": ("ci.yml:services.postgres",),
+            },
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.PASSED)
+        self.assertEqual(result.metadata["required_services"], ("postgresql",))
+        self.assertEqual(result.metadata["service_images"], ("postgres:16-alpine",))
+        self.assertNotIn("redis", result.metadata["required_services"])
+        self.assertEqual(len(self.runtime.environments), 1)
+        self.assertEqual(self.runtime.environments[0].command_environment["PG_DATABASE"], "fixture")
+
+    def test_testability_skips_service_when_orchestration_is_disabled(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m unittest", CommandPurpose.TEST, "README.md"),
+            metadata={"test_service_requirements": ("redis",)},
+        )
+
+        result = TestabilityVerifier(
+            self.runtime,
+            config=VerificationConfig(service_orchestration_enabled=False),
+        ).verify(build_context(project, self.workspace))
+
+        self.assertEqual(result.status, VerificationStatus.SKIPPED)
+        self.assertEqual(result.metadata["skip_reason"], "service-orchestration-disabled")
+        self.assertFalse(self.runtime.commands)
+
+    def test_testability_routes_required_executable_through_environment_runtime(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m unittest", CommandPurpose.TEST, "README.md"),
+            metadata={"test_required_executables": ("tmux",)},
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.PASSED)
+        self.assertEqual(result.metadata["required_executables"], ("tmux",))
+        self.assertEqual(len(self.runtime.environments), 1)
+        self.assertEqual(self.runtime.environments[0].required_executables, ("tmux",))
 
     def test_testability_installs_agent_overlay_only_in_temporary_container(self) -> None:
         project = profile(
