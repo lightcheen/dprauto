@@ -118,3 +118,19 @@ preference, and monorepo-aware Docker working directories. All nine ready Java/C
 produce deterministic plans. json-c completes a real build plus Installability, CTest Testability,
 and Runnability; the Java execution probe is explicitly infrastructure-blocked by container DNS.
 See `M4_JVM_NATIVE_BUILD_VERIFICATION_2026-08-25.md` for every source directory and exact evidence.
+
+## M5 service and framework prerequisites
+
+M5 adds bounded PostgreSQL/Redis lifecycle orchestration, Django settings and repository-runner
+selection, allowlisted initialization commands, and system executable contracts such as tmux.
+Services are started only when the selected test command has an explicit binding. See
+`M5_SERVICE_FRAMEWORK_ORCHESTRATION_2026-08-25.md` for the real dataset directories and Docker
+service probes.
+
+## M6 minimal selected-test dependency closure
+
+M6 statically closes a bounded pytest slice over its imports, ancestor `conftest.py` files, local
+modules, fixtures, and pytest configuration, then slices broad dev/qa requirements to the exact
+declared constraints needed by that slice. Dagshub's real pipeline excludes FiftyOne and datasets,
+installs four test requirements, and passes 108 tests. See
+`M6_MINIMAL_TEST_DEPENDENCY_CLOSURE_2026-08-26.md` for all audited directories and fallback limits.

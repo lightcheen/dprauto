@@ -214,6 +214,8 @@ class VerificationConfig:
     max_service_containers: int = 2
     postgres_service_image: str = "postgres:16-alpine"
     redis_service_image: str = "redis:7-alpine"
+    minimal_test_dependency_closure_enabled: bool = True
+    max_dependency_analysis_files: int = 256
 
     def __post_init__(self) -> None:
         if self.command_timeout_seconds <= 0:
@@ -263,6 +265,10 @@ class VerificationConfig:
             self.postgres_service_image, "postgres_service_image"
         )
         _validate_versioned_image(self.redis_service_image, "redis_service_image")
+        if not 16 <= self.max_dependency_analysis_files <= 2_048:
+            raise ConfigurationError(
+                "verification.max_dependency_analysis_files must be between 16 and 2048"
+            )
 
 
 @dataclass(frozen=True)
@@ -495,6 +501,15 @@ def load_config(
         ),
         redis_service_image=get(
             "VERIFICATION_REDIS_SERVICE_IMAGE", "redis:7-alpine"
+        ),
+        minimal_test_dependency_closure_enabled=_read_bool(
+            get("VERIFICATION_MINIMAL_TEST_DEPENDENCY_CLOSURE_ENABLED", "true"),
+            "VERIFICATION_MINIMAL_TEST_DEPENDENCY_CLOSURE_ENABLED",
+        ),
+        max_dependency_analysis_files=_read_int(
+            get("VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES", "256"),
+            "VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES",
+            minimum=16,
         ),
     )
     llm = LLMConfig(

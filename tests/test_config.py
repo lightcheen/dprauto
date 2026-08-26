@@ -39,6 +39,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.verification.max_service_containers, 2)
         self.assertEqual(config.verification.postgres_service_image, "postgres:16-alpine")
         self.assertEqual(config.verification.redis_service_image, "redis:7-alpine")
+        self.assertTrue(config.verification.minimal_test_dependency_closure_enabled)
+        self.assertEqual(config.verification.max_dependency_analysis_files, 256)
         self.assertEqual(config.build.docker_network, "")
         self.assertTrue(config.build.strategy_portfolio_enabled)
         self.assertEqual(config.build.max_strategy_attempts, 3)
@@ -101,6 +103,8 @@ class ConfigurationTests(unittest.TestCase):
                 "DPRAUTO_VERIFICATION_MAX_SERVICE_CONTAINERS": "3",
                 "DPRAUTO_VERIFICATION_POSTGRES_SERVICE_IMAGE": "postgres:15-alpine",
                 "DPRAUTO_VERIFICATION_REDIS_SERVICE_IMAGE": "redis:6-alpine",
+                "DPRAUTO_VERIFICATION_MINIMAL_TEST_DEPENDENCY_CLOSURE_ENABLED": "off",
+                "DPRAUTO_VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES": "512",
                 "DPRAUTO_LLM_PROVIDER": "provider",
                 "DPRAUTO_LLM_MODEL": "model",
                 "DPRAUTO_LLM_TEMPERATURE": "0.25",
@@ -158,6 +162,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.verification.max_service_containers, 3)
         self.assertEqual(config.verification.postgres_service_image, "postgres:15-alpine")
         self.assertEqual(config.verification.redis_service_image, "redis:6-alpine")
+        self.assertFalse(config.verification.minimal_test_dependency_closure_enabled)
+        self.assertEqual(config.verification.max_dependency_analysis_files, 512)
         self.assertTrue(config.llm.enabled)
         self.assertEqual(config.llm.temperature, 0.25)
         self.assertEqual(config.llm.api_config_path, Path("/tmp/model.json"))
@@ -197,6 +203,9 @@ class ConfigurationTests(unittest.TestCase):
             {"DPRAUTO_VERIFICATION_MAX_SERVICE_CONTAINERS": "5"},
             {"DPRAUTO_VERIFICATION_POSTGRES_SERVICE_IMAGE": ""},
             {"DPRAUTO_VERIFICATION_REDIS_SERVICE_IMAGE": "redis latest"},
+            {"DPRAUTO_VERIFICATION_MINIMAL_TEST_DEPENDENCY_CLOSURE_ENABLED": "maybe"},
+            {"DPRAUTO_VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES": "15"},
+            {"DPRAUTO_VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES": "2049"},
             {"DPRAUTO_BUILD_DOCKER_NETWORK": "invalid network"},
             {"DPRAUTO_VERIFICATION_DOCKER_NETWORK": "-invalid"},
             {"DPRAUTO_BUILD_POETRY_VERSION": ">=1.8"},

@@ -136,9 +136,7 @@ python -m fixture
             (root / ".github" / "actions" / "helper" / "Dockerfile").write_text(
                 "FROM python:3.11\n", encoding="utf-8"
             )
-            (root / "deploy" / "Dockerfile.prod").write_text(
-                "FROM python:3.11\n", encoding="utf-8"
-            )
+            (root / "deploy" / "Dockerfile.prod").write_text("FROM python:3.11\n", encoding="utf-8")
             (root / "setup.sh").write_text("python -m pip install .\n", encoding="utf-8")
             (root / "pyproject.toml").write_text(
                 """[project]
@@ -183,9 +181,7 @@ docs = ["sphinx"]
 """,
                 encoding="utf-8",
             )
-            (root / "tests" / "test_unit.py").write_text(
-                "def test_ok(): pass\n", encoding="utf-8"
-            )
+            (root / "tests" / "test_unit.py").write_text("def test_ok(): pass\n", encoding="utf-8")
             (root / "tests" / "test_remote.py").write_text(
                 'client.download("https://example.invalid/value")\n',
                 encoding="utf-8",
@@ -295,9 +291,7 @@ commands = ruff check .
 """,
                 encoding="utf-8",
             )
-            (root / "pyproject.toml").write_text(
-                "[project]\nname = \"fixture\"\n", encoding="utf-8"
-            )
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
             (root / "tests").mkdir()
             (root / "tests" / "test_basic.py").write_text("def test_ok(): pass\n", encoding="utf-8")
 
@@ -306,9 +300,7 @@ commands = ruff check .
         self.assertEqual(profile.metadata["default_tox_env"], "py310")
         self.assertIn("tox -e py310", command_texts(profile, CommandPurpose.TEST))
         self.assertIn("python -m pytest", command_texts(profile, CommandPurpose.TEST))
-        environments = {
-            item["name"]: item for item in profile.metadata["tox_environments"]
-        }
+        environments = {item["name"]: item for item in profile.metadata["tox_environments"]}
         self.assertFalse(environments["lint"]["safe"])
         self.assertTrue(environments["py311"]["safe"])
 
@@ -338,9 +330,7 @@ commands =
 """,
                 encoding="utf-8",
             )
-            (root / "pyproject.toml").write_text(
-                "[project]\nname = \"fixture\"\n", encoding="utf-8"
-            )
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
 
             profile = self.parser.parse(SourceReference("fixture://parallel"), root)
 
@@ -369,6 +359,20 @@ dependencies = ["pyscard>=2"]
             profile.metadata["system_dependency_hints"],
             ("git-vcs", "pyscard-native"),
         )
+
+    def test_pytest_git_declares_git_test_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "requirements-dev.txt").write_text(
+                "pytest==8.2.1\npytest-git==1.7.0\n", encoding="utf-8"
+            )
+            (root / "test_fixture.py").write_text(
+                "def test_ok(): pass\n", encoding="utf-8"
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://pytest-git"), root)
+
+        self.assertEqual(profile.metadata["system_dependency_hints"], ("git-vcs",))
 
     def test_setuptools_scm_requires_explicit_configuration_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -514,9 +518,7 @@ dynamic = ["version"]
                 "2.0.0 (2024-01-01)\n------------------\n\n9.0.0 (unreleased)\n",
                 encoding="utf-8",
             )
-            (root / "docs" / "CHANGELOG.md").write_text(
-                "# 10.0.0 (unreleased)\n", encoding="utf-8"
-            )
+            (root / "docs" / "CHANGELOG.md").write_text("# 10.0.0 (unreleased)\n", encoding="utf-8")
 
             profile = self.parser.parse(SourceReference("fixture://released"), root)
 
@@ -538,9 +540,7 @@ def tests(session):
 """,
                 encoding="utf-8",
             )
-            (root / "pyproject.toml").write_text(
-                "[project]\nname = \"fixture\"\n", encoding="utf-8"
-            )
+            (root / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
             (root / "tests").mkdir()
             (root / "tests" / "test_basic.py").write_text("def test_ok(): pass\n", encoding="utf-8")
 
@@ -571,9 +571,7 @@ execute_from_command_line([])
 
             profile = self.parser.parse(SourceReference("fixture://django"), root)
 
-        django_test = next(
-            item for item in profile.commands if item.name == "test-django-manage"
-        )
+        django_test = next(item for item in profile.commands if item.name == "test-django-manage")
         self.assertEqual(django_test.command.display, "python manage.py test")
         self.assertEqual(
             django_test.command.environment,
@@ -589,12 +587,8 @@ execute_from_command_line([])
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".github" / "workflows").mkdir(parents=True)
-            (root / "pyproject.toml").write_text(
-                '[project]\nname = "sample"\n', encoding="utf-8"
-            )
-            (root / "test_sample.py").write_text(
-                "def test_ok(): pass\n", encoding="utf-8"
-            )
+            (root / "pyproject.toml").write_text('[project]\nname = "sample"\n', encoding="utf-8")
+            (root / "test_sample.py").write_text("def test_ok(): pass\n", encoding="utf-8")
             (root / ".github" / "workflows" / "tests.yml").write_text(
                 """jobs:
   database:
@@ -633,6 +627,30 @@ execute_from_command_line([])
 
         self.assertIn("tmux-executable", profile.metadata["system_dependency_hints"])
         self.assertEqual(profile.metadata["test_required_executables"], ("tmux",))
+
+    def test_runtime_dependencies_exclude_dev_and_handle_extras_brackets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "setup.py").write_text(
+                """from setuptools import setup
+install_requires = ["gql[requests]", "python-dateutil>=2", "PyYAML"]
+setup(name="fixture", install_requires=install_requires)
+""",
+                encoding="utf-8",
+            )
+            (root / "requirements-dev.txt").write_text(
+                "pytest==8.2.1\nfiftyone==0.23.8\n", encoding="utf-8"
+            )
+            (root / "test_fixture.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+
+            profile = self.parser.parse(SourceReference("fixture://runtime-deps"), root)
+
+        self.assertEqual(
+            profile.metadata["runtime_dependency_names"],
+            ("gql", "python-dateutil", "pyyaml"),
+        )
+        self.assertIn("fiftyone", profile.metadata["dependency_names"])
+        self.assertNotIn("fiftyone", profile.metadata["runtime_dependency_names"])
 
 
 if __name__ == "__main__":

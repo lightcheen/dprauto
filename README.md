@@ -233,6 +233,22 @@ Python 版本一致的单个环境；lint、docs、fuzz、benchmark、外部服�
 最窄的 test/testing、tox 或 dev requirements 文件。不会把 `requirements-dev.txt`、
 `.[tests]` 和临时测试工具全部作为相互独立的依赖集合重复安装。
 
+当唯一可用来源是宽泛的 `requirements-dev.txt`/`requirements-qa.txt`，且 Testability 已选择
+有界 pytest 文件切片时，验证器会静态构造最小依赖闭包：解析所选测试、沿目录向上的
+`conftest.py` 以及递归可达的本地模块；排除标准库、项目包和标准构建已安装的 runtime
+dependencies；再把剩余 import、pytest 配置项和 fixture 名映射回该 requirements 文件中的
+原始版本约束。安装命令只包含闭包中的直接 requirements，不会把未使用的 FiftyOne、PyArrow、
+datasets、文档或 lint 工具带入临时验证容器。
+
+`TYPE_CHECKING` 分支、函数体内的惰性 import 和 `ImportError` fallback 不会被误当成 pytest
+collection 前置条件。若初始切片含项目未声明的 import，系统会在最多 64 个安全测试候选中重新
+选择依赖可闭包的代表文件；若找不到完整闭包，或 requirements 使用 `-r`、URL、hash mode、
+续行等不能安全裁剪的语法，则保守回退到原项目依赖命令，而不是猜测未固定包。分析默认每个
+候选最多递归 256 个文件，可通过 `DPRAUTO_VERIFICATION_MAX_DEPENDENCY_ANALYSIS_FILES`
+设置为 16–2048，也可用 `DPRAUTO_VERIFICATION_MINIMAL_TEST_DEPENDENCY_CLOSURE_ENABLED=off`
+关闭。闭包模式、证据文件、import roots、选中 requirements、未解析 import 和被排除目标均写入
+Verification metadata。
+
 Parser 还会在有界文件扫描中记录真实测试文件、明显的 integration/e2e/remote/notebook/
 live-network 文件，以及 conftest 在 module/class scope 强制读取的环境变量名（只记录变量名，
 从不读取值）。存在直接 pytest 证据时，Testability 不会为了运行项目测试而启动同时包含

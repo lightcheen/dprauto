@@ -75,9 +75,7 @@ class FakeRuntime:
         )
         return ContainerExecution(result, output, self.filesystem_changes)
 
-    def run_environment(
-        self, image_reference, command, environment, *, timeout_seconds
-    ):
+    def run_environment(self, image_reference, command, environment, *, timeout_seconds):
         self.environments.append(environment)
         return self.run_image(
             image_reference,
@@ -242,9 +240,19 @@ class CommandSelectionTests(unittest.TestCase):
                 ci_files=(".github/workflows/test.yml",),
                 readme_files=("README.md",),
                 commands=(
-                    project_command("python -m sample --help", CommandPurpose.TEST, ".github/workflows/test.yml", 1.0),
+                    project_command(
+                        "python -m sample --help",
+                        CommandPurpose.TEST,
+                        ".github/workflows/test.yml",
+                        1.0,
+                    ),
                     project_command("python -m pytest -q", CommandPurpose.TEST, "README.md", 0.9),
-                    project_command("python -m unittest discover", CommandPurpose.TEST, ".github/workflows/test.yml", 0.8),
+                    project_command(
+                        "python -m unittest discover",
+                        CommandPurpose.TEST,
+                        ".github/workflows/test.yml",
+                        0.8,
+                    ),
                 ),
             )
         )
@@ -257,10 +265,21 @@ class CommandSelectionTests(unittest.TestCase):
                 SourceReference("fixture://project"),
                 ci_files=(".github/workflows/test.yml",),
                 commands=(
-                    project_command("tox -e ${{ matrix.env }}", CommandPurpose.TEST, ".github/workflows/test.yml", 1.0),
-                    project_command("tox -e docs", CommandPurpose.TEST, ".github/workflows/test.yml", 0.99),
-                    project_command("ruff check .", CommandPurpose.TEST, ".github/workflows/test.yml", 0.98),
-                    project_command("python -m pytest -q", CommandPurpose.TEST, "inferred:test-layout", 0.7),
+                    project_command(
+                        "tox -e ${{ matrix.env }}",
+                        CommandPurpose.TEST,
+                        ".github/workflows/test.yml",
+                        1.0,
+                    ),
+                    project_command(
+                        "tox -e docs", CommandPurpose.TEST, ".github/workflows/test.yml", 0.99
+                    ),
+                    project_command(
+                        "ruff check .", CommandPurpose.TEST, ".github/workflows/test.yml", 0.98
+                    ),
+                    project_command(
+                        "python -m pytest -q", CommandPurpose.TEST, "inferred:test-layout", 0.7
+                    ),
                 ),
             )
         )
@@ -272,9 +291,7 @@ class CommandSelectionTests(unittest.TestCase):
             ProjectProfile(
                 "project",
                 SourceReference("fixture://project"),
-                commands=(
-                    project_command("tox", CommandPurpose.TEST, "tox.ini", 0.9),
-                ),
+                commands=(project_command("tox", CommandPurpose.TEST, "tox.ini", 0.9),),
                 metadata={"default_tox_env": "py311"},
             )
         )
@@ -286,9 +303,7 @@ class CommandSelectionTests(unittest.TestCase):
             ProjectProfile(
                 "project",
                 SourceReference("fixture://project"),
-                commands=(
-                    project_command("nox", CommandPurpose.TEST, "noxfile.py", 0.9),
-                ),
+                commands=(project_command("nox", CommandPurpose.TEST, "noxfile.py", 0.9),),
                 metadata={"default_nox_session": "tests"},
             )
         )
@@ -347,9 +362,7 @@ class CommandSelectionTests(unittest.TestCase):
             ProjectProfile(
                 "project",
                 SourceReference("fixture://project"),
-                commands=(
-                    project_command("nox", CommandPurpose.TEST, "noxfile.py"),
-                ),
+                commands=(project_command("nox", CommandPurpose.TEST, "noxfile.py"),),
                 metadata={
                     "nox_sessions": (
                         {
@@ -560,9 +573,7 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertEqual(result.status, VerificationStatus.FAILED)
         self.assertEqual(
             next(
-                check
-                for check in result.checks
-                if check.name == "dependency-installation"
+                check for check in result.checks if check.name == "dependency-installation"
             ).status,
             VerificationStatus.FAILED,
         )
@@ -628,7 +639,7 @@ class VerificationPolicyTests(unittest.TestCase):
                         "python_versions": ("3.10", "3.11"),
                         "parameterized": False,
                     },
-                )
+                ),
             },
         )
         context = build_context(
@@ -651,9 +662,7 @@ class VerificationPolicyTests(unittest.TestCase):
             project_command("python -m pytest -q", CommandPurpose.TEST, "README.md"),
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertEqual(result.status, VerificationStatus.PASSED)
         self.assertIn(
@@ -688,9 +697,7 @@ class VerificationPolicyTests(unittest.TestCase):
             project_command("pytest tests/unit", CommandPurpose.TEST, "README.rst"),
             metadata={
                 "test_files": tuple(f"tests/unit/test_{index}.py" for index in range(5)),
-                "safe_test_files": tuple(
-                    f"tests/unit/test_{index}.py" for index in range(5)
-                ),
+                "safe_test_files": tuple(f"tests/unit/test_{index}.py" for index in range(5)),
             },
         )
         verifier = TestabilityVerifier(
@@ -730,9 +737,7 @@ class VerificationPolicyTests(unittest.TestCase):
             },
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertEqual(result.metadata["original_command"], "pytest tests/unit")
         self.assertEqual(
@@ -751,9 +756,7 @@ class VerificationPolicyTests(unittest.TestCase):
             metadata={"test_required_environment_variables": ("SERVICE_TOKEN",)},
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertEqual(result.status, VerificationStatus.SKIPPED)
         self.assertEqual(result.metadata["skip_reason"], "required-secret-environment")
@@ -776,9 +779,7 @@ class VerificationPolicyTests(unittest.TestCase):
             },
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertEqual(result.status, VerificationStatus.PASSED)
         self.assertEqual(result.metadata["required_services"], ("postgresql",))
@@ -810,9 +811,7 @@ class VerificationPolicyTests(unittest.TestCase):
             metadata={"test_required_executables": ("tmux",)},
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertEqual(result.status, VerificationStatus.PASSED)
         self.assertEqual(result.metadata["required_executables"], ("tmux",))
@@ -831,9 +830,7 @@ class VerificationPolicyTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertIn(
@@ -868,9 +865,7 @@ class VerificationPolicyTests(unittest.TestCase):
             package_managers=("pip",),
         )
 
-        TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertIn("python -m pip install -r requirements-tests.txt", executed)
@@ -884,9 +879,7 @@ class VerificationPolicyTests(unittest.TestCase):
             package_managers=("pip",),
         )
 
-        TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertIn("pip install -r requirements-dev-lock.txt", executed)
@@ -912,9 +905,7 @@ class VerificationPolicyTests(unittest.TestCase):
             },
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertIn(
@@ -940,18 +931,14 @@ class VerificationPolicyTests(unittest.TestCase):
             },
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertNotIn("pytest-xdist", self.runtime.commands[0].display)
         self.assertNotIn("--numprocesses", self.runtime.commands[0].display)
         self.assertEqual(result.metadata["parallel_workers"], 0)
 
     def test_testability_selects_one_native_dependency_source_after_runtime_build(self) -> None:
-        command = project_command(
-            "python -m pytest -q", CommandPurpose.TEST, "pyproject.toml"
-        )
+        command = project_command("python -m pytest -q", CommandPurpose.TEST, "pyproject.toml")
         project = profile(
             ProjectType.LIBRARY,
             command,
@@ -963,9 +950,7 @@ class VerificationPolicyTests(unittest.TestCase):
             },
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertTrue(result.passed)
@@ -983,9 +968,7 @@ class VerificationPolicyTests(unittest.TestCase):
             metadata={"test_dependency_extras": ("tests",)},
         )
 
-        result = TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        result = TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         self.assertTrue(result.passed)
         executed = self.runtime.commands[0].display
@@ -1028,13 +1011,61 @@ class VerificationPolicyTests(unittest.TestCase):
             package_managers=("pip",),
         )
 
-        TestabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace)
-        )
+        TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
 
         executed = self.runtime.commands[0].display
         self.assertIn("pip install -r requirements-tests.txt", executed)
         self.assertNotIn("requirements-docs-tests.txt", executed)
+
+    def test_testability_installs_minimal_import_closure_from_broad_dev_file(self) -> None:
+        (self.workspace / "tests").mkdir()
+        (self.workspace / "tests" / "test_a.py").write_text(
+            "import aiohttp\ndef test_a(): pass\n", encoding="utf-8"
+        )
+        (self.workspace / "tests" / "test_b.py").write_text(
+            "import requests_cache\ndef test_b(): pass\n", encoding="utf-8"
+        )
+        (self.workspace / "tests" / "test_c.py").write_text(
+            "def test_c(): pass\n", encoding="utf-8"
+        )
+        (self.workspace / "requirements-dev.txt").write_text(
+            """pytest==8.2.1
+aiohttp==3.10.0
+requests-cache==1.2.1
+fiftyone==0.23.8
+""",
+            encoding="utf-8",
+        )
+        files = (
+            "tests/test_a.py",
+            "tests/test_b.py",
+            "tests/test_c.py",
+        )
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("pytest", CommandPurpose.TEST, "README.md"),
+            dependency_files=("requirements-dev.txt",),
+            package_managers=("pip",),
+            metadata={"test_files": files, "safe_test_files": files},
+        )
+
+        result = TestabilityVerifier(
+            self.runtime,
+            config=VerificationConfig(max_test_files_per_slice=2),
+        ).verify(build_context(project, self.workspace))
+
+        executed = self.runtime.commands[0].display
+        self.assertTrue(result.passed)
+        self.assertTrue(result.metadata["dependency_plan_applied"])
+        self.assertEqual(result.metadata["dependency_plan_mode"], "minimal-slice")
+        self.assertEqual(
+            result.metadata["dependency_selected_requirements"],
+            ("pytest==8.2.1", "aiohttp==3.10.0", "requests-cache==1.2.1"),
+        )
+        self.assertNotIn("requirements-dev.txt", executed)
+        self.assertNotIn("fiftyone", executed)
+        self.assertIn("aiohttp==3.10.0", executed)
+        self.assertIn("requests-cache==1.2.1", executed)
 
     def test_testability_uses_native_uv_and_pdm_group_selection(self) -> None:
         command = project_command("pytest -q", CommandPurpose.TEST, "pyproject.toml")
@@ -1088,7 +1119,9 @@ class VerificationPolicyTests(unittest.TestCase):
             dependency_names=("requests",),
         )
         result = InstallabilityVerifier(self.runtime).verify(
-            build_context(project, self.workspace, setup="python -m pip install -r requirements.txt")
+            build_context(
+                project, self.workspace, setup="python -m pip install -r requirements.txt"
+            )
         )
         self.assertTrue(result.passed)
         self.assertEqual(
@@ -1121,7 +1154,9 @@ class VerificationPolicyTests(unittest.TestCase):
         verifier = RunnabilityVerifier(self.runtime)
         passed = verifier.verify(build_context(project, self.workspace))
         self.assertTrue(passed.passed)
-        self.assertEqual([check.name for check in passed.checks], ["web-process", "web-port", "web-http"])
+        self.assertEqual(
+            [check.name for check in passed.checks], ["web-process", "web-port", "web-http"]
+        )
 
         self.runtime.web = WebProbe(True, True, False, 8000, 43210, None)
         failed = verifier.verify(build_context(project, self.workspace))
@@ -1131,7 +1166,9 @@ class VerificationPolicyTests(unittest.TestCase):
         verifier = RunnabilityVerifier(self.runtime)
         cli = profile(ProjectType.CLI, project_command("sample", CommandPurpose.RUN, "setup.py"))
         self.assertTrue(verifier.verify(build_context(cli, self.workspace)).passed)
-        script = profile(ProjectType.SCRIPT, project_command("python app.py", CommandPurpose.RUN, "README.md"))
+        script = profile(
+            ProjectType.SCRIPT, project_command("python app.py", CommandPurpose.RUN, "README.md")
+        )
         self.runtime.output = ""
         self.assertEqual(
             verifier.verify(build_context(script, self.workspace)).status,
@@ -1149,7 +1186,9 @@ class VerificationPolicyTests(unittest.TestCase):
         result = verifier.verify(build_context(cli, self.workspace))
 
         self.assertTrue(result.passed)
-        self.assertEqual([command.display for command in self.runtime.commands], ["sample", "sample --help"])
+        self.assertEqual(
+            [command.display for command in self.runtime.commands], ["sample", "sample --help"]
+        )
         self.assertTrue(result.metadata["empty_output_help_fallback"])
 
     def test_jvm_library_uses_strategy_owned_artifact_probe(self) -> None:
@@ -1159,9 +1198,7 @@ class VerificationPolicyTests(unittest.TestCase):
             package_managers=("maven",),
         )
         probe = "jar tf /workspace/target/sample.jar"
-        self.runtime.output_by_command[probe] = (
-            "DPRAUTO_JVM_ARTIFACT_OK\nDPRAUTO_API_COUNT=14\n"
-        )
+        self.runtime.output_by_command[probe] = "DPRAUTO_JVM_ARTIFACT_OK\nDPRAUTO_API_COUNT=14\n"
         context = build_context(
             project,
             self.workspace,

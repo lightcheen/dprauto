@@ -8,12 +8,18 @@ from typing import Mapping
 
 from dprauto.config import VerificationConfig
 from dprauto.domain.enums import VerificationLevel, VerificationStatus
-from dprauto.domain.models import CommandSpec, VerificationCheck, VerificationResult
+from dprauto.domain.models import (
+    CommandSpec,
+    ProjectCommand,
+    VerificationCheck,
+    VerificationResult,
+)
 from dprauto.ports.runtime import ContainerRuntime
 from dprauto.ports.verification import VerificationContext
 from dprauto.time_budget import clamped_timeout_seconds
 from dprauto.verification.commands import TestCommandSelector
 from dprauto.verification.common import verification_id
+from dprauto.verification.dependencies import TestDependencyPlan, TestDependencyPlanner
 from dprauto.verification.overlay import load_verification_requirements
 from dprauto.verification.prerequisites import TestEnvironmentPlanner
 
@@ -28,14 +34,17 @@ class TestabilityVerifier:
         selector: TestCommandSelector | None = None,
         config: VerificationConfig | None = None,
         environment_planner: TestEnvironmentPlanner | None = None,
+        dependency_planner: TestDependencyPlanner | None = None,
     ) -> None:
         self.runtime = runtime
         self.config = config or VerificationConfig()
         self.selector = selector or TestCommandSelector(
             max_test_files=self.config.max_test_files_per_slice
         )
-        self.environment_planner = environment_planner or TestEnvironmentPlanner(
-            self.config
+        self.environment_planner = environment_planner or TestEnvironmentPlanner(self.config)
+        self.dependency_planner = dependency_planner or TestDependencyPlanner(
+            max_analysis_files=self.config.max_dependency_analysis_files,
+            max_test_files=self.config.max_test_files_per_slice,
         )
 
     def supports(self, profile, level: VerificationLevel) -> bool:
@@ -64,9 +73,7 @@ class TestabilityVerifier:
                 )
             else:
                 skip_reason = "no-project-test-command"
-                summary = (
-                    "no project-owned test command was discovered; smoke probes are excluded"
-                )
+                summary = "no project-owned test command was discovered; smoke probes are excluded"
             check = VerificationCheck(
                 "project-tests",
                 VerificationStatus.SKIPPED,
@@ -84,6 +91,19 @@ class TestabilityVerifier:
                 },
                 checks=(check,),
             )
+        dependency_plan = TestDependencyPlan(targets=selection.targets)
+        if self.config.minimal_test_dependency_closure_enabled:
+            dependency_plan = self.dependency_planner.plan(
+                context.profile,
+                context.workspace,
+                selection.targets,
+                command=selection.command.command.display,
+            )
+            if dependency_plan.applied and dependency_plan.targets != selection.targets:
+                selection = self._with_dependency_closed_targets(
+                    selection,
+                    dependency_plan,
+                )
         selected = selection.command
         image = context.build_result.image_reference
         if not image:
@@ -97,7 +117,7 @@ class TestabilityVerifier:
                 summary=check.summary,
                 checks=(check,),
             )
-        if selection.kind == "bounded-file-slice":
+        if "bounded-file-slice" in selection.kind:
             test_command, parallel_workers = selected.command, 0
         else:
             test_command, parallel_workers = self._with_bounded_parallelism(
@@ -124,18 +144,41 @@ class TestabilityVerifier:
             context.profile,
             test_command,
             overlay_requirements=overlay_requirements,
+            dependency_commands=(
+                dependency_plan.install_commands if dependency_plan.applied else None
+            ),
         )
         dependency_setup = command.display != test_command.display
         environment = self.environment_planner.plan(context.profile, selected)
+        if dependency_plan.required_executables:
+            environment = replace(
+                environment,
+                required_executables=tuple(
+                    dict.fromkeys(
+                        (
+                            *environment.required_executables,
+                            *dependency_plan.required_executables,
+                        )
+                    )
+                ),
+                evidence=tuple(
+                    dict.fromkeys(
+                        (
+                            *environment.evidence,
+                            *(
+                                f"test-dependency-executable:{item}"
+                                for item in dependency_plan.required_executables
+                            ),
+                        )
+                    )
+                ),
+            )
         if environment.services and not self.config.service_orchestration_enabled:
             service_kinds = tuple(service.kind for service in environment.services)
-            summary = (
-                "project tests require disabled verification service(s): "
-                + ", ".join(service_kinds)
+            summary = "project tests require disabled verification service(s): " + ", ".join(
+                service_kinds
             )
-            check = VerificationCheck(
-                "project-tests", VerificationStatus.SKIPPED, summary
-            )
+            check = VerificationCheck("project-tests", VerificationStatus.SKIPPED, summary)
             return VerificationResult(
                 verification_id(self.level),
                 self.level,
@@ -148,11 +191,7 @@ class TestabilityVerifier:
                 },
                 checks=(check,),
             )
-        timeout_policy = (
-            "dependency-and-test"
-            if dependency_setup
-            else "test-only"
-        )
+        timeout_policy = "dependency-and-test" if dependency_setup else "test-only"
         requested_timeout_seconds = (
             self.config.dependency_command_timeout_seconds
             if dependency_setup
@@ -184,9 +223,7 @@ class TestabilityVerifier:
         ):
             if not callable(environment_runner):
                 summary = "container runtime cannot orchestrate required test prerequisites"
-                check = VerificationCheck(
-                    "project-tests", VerificationStatus.ERROR, summary
-                )
+                check = VerificationCheck("project-tests", VerificationStatus.ERROR, summary)
                 return VerificationResult(
                     verification_id(self.level),
                     self.level,
@@ -238,28 +275,30 @@ class TestabilityVerifier:
                 "selection_targets": selection.targets,
                 "selection_target_count": len(selection.targets),
                 "parallel_workers": parallel_workers,
-                "parallel_source": (
-                    "tox.ini+ci" if parallel_workers else ""
-                ),
+                "parallel_source": ("tox.ini+ci" if parallel_workers else ""),
                 "timeout_policy": timeout_policy,
                 "requested_timeout_seconds": requested_timeout_seconds,
                 "effective_timeout_seconds": timeout_seconds,
                 "verification_overlay_packages": overlay_requirements,
-                "required_services": tuple(
-                    service.kind for service in environment.services
-                ),
+                "required_services": tuple(service.kind for service in environment.services),
                 "service_images": tuple(
                     service.image_reference for service in environment.services
                 ),
-                "test_environment_variable_names": tuple(
-                    environment.command_environment
-                ),
-                "test_setup_commands": tuple(
-                    item.display for item in environment.setup_commands
-                ),
+                "test_environment_variable_names": tuple(environment.command_environment),
+                "test_setup_commands": tuple(item.display for item in environment.setup_commands),
                 "required_executables": environment.required_executables,
                 "prerequisite_evidence": environment.evidence,
                 "runtime_environment": dict(execution.metadata),
+                "dependency_plan_mode": dependency_plan.mode,
+                "dependency_plan_source": dependency_plan.source,
+                "dependency_plan_applied": dependency_plan.applied,
+                "dependency_plan_reason": dependency_plan.reason,
+                "dependency_analyzed_files": dependency_plan.analyzed_files,
+                "dependency_import_roots": dependency_plan.import_roots,
+                "dependency_selected_requirements": dependency_plan.selected_requirements,
+                "dependency_unresolved_imports": dependency_plan.unresolved_imports,
+                "dependency_excluded_targets": dependency_plan.excluded_targets,
+                "dependency_required_executables": dependency_plan.required_executables,
             },
             checks=(check,),
         )
@@ -283,12 +322,19 @@ class TestabilityVerifier:
         command: CommandSpec,
         *,
         overlay_requirements: tuple[str, ...] = (),
+        dependency_commands: tuple[str, ...] | None = None,
     ) -> CommandSpec:
         display = command.display
         tools: list[str] = []
         lowered = display.casefold()
         matrix_runner = bool(re.search(r"\b(?:tox|nox)\b", lowered))
-        installs = [] if matrix_runner else self._declared_test_dependency_commands(profile)
+        installs = (
+            []
+            if matrix_runner
+            else list(dependency_commands)
+            if dependency_commands is not None
+            else self._declared_test_dependency_commands(profile)
+        )
         # A project-owned extra/group/requirements file is authoritative for the
         # runner version. Appending our fixed pytest pin can conflict with a
         # project pin and also breaks pip's --require-hashes mode for lock-style
@@ -296,9 +342,8 @@ class TestabilityVerifier:
         # dependency source was found.
         if not installs and re.search(r"\b(pytest|py\.test)\b", lowered):
             tools.append(f"pytest=={self.config.pytest_version}")
-        if (
-            self._parallel_metadata(profile)
-            and re.search(r"(?:--numprocesses(?:=|\s)|(?:^|\s)-n\s)", display)
+        if self._parallel_metadata(profile) and re.search(
+            r"(?:--numprocesses(?:=|\s)|(?:^|\s)-n\s)", display
         ):
             tools.append(f"pytest-xdist=={self.config.pytest_xdist_version}")
         if re.search(r"\btox\b", lowered):
@@ -307,9 +352,7 @@ class TestabilityVerifier:
             tools.append(f"nox=={self.config.nox_version}")
         tools.extend(overlay_requirements)
         if tools:
-            tool_requirements = " ".join(
-                shlex.quote(tool) for tool in dict.fromkeys(tools)
-            )
+            tool_requirements = " ".join(shlex.quote(tool) for tool in dict.fromkeys(tools))
             if installs and installs[-1].startswith("python -m pip install "):
                 installs[-1] += " " + tool_requirements
             else:
@@ -320,6 +363,29 @@ class TestabilityVerifier:
             command,
             argv=(" && ".join((*installs, display)),),
             shell=True,
+        )
+
+    @staticmethod
+    def _with_dependency_closed_targets(selection, plan: TestDependencyPlan):
+        capture_disabled = selection.command.command.display.endswith(" -s")
+        argv = ("python", "-m", "pytest", *plan.targets)
+        if capture_disabled:
+            argv += ("-s",)
+        command = ProjectCommand(
+            selection.command.name,
+            replace(selection.command.command, argv=argv, shell=False),
+            f"dependency-closed:{selection.command.source}",
+            selection.command.confidence,
+        )
+        kind = selection.kind
+        if "dependency-closed-slice" not in kind:
+            kind = f"{kind}+dependency-closed-slice"
+        return replace(
+            selection,
+            command=command,
+            kind=kind,
+            targets=plan.targets,
+            reason=f"{selection.reason}; {plan.reason}",
         )
 
     def _with_bounded_parallelism(

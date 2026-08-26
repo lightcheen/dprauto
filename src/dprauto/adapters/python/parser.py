@@ -116,13 +116,14 @@ class PythonProjectParser:
         python_constraint, version_evidence = self._python_version(scanned, ci_files)
         entry_points = self._entry_points(scanned)
         dependencies = self._dependencies(scanned, dependency_files)
+        runtime_dependencies = self._runtime_dependencies(scanned, dependency_files)
         system_dependency_hints = self._system_dependency_hints(
             scanned,
             dependency_files,
             dependencies,
         )
-        test_dependency_extras, test_dependency_manager_groups = (
-            self._test_dependency_groups(scanned)
+        test_dependency_extras, test_dependency_manager_groups = self._test_dependency_groups(
+            scanned
         )
         test_dependency_groups = tuple(
             dict.fromkeys((*test_dependency_extras, *test_dependency_manager_groups))
@@ -145,8 +146,7 @@ class PythonProjectParser:
             commands = framework_commands + tuple(
                 item
                 for item in commands
-                if (item.command.display.casefold(), item.command.purpose)
-                not in framework_keys
+                if (item.command.display.casefold(), item.command.purpose) not in framework_keys
             )
         service_metadata = self._ci_service_metadata(scanned, ci_files)
         project_type, type_evidence = self._project_type(
@@ -164,9 +164,7 @@ class PythonProjectParser:
         default_nox_session = self._default_nox_session(scanned)
         tox_environments = tox_environment_metadata(scanned.read_text("tox.ini"))
         nox_sessions = nox_session_metadata(scanned.read_text("noxfile.py"))
-        pytest_parallel = dict(
-            tox_pytest_parallel_metadata(scanned.read_text("tox.ini"))
-        )
+        pytest_parallel = dict(tox_pytest_parallel_metadata(scanned.read_text("tox.ini")))
         if pytest_parallel:
             pytest_parallel["ci_confirmed"] = self._ci_uses_tox_factor(
                 scanned,
@@ -201,6 +199,7 @@ class PythonProjectParser:
                 "python_version_evidence": version_evidence,
                 "entry_points": entry_points,
                 "dependency_names": tuple(sorted(dependencies)),
+                "runtime_dependency_names": tuple(sorted(runtime_dependencies)),
                 "system_dependency_hints": system_dependency_hints,
                 "test_required_executables": tuple(
                     hint.removesuffix("-executable")
@@ -256,8 +255,7 @@ class PythonProjectParser:
         return tuple(
             path
             for path in scanned.files
-            if self._depth(path) <= 2
-            and PurePosixPath(path).name.lower() in _PYTHON_BUILD_NAMES
+            if self._depth(path) <= 2 and PurePosixPath(path).name.lower() in _PYTHON_BUILD_NAMES
         )
 
     @staticmethod
@@ -381,9 +379,7 @@ class PythonProjectParser:
                     safe_files.append(path)
             if name == "conftest.py":
                 required_environment.extend(
-                    PythonProjectParser._required_environment_literals(
-                        scanned.read_text(path)
-                    )
+                    PythonProjectParser._required_environment_literals(scanned.read_text(path))
                 )
         maximum = 512
         return {
@@ -393,9 +389,7 @@ class PythonProjectParser:
             "test_file_count": len(test_files),
             "safe_test_file_count": len(safe_files),
             "test_files_truncated": len(test_files) > maximum,
-            "test_required_environment_variables": tuple(
-                dict.fromkeys(required_environment)
-            )[:32],
+            "test_required_environment_variables": tuple(dict.fromkeys(required_environment))[:32],
         }
 
     @staticmethod
@@ -508,6 +502,8 @@ class PythonProjectParser:
         hints: list[str] = []
         if re.search(r"(?i)\bgit\+(?:https?|ssh|file)://", manifests):
             hints.append("git-vcs")
+        if "pytest-git" in dependency_names:
+            hints.append("git-vcs")
         if "pyscard" in dependency_names:
             hints.append("pyscard-native")
         ci_content = "\n".join(
@@ -516,9 +512,8 @@ class PythonProjectParser:
             if path.lower().startswith(".github/workflows/")
             or PurePosixPath(path).name.lower() in _CI_ROOT_FILES
         )
-        if (
-            "libtmux" in dependency_names
-            and re.search(r"(?m)^\s*(?:run:\s*)?(?:.*\s)?tmux\s+-V\s*$", ci_content)
+        if "libtmux" in dependency_names and re.search(
+            r"(?m)^\s*(?:run:\s*)?(?:.*\s)?tmux\s+-V\s*$", ci_content
         ):
             hints.append("tmux-executable")
         return tuple(hints)
@@ -538,9 +533,7 @@ class PythonProjectParser:
                 manage,
             )
             environment = (
-                {"DJANGO_SETTINGS_MODULE": settings_match.group(1)}
-                if settings_match
-                else {}
+                {"DJANGO_SETTINGS_MODULE": settings_match.group(1)} if settings_match else {}
             )
             commands.extend(
                 (
@@ -643,16 +636,20 @@ class PythonProjectParser:
         by_command: dict[str, tuple[str, ...]] = {}
         for path in ci_files:
             content = scanned.read_text(path)
-            has_postgres = bool(re.search(
-                r"(?ms)^\s*services:\s*$.*?^\s+postgres:\s*$.*?"
-                r"^\s+image:\s*postgres(?::[^\s#]+)?",
-                content,
-            ))
-            has_redis = bool(re.search(
-                r"(?ms)^\s*services:\s*$.*?^\s+redis:\s*$.*?"
-                r"^\s+image:\s*redis(?::[^\s#]+)?",
-                content,
-            ))
+            has_postgres = bool(
+                re.search(
+                    r"(?ms)^\s*services:\s*$.*?^\s+postgres:\s*$.*?"
+                    r"^\s+image:\s*postgres(?::[^\s#]+)?",
+                    content,
+                )
+            )
+            has_redis = bool(
+                re.search(
+                    r"(?ms)^\s*services:\s*$.*?^\s+redis:\s*$.*?"
+                    r"^\s+image:\s*redis(?::[^\s#]+)?",
+                    content,
+                )
+            )
             if has_postgres:
                 services.append("postgresql")
                 evidence.append(f"{path}:services.postgres")
@@ -734,8 +731,7 @@ class PythonProjectParser:
         if "[tool.hatch" in pyproject or "hatch.toml" in names:
             managers.append("hatch")
         if not managers or any(
-            name.startswith("requirements") or name in {"setup.py", "setup.cfg"}
-            for name in names
+            name.startswith("requirements") or name in {"setup.py", "setup.cfg"} for name in names
         ):
             managers.append("pip")
         return tuple(dict.fromkeys(managers))
@@ -750,11 +746,15 @@ class PythonProjectParser:
         pyproject = scanned.read_text("pyproject.toml")
         match = re.search(r"(?m)^\s*requires-python\s*=\s*[\"']([^\"']+)", pyproject)
         if match:
-            evidence.append({"source": "pyproject.toml", "value": match.group(1), "kind": "constraint"})
+            evidence.append(
+                {"source": "pyproject.toml", "value": match.group(1), "kind": "constraint"}
+            )
         poetry_section = self._toml_section(pyproject, "tool.poetry.dependencies")
         match = re.search(r"(?m)^\s*python\s*=\s*[\"']([^\"']+)", poetry_section)
         if match:
-            evidence.append({"source": "pyproject.toml", "value": match.group(1), "kind": "constraint"})
+            evidence.append(
+                {"source": "pyproject.toml", "value": match.group(1), "kind": "constraint"}
+            )
 
         setup_py = scanned.read_text("setup.py")
         match = re.search(r"python_requires\s*=\s*[\"']([^\"']+)", setup_py)
@@ -764,7 +764,9 @@ class PythonProjectParser:
         setup_cfg = scanned.read_text("setup.cfg")
         match = re.search(r"(?m)^\s*python_requires\s*=\s*([^\n#]+)", setup_cfg)
         if match:
-            evidence.append({"source": "setup.cfg", "value": match.group(1).strip(), "kind": "constraint"})
+            evidence.append(
+                {"source": "setup.cfg", "value": match.group(1).strip(), "kind": "constraint"}
+            )
 
         for filename, pattern in (
             (".python-version", r"^\s*([^\s]+)"),
@@ -856,24 +858,115 @@ class PythonProjectParser:
                         dependencies.add(match.group(1).lower().replace("_", "-"))
             elif name == "pyproject.toml":
                 project = self._toml_section(text, "project")
-                dependency_block = re.search(r"dependencies\s*=\s*\[(.*?)\]", project, re.DOTALL)
-                if dependency_block:
-                    for candidate in re.findall(r"[\"']([^\"']+)[\"']", dependency_block.group(1)):
-                        match = re.match(r"([A-Za-z0-9_.-]+)", candidate)
-                        if match:
-                            dependencies.add(match.group(1).lower().replace("_", "-"))
+                for candidate in self._bracketed_string_assignment(project, "dependencies"):
+                    match = re.match(r"([A-Za-z0-9_.-]+)", candidate)
+                    if match:
+                        dependencies.add(match.group(1).lower().replace("_", "-"))
                 poetry = self._toml_section(text, "tool.poetry.dependencies")
                 for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=", poetry):
                     if match.group(1).lower() != "python":
                         dependencies.add(match.group(1).lower().replace("_", "-"))
             elif name == "setup.py":
-                block = re.search(r"install_requires\s*=\s*\[(.*?)\]", text, re.DOTALL)
-                if block:
-                    for candidate in re.findall(r"[\"']([^\"']+)[\"']", block.group(1)):
-                        match = re.match(r"([A-Za-z0-9_.-]+)", candidate)
-                        if match:
-                            dependencies.add(match.group(1).lower().replace("_", "-"))
+                for candidate in self._python_literal_assignment(text, "install_requires"):
+                    match = re.match(r"([A-Za-z0-9_.-]+)", candidate)
+                    if match:
+                        dependencies.add(match.group(1).lower().replace("_", "-"))
         return dependencies
+
+    def _runtime_dependencies(
+        self,
+        scanned: ScannedProject,
+        dependency_files: tuple[str, ...],
+    ) -> set[str]:
+        """Return dependencies installed by the normal project build, excluding dev files."""
+
+        dependencies: set[str] = set()
+
+        def add(candidate: str) -> None:
+            match = re.match(r"([A-Za-z0-9_.-]+)", candidate.strip())
+            if match:
+                dependencies.add(match.group(1).lower().replace("_", "-"))
+
+        for path in dependency_files:
+            name = PurePosixPath(path).name.casefold()
+            text = scanned.read_text(path)
+            if name == "requirements.txt":
+                for line in text.splitlines():
+                    if line.strip() and not line.lstrip().startswith(("#", "-")):
+                        add(line)
+            elif name == "pyproject.toml":
+                project = self._toml_section(text, "project")
+                for candidate in self._bracketed_string_assignment(project, "dependencies"):
+                    add(candidate)
+                poetry = self._toml_section(text, "tool.poetry.dependencies")
+                for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=", poetry):
+                    if match.group(1).casefold() != "python":
+                        add(match.group(1))
+            elif name == "setup.py":
+                for candidate in self._python_literal_assignment(text, "install_requires"):
+                    add(candidate)
+            elif name == "setup.cfg":
+                section = self._ini_section(text, "options")
+                block = re.search(
+                    r"(?ms)^\s*install_requires\s*=\s*\n(.*?)(?=^\S|\Z)",
+                    section,
+                )
+                if block:
+                    for candidate in block.group(1).splitlines():
+                        add(candidate)
+        return dependencies
+
+    @staticmethod
+    def _python_literal_assignment(text: str, name: str) -> tuple[str, ...]:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            return ()
+        for statement in tree.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if not any(isinstance(target, ast.Name) and target.id == name for target in targets):
+                continue
+            value = statement.value
+            if not isinstance(value, (ast.List, ast.Tuple)):
+                continue
+            return tuple(
+                item.value
+                for item in value.elts
+                if isinstance(item, ast.Constant) and isinstance(item.value, str)
+            )
+        return ()
+
+    @staticmethod
+    def _bracketed_string_assignment(text: str, name: str) -> tuple[str, ...]:
+        match = re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*\[", text)
+        if not match:
+            return ()
+        start = text.find("[", match.start())
+        depth = 0
+        quote = ""
+        escaped = False
+        for index in range(start, len(text)):
+            character = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == quote:
+                    quote = ""
+                continue
+            if character in {'"', "'"}:
+                quote = character
+            elif character == "[":
+                depth += 1
+            elif character == "]":
+                depth -= 1
+                if depth == 0:
+                    block = text[start + 1 : index]
+                    return tuple(re.findall(r"[\"']([^\"']+)[\"']", block))
+        return ()
 
     def _extract_commands(
         self,
@@ -884,7 +977,9 @@ class PythonProjectParser:
         commands: list[ExtractedCommand] = []
         for path in readme_files:
             if self._depth(path) == 1:
-                commands.extend(self.command_extractor.extract_markdown(path, scanned.read_text(path)))
+                commands.extend(
+                    self.command_extractor.extract_markdown(path, scanned.read_text(path))
+                )
         for path in ci_files:
             commands.extend(self.command_extractor.extract_ci(path, scanned.read_text(path)))
         return tuple(commands)
@@ -932,8 +1027,14 @@ class PythonProjectParser:
             if requirements:
                 install_command = f"python -m pip install -r {requirements}"
                 install_source = f"inferred:{requirements}"
-            elif any(PurePosixPath(path).name.lower() in {"pyproject.toml", "setup.py", "setup.cfg"} for path in build_files):
-                install_command, install_source = "python -m pip install .", "inferred:package-metadata"
+            elif any(
+                PurePosixPath(path).name.lower() in {"pyproject.toml", "setup.py", "setup.cfg"}
+                for path in build_files
+            ):
+                install_command, install_source = (
+                    "python -m pip install .",
+                    "inferred:package-metadata",
+                )
         if install_command:
             inferred.append(
                 ExtractedCommand(install_command, CommandPurpose.INSTALL, install_source, 0.8)
@@ -1023,8 +1124,7 @@ class PythonProjectParser:
     def _has_unittest_evidence(scanned: ScannedProject) -> bool:
         for path in scanned.files:
             if path.endswith(".py") and any(
-                part.casefold() in {"test", "tests"}
-                for part in PurePosixPath(path).parts
+                part.casefold() in {"test", "tests"} for part in PurePosixPath(path).parts
             ):
                 if "unittest" in scanned.read_text(path):
                     return True
@@ -1065,7 +1165,9 @@ class PythonProjectParser:
         candidates = [path for path in scanned.files if path.endswith("/__main__.py")]
         if not candidates:
             return ""
-        path = min(candidates, key=lambda candidate: (len(PurePosixPath(candidate).parts), candidate))
+        path = min(
+            candidates, key=lambda candidate: (len(PurePosixPath(candidate).parts), candidate)
+        )
         parts = list(PurePosixPath(path).parts[:-1])
         if parts and parts[0] == "src":
             parts.pop(0)
@@ -1137,7 +1239,10 @@ class PythonProjectParser:
             if len(PurePosixPath(path).parts) > 4:
                 continue
             content = scanned.read_text(path).lower()
-            if any(f"import {name}" in content or f"from {name}" in content for name in _WEB_DEPENDENCIES):
+            if any(
+                f"import {name}" in content or f"from {name}" in content
+                for name in _WEB_DEPENDENCIES
+            ):
                 return True
         return False
 
