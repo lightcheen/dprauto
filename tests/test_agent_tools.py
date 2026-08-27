@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from dprauto.agent.tools import (
     ListProjectFilesTool,
     ModifyBuildScriptTool,
     PatchBaseImageTool,
+    PatchBuildScriptTool,
     PatchPythonDependenciesTool,
     PatchSystemPackagesTool,
     PatchVerificationDependenciesTool,
@@ -35,11 +37,19 @@ class AgentToolTests(unittest.TestCase):
         self.storage = LocalArtifactStorage(self.root / "artifacts")
         self.context = ToolContext("tool-run", 1, str(self.root))
 
+    @staticmethod
+    def source_sha(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "absent"
+
     def test_build_script_change_is_atomic_and_persists_diff(self) -> None:
         dockerfile = self.root / "Dockerfile"
         dockerfile.write_text("FROM python:3.10-slim\n", encoding="utf-8")
         result = ModifyBuildScriptTool(self.storage).invoke(
-            {"path": "Dockerfile", "content": "FROM python:3.11-slim\nRUN python --version\n"},
+            {
+                "path": "Dockerfile",
+                "content": "FROM python:3.11-slim\nRUN python --version\n",
+                "source_sha256": self.source_sha(dockerfile),
+            },
             self.context,
         )
 
@@ -57,26 +67,42 @@ class AgentToolTests(unittest.TestCase):
         tool = ModifyBuildScriptTool(self.storage)
         with self.assertRaises(PolicyViolationError):
             tool.invoke(
-                {"path": "app.py", "content": "VALUE = 2\n"},
+                {
+                    "path": "app.py",
+                    "content": "VALUE = 2\n",
+                    "source_sha256": self.source_sha(self.root / "app.py"),
+                },
                 self.context,
             )
         with self.assertRaises(ToolExecutionError):
             tool.invoke(
-                {"path": "../Dockerfile", "content": "FROM scratch\n"},
+                {
+                    "path": "../Dockerfile",
+                    "content": "FROM scratch\n",
+                    "source_sha256": "absent",
+                },
                 self.context,
             )
         (self.root / "real-build-file").write_text("FROM scratch\n", encoding="utf-8")
         (self.root / "Dockerfile").symlink_to(self.root / "real-build-file")
         with self.assertRaises(ToolExecutionError):
             tool.invoke(
-                {"path": "Dockerfile", "content": "FROM python:3.11-slim\n"},
+                {
+                    "path": "Dockerfile",
+                    "content": "FROM python:3.11-slim\n",
+                    "source_sha256": "absent",
+                },
                 self.context,
             )
         self.assertEqual((self.root / "app.py").read_text(), "VALUE = 1\n")
 
     def test_setup_script_is_an_allowed_build_script_not_business_source(self) -> None:
         result = ModifyBuildScriptTool(self.storage).invoke(
-            {"path": "setup.sh", "content": "#!/bin/sh\npython --version\n"},
+            {
+                "path": "setup.sh",
+                "content": "#!/bin/sh\npython --version\n",
+                "source_sha256": "absent",
+            },
             self.context,
         )
         self.assertFalse(result.environment_diff.source_changed)
@@ -90,6 +116,7 @@ class AgentToolTests(unittest.TestCase):
                     "FROM python:3.11-slim\n"
                     "RUN apt-get update && apt-get install -y git\n"
                 ),
+                "source_sha256": "absent",
             },
             self.context,
         )
@@ -104,7 +131,11 @@ class AgentToolTests(unittest.TestCase):
         self.assertTrue(result.data["bounded_apt_network_retries"])
 
         repeated = ModifyBuildScriptTool(self.storage).invoke(
-            {"path": "Dockerfile", "content": content},
+            {
+                "path": "Dockerfile",
+                "content": content,
+                "source_sha256": self.source_sha(self.root / "Dockerfile"),
+            },
             self.context,
         )
         self.assertFalse(repeated.data["changed"])
@@ -344,6 +375,8 @@ class AgentToolTests(unittest.TestCase):
         self.assertEqual(first.data["total_lines"], 1_000)
         self.assertEqual(first.data["next_start_line"], 101)
         self.assertTrue(first.data["truncated"])
+        self.assertFalse(first.data["complete_file"])
+        self.assertEqual(first.data["source_sha256"], hashlib.sha256(content.encode()).hexdigest())
         self.assertIn("line-650", middle.data["content"])
         self.assertIn("line-749", middle.data["content"])
         with self.assertRaises(ToolExecutionError):
@@ -354,6 +387,89 @@ class AgentToolTests(unittest.TestCase):
         with self.assertRaises(ToolExecutionError):
             tool.invoke(
                 {"path": "large.py", "start_line": 20, "end_line": 10},
+                self.context,
+            )
+
+    def test_read_and_patch_reject_non_utf8_build_script(self) -> None:
+        dockerfile = self.root / "Dockerfile"
+        dockerfile.write_bytes(b"FROM scratch\n\xff\n")
+
+        with self.assertRaisesRegex(ToolExecutionError, "not valid UTF-8"):
+            ReadFileTool().invoke({"path": "Dockerfile"}, self.context)
+        with self.assertRaisesRegex(ToolExecutionError, "not valid UTF-8"):
+            PatchBuildScriptTool(self.storage).invoke(
+                {
+                    "path": "Dockerfile",
+                    "source_sha256": self.source_sha(dockerfile),
+                    "old_content": "FROM scratch\n",
+                    "new_content": "FROM busybox:1.36\n",
+                },
+                self.context,
+            )
+    def test_exact_patch_uses_paged_read_digest_and_rejects_stale_source(self) -> None:
+        content = "".join(f"RUN step-{number}\n" for number in range(1, 1_001))
+        dockerfile = self.root / "Dockerfile"
+        dockerfile.write_text(content, encoding="utf-8")
+        page = ReadFileTool(max_lines=100).invoke(
+            {"path": "Dockerfile", "start_line": 601, "end_line": 700},
+            self.context,
+        )
+        tool = PatchBuildScriptTool(self.storage)
+
+        result = tool.invoke(
+            {
+                "path": "Dockerfile",
+                "source_sha256": page.data["source_sha256"],
+                "old_content": "RUN step-650\n",
+                "new_content": "RUN step-650 --bounded\n",
+            },
+            self.context,
+        )
+
+        self.assertTrue(result.data["exact_patch"])
+        self.assertEqual(
+            dockerfile.read_text(encoding="utf-8"),
+            content.replace("RUN step-650\n", "RUN step-650 --bounded\n"),
+        )
+        with self.assertRaisesRegex(ToolExecutionError, "source changed before mutation"):
+            tool.invoke(
+                {
+                    "path": "Dockerfile",
+                    "source_sha256": page.data["source_sha256"],
+                    "old_content": "RUN step-651\n",
+                    "new_content": "RUN step-651 --stale\n",
+                },
+                self.context,
+            )
+
+    def test_exact_patch_rejects_ambiguous_old_content(self) -> None:
+        dockerfile = self.root / "Dockerfile"
+        dockerfile.write_text("RUN true\nRUN true\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ToolExecutionError, "match exactly once"):
+            PatchBuildScriptTool(self.storage).invoke(
+                {
+                    "path": "Dockerfile",
+                    "source_sha256": self.source_sha(dockerfile),
+                    "old_content": "RUN true\n",
+                    "new_content": "RUN false\n",
+                },
+                self.context,
+            )
+
+    def test_whole_file_replacement_rejects_stale_source_digest(self) -> None:
+        dockerfile = self.root / "Dockerfile"
+        dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+        observed_sha = self.source_sha(dockerfile)
+        dockerfile.write_text("FROM busybox:1.36\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ToolExecutionError, "source changed before mutation"):
+            ModifyBuildScriptTool(self.storage).invoke(
+                {
+                    "path": "Dockerfile",
+                    "content": "FROM alpine:3.20\n",
+                    "source_sha256": observed_sha,
+                },
                 self.context,
             )
 

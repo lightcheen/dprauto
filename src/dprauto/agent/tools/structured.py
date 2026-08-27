@@ -10,7 +10,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from dprauto.agent.models import ToolContext, ToolResult
-from dprauto.agent.tools.filesystem import ModifyBuildScriptTool, _safe_target, _text_argument
+from dprauto.agent.tools.filesystem import (
+    ModifyBuildScriptTool,
+    _decode_utf8,
+    _safe_target,
+    _sha256_bytes,
+    _source_sha256,
+    _text_argument,
+)
 from dprauto.config import SecurityConfig
 from dprauto.domain.enums import ChangeKind, RiskLevel
 from dprauto.domain.models import DependencyChange, EnvironmentDiff
@@ -71,17 +78,21 @@ class _StructuredDockerfileTool:
         self.mutator = ModifyBuildScriptTool(storage, security)
 
     @staticmethod
-    def _dockerfile(arguments: Mapping[str, Any], context: ToolContext) -> tuple[str, str]:
+    def _dockerfile(
+        arguments: Mapping[str, Any], context: ToolContext
+    ) -> tuple[str, str, str]:
         path = _text_argument(arguments, "path")
         if not PurePosixPath(path).name.casefold().startswith("dockerfile"):
             raise ToolExecutionError("structured environment patches require a Dockerfile path")
         _, target = _safe_target(context.workspace, path, require_file=True)
-        return path, target.read_text(encoding="utf-8", errors="replace")
+        source_bytes = target.read_bytes()
+        return path, _decode_utf8(source_bytes, path), _sha256_bytes(source_bytes)
 
     def _replace(
         self,
         path: str,
         content: str,
+        source_sha256: str,
         context: ToolContext,
         *,
         dimension: str,
@@ -89,7 +100,14 @@ class _StructuredDockerfileTool:
         dependencies: tuple[DependencyChange, ...] = (),
         risk_level: RiskLevel,
     ) -> ToolResult:
-        result = self.mutator.invoke({"path": path, "content": content}, context)
+        result = self.mutator.invoke(
+            {
+                "path": path,
+                "content": content,
+                "source_sha256": source_sha256,
+            },
+            context,
+        )
         base = result.environment_diff or EnvironmentDiff()
         if not result.data.get("changed", False):
             structured = base
@@ -151,7 +169,7 @@ class PatchSystemPackagesTool(_StructuredDockerfileTool):
     )
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
-        path, content = self._dockerfile(arguments, context)
+        path, content, source_sha256 = self._dockerfile(arguments, context)
         manager = _text_argument(arguments, "package_manager").casefold()
         if manager not in {"apt", "apk", "dnf", "yum"}:
             raise ToolExecutionError("package_manager must be one of apt, apk, dnf, yum")
@@ -178,6 +196,7 @@ class PatchSystemPackagesTool(_StructuredDockerfileTool):
         return self._replace(
             path,
             updated,
+            source_sha256,
             context,
             dimension="system_packages",
             summary=f"added structured system packages via {manager}: {', '.join(added)}",
@@ -233,7 +252,7 @@ class PatchPythonDependenciesTool(_StructuredDockerfileTool):
     )
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
-        path, content = self._dockerfile(arguments, context)
+        path, content, source_sha256 = self._dockerfile(arguments, context)
         requested = _package_list(arguments, python=True)
         match = self._MARKER.search(content)
         existing = tuple(json.loads(match.group("packages"))) if match else ()
@@ -256,6 +275,7 @@ class PatchPythonDependenciesTool(_StructuredDockerfileTool):
         return self._replace(
             path,
             updated,
+            source_sha256,
             context,
             dimension="python_dependencies",
             summary=f"added structured Python dependencies: {', '.join(added)}",
@@ -328,6 +348,12 @@ class PatchVerificationDependenciesTool:
                 "verification overlay cannot override DPRAuto-managed test runner(s): "
                 + ", ".join(controlled)
             )
+        _, overlay_target = _safe_target(
+            context.workspace,
+            VERIFICATION_REQUIREMENTS_PATH,
+            require_file=False,
+        )
+        overlay_sha256 = _source_sha256(overlay_target)
         try:
             existing = load_verification_requirements(Path(context.workspace))
             packages = tuple(dict.fromkeys((*existing, *requested)))
@@ -335,7 +361,11 @@ class PatchVerificationDependenciesTool:
         except (OSError, UnicodeError, ValueError) as exc:
             raise ToolExecutionError(str(exc)) from exc
         result = self.mutator.invoke(
-            {"path": VERIFICATION_REQUIREMENTS_PATH, "content": content},
+            {
+                "path": VERIFICATION_REQUIREMENTS_PATH,
+                "content": content,
+                "source_sha256": overlay_sha256,
+            },
             context,
         )
         added = tuple(item for item in packages if item not in existing)
@@ -396,7 +426,7 @@ class PatchBaseImageTool(_StructuredDockerfileTool):
     }
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
-        path, content = self._dockerfile(arguments, context)
+        path, content, source_sha256 = self._dockerfile(arguments, context)
         current = _text_argument(arguments, "current_image")
         replacement = _text_argument(arguments, "replacement_image")
         for label, image in (("current_image", current), ("replacement_image", replacement)):
@@ -418,6 +448,7 @@ class PatchBaseImageTool(_StructuredDockerfileTool):
         return self._replace(
             path,
             updated,
+            source_sha256,
             context,
             dimension="runtime",
             summary=f"replaced base image {current} with {replacement}",

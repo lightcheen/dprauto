@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -34,8 +35,9 @@ def docker_ready() -> bool:
 
 
 class ScriptedRepairLLM:
-    def __init__(self, replacement):
+    def __init__(self, replacement, source_sha256):
         self.replacement = replacement
+        self.source_sha256 = source_sha256
         self.requests = []
 
     def complete(self, request):
@@ -72,7 +74,11 @@ class ScriptedRepairLLM:
                 "actions": [
                     {
                         "tool": "modify_build_script",
-                        "arguments": {"path": "Dockerfile", "content": self.replacement},
+                        "arguments": {
+                            "path": "Dockerfile",
+                            "content": self.replacement,
+                            "source_sha256": self.source_sha256,
+                        },
                         "rationale": "remove the injected build-only failure",
                     }
                 ],
@@ -89,7 +95,10 @@ class AgentDockerIntegrationTests(unittest.TestCase):
             shutil.copytree(FIXTURES / fixture, workspace)
             (workspace / "Dockerfile").write_text(broken_dockerfile, encoding="utf-8")
             storage = LocalArtifactStorage(root / "runs")
-            llm = ScriptedRepairLLM(fixed_dockerfile)
+            llm = ScriptedRepairLLM(
+                fixed_dockerfile,
+                hashlib.sha256(broken_dockerfile.encode()).hexdigest(),
+            )
             config = AppConfig(
                 build=BuildConfig(
                     timeout_seconds=120,

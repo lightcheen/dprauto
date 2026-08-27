@@ -5,6 +5,7 @@ from dprauto.agent.tools.filesystem import (
     InspectProjectTool,
     ListProjectFilesTool,
     ModifyBuildScriptTool,
+    PatchBuildScriptTool,
     ReadFileTool,
     SearchProjectTool,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "InspectProjectTool",
     "ListProjectFilesTool",
     "ModifyBuildScriptTool",
+    "PatchBuildScriptTool",
     "PatchBaseImageTool",
     "PatchPythonDependenciesTool",
     "PatchSystemPackagesTool",

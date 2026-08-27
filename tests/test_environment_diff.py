@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -33,6 +34,10 @@ from dprauto.domain.models import (
 )
 from dprauto.environment import compare_environment_snapshots
 from dprauto.errors import PolicyViolationError
+
+
+def source_sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "absent"
 
 
 class EnvironmentSnapshotTests(unittest.TestCase):
@@ -331,6 +336,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                             {
                                 "path": "Dockerfile",
                                 "content": original + "RUN python -m pip install pytest\n",
+                                "source_sha256": source_sha(root / "Dockerfile"),
                             },
                         ),
                     ),
@@ -360,7 +366,12 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
             context = ToolContext("environment-policy", 1, str(root))
             with self.assertRaises(PolicyViolationError):
                 ModifyBuildScriptTool(storage).invoke(
-                    {"path": "app.py", "content": "VALUE = 2\n"}, context
+                    {
+                        "path": "app.py",
+                        "content": "VALUE = 2\n",
+                        "source_sha256": source_sha(root / "app.py"),
+                    },
+                    context,
                 )
 
             mutation = ModifyBuildScriptTool(
@@ -397,7 +408,11 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                         (
                             ToolCall(
                                 "modify_build_script",
-                                {"path": "app.py", "content": "VALUE = 2\n"},
+                                {
+                                    "path": "app.py",
+                                    "content": "VALUE = 2\n",
+                                    "source_sha256": source_sha(root / "app.py"),
+                                },
                             ),
                         ),
                     ),
@@ -448,6 +463,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                                 {
                                     "path": "Dockerfile",
                                     "content": "FROM python:3.11-slim\nRUN python --version\n",
+                                    "source_sha256": source_sha(root / "Dockerfile"),
                                 },
                             ),
                             ToolCall("later_failure", {}),
@@ -511,6 +527,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                                         "FROM python:3.11-slim\n"
                                         "RUN python -m pip install pytest\n"
                                     ),
+                                    "source_sha256": source_sha(root / "Dockerfile"),
                                 },
                             ),
                         ),
@@ -580,6 +597,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                                         "FROM python:3.11-slim\n"
                                         "RUN python -m pip install pytest\n"
                                     ),
+                                    "source_sha256": source_sha(root / "Dockerfile"),
                                 },
                             ),
                         ),
@@ -632,6 +650,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                                 {
                                     "path": "Dockerfile",
                                     "content": original + "RUN apt-get install -y git\n",
+                                    "source_sha256": source_sha(root / "Dockerfile"),
                                 },
                             ),
                         ),
@@ -688,6 +707,7 @@ class AgentEnvironmentPolicyTests(unittest.TestCase):
                                         "FROM python:3.11-slim\n"
                                         "RUN apt-get install -y git\n"
                                     ),
+                                    "source_sha256": source_sha(root / "Dockerfile"),
                                 },
                             ),
                         ),

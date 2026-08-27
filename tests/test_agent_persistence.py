@@ -100,10 +100,20 @@ class MarkerPlanner:
             else state["workspace"]
         )
         current = Path(workspace).joinpath("Dockerfile").read_text()
+        source_sha256 = hashlib.sha256(current.encode()).hexdigest()
         replacement = current.replace(f"# {marker}\n", "")
         plan = FixPlan(
             f"remove {marker}",
-            (ToolCall("modify_build_script", {"path": "Dockerfile", "content": replacement}),),
+            (
+                ToolCall(
+                    "modify_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "content": replacement,
+                        "source_sha256": source_sha256,
+                    },
+                ),
+            ),
             f"remove only {marker}",
         )
         self.plans.append(plan)

@@ -304,8 +304,11 @@ class LLMRepairPlanner:
                             "patch_system_packages, patch_python_dependencies, "
                             "patch_verification_dependencies, or patch_base_image "
                             "tool whenever one expresses the repair. Change only one high-risk "
-                            "environment dimension per plan. Use modify_build_script only when no "
-                            "structured patch can express the fix; its arguments.content must be "
+                            "environment dimension per plan. For another build-script edit, "
+                            "prefer patch_build_script with an exact prompt-visible old_content "
+                            "and the read_file source_sha256. Use modify_build_script only when no "
+                            "structured or exact patch can express the fix; source_sha256 must "
+                            "match a complete_file read through EOF and arguments.content must be "
                             "the complete non-empty replacement file, never a diff. A repair "
                             "must change the build "
                             "environment before rebuilding. Observation evidence has already been "
@@ -567,7 +570,10 @@ class LLMRepairPlanner:
                 "system_packages": "patch_system_packages",
                 "python_dependencies": "patch_python_dependencies",
                 "base_image": "patch_base_image",
+                "exact_build_script_patch": "patch_build_script",
                 "whole_file_fallback": "modify_build_script",
+                "source_precondition": "read_file source_sha256 compare-and-swap",
+                "whole_file_requires": "complete_file=true through EOF",
                 "maximum_high_risk_dimensions_per_round": 1,
             },
         }

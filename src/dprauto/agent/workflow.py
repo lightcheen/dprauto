@@ -6,7 +6,7 @@ import hashlib
 import re
 from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Mapping
 
 from langgraph.graph import END, START, StateGraph
@@ -44,6 +44,7 @@ from dprauto.domain.enums import (
 from dprauto.domain.models import (
     EnvironmentDiff,
     FailureInfo,
+    FileChange,
     RegressionResult,
     RepairPreflightResult,
 )
@@ -443,17 +444,18 @@ class AgentWorkflow:
             outside = tuple(
                 action.tool for action in plan.actions if action.tool not in planning_tools
             )
-            violation = (
-                "repair plan selected tool(s) outside the bounded search space: "
-                + ", ".join(dict.fromkeys(outside))
-                if outside
-                else self._plan_policy_violation(plan, failure)
-            )
             fingerprint = method_fingerprint(plan)
-            if not violation and self._method_already_attempted(state, fingerprint):
+            if outside:
+                violation = (
+                    "repair plan selected tool(s) outside the bounded search space: "
+                    + ", ".join(dict.fromkeys(outside))
+                )
+            elif self._method_already_attempted(state, fingerprint):
                 violation = (
                     "duplicate repair method rejected before execution: " + fingerprint
                 )
+            else:
+                violation = self._plan_policy_violation(plan, failure, state)
             if not violation:
                 return {
                     "phase": AgentPhase.PROPOSING,
@@ -1355,7 +1357,9 @@ class AgentWorkflow:
             default=RiskLevel.NONE,
         )
         return EnvironmentDiff(
-            files=tuple(change for item in diffs for change in item.files),
+            files=AgentWorkflow._combine_file_changes(
+                tuple(change for item in diffs for change in item.files)
+            ),
             dependencies=tuple(change for item in diffs for change in item.dependencies),
             environment_variables=tuple(
                 change for item in diffs for change in item.environment_variables
@@ -1371,11 +1375,11 @@ class AgentWorkflow:
             startup_arguments=tuple(
                 change for item in diffs for change in item.startup_arguments
             ),
-            build_scripts=tuple(
-                change for item in diffs for change in item.build_scripts
+            build_scripts=AgentWorkflow._combine_file_changes(
+                tuple(change for item in diffs for change in item.build_scripts)
             ),
-            business_source=tuple(
-                change for item in diffs for change in item.business_source
+            business_source=AgentWorkflow._combine_file_changes(
+                tuple(change for item in diffs for change in item.business_source)
             ),
             source_changed=any(item.source_changed for item in diffs),
             risk_level=risk_level,
@@ -1385,6 +1389,33 @@ class AgentWorkflow:
             ),
             summary="; ".join(item.summary for item in diffs if item.summary),
         )
+
+    @staticmethod
+    def _combine_file_changes(changes: tuple[FileChange, ...]) -> tuple[FileChange, ...]:
+        """Keep the earliest precondition and latest result for each changed path."""
+
+        combined: dict[str, FileChange] = {}
+        for change in changes:
+            previous = combined.get(change.path)
+            if previous is None:
+                combined[change.path] = change
+                continue
+            before_digest = previous.before_digest
+            after_digest = change.after_digest
+            kind = (
+                ChangeKind.ADDED
+                if before_digest is None and after_digest is not None
+                else ChangeKind.REMOVED
+                if after_digest is None
+                else ChangeKind.MODIFIED
+            )
+            combined[change.path] = FileChange(
+                change.path,
+                kind,
+                before_digest,
+                after_digest,
+            )
+        return tuple(combined.values())
 
     @staticmethod
     def _elapsed_seconds(state: AgentState) -> float:
@@ -1407,6 +1438,7 @@ class AgentWorkflow:
         self,
         plan,
         failure: FailureInfo | None = None,
+        state: AgentState | None = None,
     ) -> str:
         specifications = self.tools.specifications
         mutating_actions = 0
@@ -1416,6 +1448,7 @@ class AgentWorkflow:
             "patch_python_dependencies": "python-dependencies",
             "patch_verification_dependencies": "verification-python-dependencies",
             "patch_base_image": "runtime",
+            "patch_build_script": "build-script",
             "modify_build_script": "opaque-whole-file",
         }
         for action in plan.actions:
@@ -1450,6 +1483,7 @@ class AgentWorkflow:
                     "patch_system_packages",
                     "patch_python_dependencies",
                     "patch_base_image",
+                    "patch_build_script",
                     "modify_build_script",
                 }
             ):
@@ -1457,6 +1491,13 @@ class AgentWorkflow:
                     "repair plan rejected: Testability dependencies must use "
                     "patch_verification_dependencies instead of changing the runtime image"
                 )
+            if state is not None and action.tool in {
+                "modify_build_script",
+                "patch_build_script",
+            }:
+                proof_violation = self._mutation_read_proof_violation(action, state)
+                if proof_violation:
+                    return proof_violation
             mutating_actions += 1
             dimensions.add(dimension_by_tool.get(action.tool, action.tool))
         if mutating_actions == 0:
@@ -1466,10 +1507,105 @@ class AgentWorkflow:
                 "repair plan rejected: modify_build_script must be the only action in a "
                 "whole-file fallback plan"
             )
+        if "build-script" in dimensions and mutating_actions > 1:
+            return (
+                "repair plan rejected: patch_build_script must be the only action in an "
+                "atomic source-SHA patch plan"
+            )
         if len(dimensions) > 1:
             return (
                 "repair plan rejected: one round may change only one high-risk environment "
                 f"dimension ({', '.join(sorted(dimensions))})"
+            )
+        return ""
+
+    def _mutation_read_proof_violation(self, action, state: AgentState) -> str:
+        """Require prompt-visible source evidence before an opaque build-script mutation."""
+
+        specification = self.tools.specifications.get(action.tool, {})
+        schema = specification.get("argument_schema", {})
+        required = schema.get("required", ()) if isinstance(schema, Mapping) else ()
+        # Lightweight fake tools used by orchestration tests do not claim the production
+        # CAS contract. The concrete tools still enforce the digest again at execution.
+        if "source_sha256" not in required:
+            return ""
+        path = action.arguments.get("path")
+        source_sha256 = action.arguments.get("source_sha256")
+        if not isinstance(path, str) or not path.strip():
+            return f"repair plan rejected: {action.tool} requires a non-empty path"
+        if not isinstance(source_sha256, str) or not source_sha256.strip():
+            return f"repair plan rejected: {action.tool} requires source_sha256"
+        source_sha256 = source_sha256.casefold()
+        if source_sha256 != "absent" and not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
+            return (
+                f"repair plan rejected: {action.tool} source_sha256 must be a SHA-256 "
+                "digest or 'absent'"
+            )
+
+        context = self.context_manager.build_llm_context(
+            state,
+            state.get("tool_results", ()),
+        )
+        scripts = tuple(context.get("current_build_scripts", ()))
+        matching_scripts = tuple(
+            item
+            for item in scripts
+            if isinstance(item, Mapping)
+            and item.get("path") == path
+            and item.get("source_sha256") == source_sha256
+        )
+        if action.tool == "modify_build_script":
+            if source_sha256 == "absent":
+                relative = PurePosixPath(path)
+                if relative.is_absolute() or ".." in relative.parts:
+                    return (
+                        "repair plan rejected: modify_build_script path must be a safe "
+                        f"workspace-relative path: {path}"
+                    )
+                target = Path(self._active_workspace(state)) / relative.as_posix()
+                return (
+                    "repair plan rejected: source_sha256='absent' does not match an existing "
+                    f"mutation target: {path}"
+                    if target.exists()
+                    else ""
+                )
+            if not any(bool(item.get("complete_file")) for item in matching_scripts):
+                return (
+                    "repair plan rejected: modify_build_script requires a complete read_file "
+                    f"proof through EOF with matching source_sha256 for {path}; use "
+                    "patch_build_script for a paged or truncated file"
+                )
+            return ""
+
+        if source_sha256 == "absent":
+            return "repair plan rejected: patch_build_script cannot patch an absent source"
+        old_content = action.arguments.get("old_content")
+        if not isinstance(old_content, str) or not old_content:
+            return "repair plan rejected: patch_build_script requires non-empty old_content"
+        if "characters omitted" in old_content:
+            return (
+                "repair plan rejected: patch_build_script old_content cannot include a "
+                "context truncation marker"
+            )
+        prompt_visible_records = tuple(context.get("evidence", ()))
+        matching_evidence = tuple(
+            record.get("data", {})
+            for record in prompt_visible_records
+            if isinstance(record, Mapping)
+            and record.get("tool") == "read_file"
+            and isinstance(record.get("data"), Mapping)
+            and record["data"].get("path") == path
+            and record["data"].get("source_sha256") == source_sha256
+        )
+        visible_content = tuple(
+            item.get("content")
+            for item in (*matching_scripts, *matching_evidence)
+            if isinstance(item.get("content"), str)
+        )
+        if not any(old_content in content for content in visible_content):
+            return (
+                "repair plan rejected: patch_build_script old_content and source_sha256 must "
+                f"come from prompt-visible read_file evidence for {path}"
             )
         return ""
 

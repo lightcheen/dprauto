@@ -12,6 +12,7 @@ from dprauto.domain.models import FailureInfo
 _KNOWN_REPAIR_TOOLS = {
     "modify_build_script",
     "patch_base_image",
+    "patch_build_script",
     "patch_python_dependencies",
     "patch_system_packages",
     "patch_verification_dependencies",
@@ -104,28 +105,36 @@ def bounded_repair_search_space(
             allowed = set()
             signals.append("test failure has no dependency-shaped repair evidence")
     elif _is_cost_timeout(failure):
-        allowed = {"modify_build_script"}
-        preferred.append("modify_build_script")
+        allowed = {"patch_build_script", "modify_build_script"}
+        preferred.append("patch_build_script")
         signals.append("build/install timeout permits scope reduction only")
     elif failure.category in {
         FailureCategory.PYTHON_DEPENDENCY,
         FailureCategory.PACKAGE_DEPENDENCY,
         FailureCategory.DEPENDENCY_CONFLICT,
     } or any(marker in evidence for marker in _PYTHON_MARKERS):
-        allowed = {"patch_python_dependencies", "modify_build_script"}
+        allowed = {
+            "patch_python_dependencies",
+            "patch_build_script",
+            "modify_build_script",
+        }
         preferred.append("patch_python_dependencies")
         signals.append("Python package dependency evidence")
     elif failure.category in {
         FailureCategory.SYSTEM_DEPENDENCY,
         FailureCategory.TOOLCHAIN,
     } or any(marker in evidence for marker in _SYSTEM_MARKERS):
-        allowed = {"patch_system_packages", "modify_build_script"}
+        allowed = {
+            "patch_system_packages",
+            "patch_build_script",
+            "modify_build_script",
+        }
         preferred.append("patch_system_packages")
         signals.append("system package or executable evidence")
     elif failure.category is FailureCategory.RUNTIME_VERSION or any(
         marker in evidence for marker in _RUNTIME_MARKERS
     ):
-        allowed = {"patch_base_image", "modify_build_script"}
+        allowed = {"patch_base_image", "patch_build_script", "modify_build_script"}
         preferred.append("patch_base_image")
         signals.append("runtime or base-image compatibility evidence")
     else:

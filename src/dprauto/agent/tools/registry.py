@@ -62,7 +62,7 @@ class ToolRegistry:
 
     @staticmethod
     def _default_effect(name: str) -> str:
-        if name in {"modify_build_script"}:
+        if name in {"modify_build_script", "patch_build_script"}:
             return "mutate"
         if name in {"build_image", "run_command"}:
             return "execute"

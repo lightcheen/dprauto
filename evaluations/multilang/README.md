@@ -143,3 +143,13 @@ preflight/build/test outcomes into later rounds. Replayed M9/M10 failures expose
 Testability overlay for sybil, Piccolo's PostgreSQL extra, aiohttp, requests-cache, and
 python-multipart; deterministic service/executable/runner-contract cases remain outside the LLM
 space. See `M7_BOUNDED_REPAIR_SEARCH_FEEDBACK_2026-08-27.md` for exact source and run directories.
+
+## M8 CAS-protected build-script mutation
+
+M8 requires whole-file replacements to cite a complete, prompt-visible `read_file` result and its
+source SHA-256. Paged or context-truncated files use `patch_build_script`, which replaces one exact
+observed fragment under the same SHA precondition. Structured mutations share the CAS writer, and
+candidate promotion verifies both the accepted workspace's before digest and the candidate's after
+digest. The isolated real-data probe uses ccache's
+`dockerfiles/ubuntu-24.04/Dockerfile`; see `M8_CAS_BUILD_SCRIPT_MUTATION_2026-08-27.md` for its exact
+source directory, digest, diff and stale-write rejection.

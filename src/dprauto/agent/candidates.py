@@ -310,6 +310,24 @@ class RepairCandidateManager:
                     raise AgentWorkflowError(
                         f"repair candidate cannot replace a non-file path: {value}"
                     )
+                if change.before_digest is None:
+                    if destination.exists() or destination.is_symlink():
+                        raise AgentWorkflowError(
+                            "accepted workspace changed before candidate promotion: "
+                            f"expected {value} to be absent"
+                        )
+                else:
+                    if not destination.is_file():
+                        raise AgentWorkflowError(
+                            "accepted workspace changed before candidate promotion: "
+                            f"expected existing file {value}"
+                        )
+                    accepted_digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+                    if accepted_digest != change.before_digest:
+                        raise AgentWorkflowError(
+                            "accepted workspace changed before candidate promotion for "
+                            f"{value}: expected {change.before_digest}, found {accepted_digest}"
+                        )
                 backups[destination] = (
                     destination.read_bytes() if destination.is_file() else None,
                     destination.stat().st_mode if destination.exists() else None,

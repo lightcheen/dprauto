@@ -22,6 +22,34 @@ from dprauto.ports.parser import ProjectParser
 from dprauto.ports.storage import Storage
 
 
+ABSENT_SOURCE_SHA256 = "absent"
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _decode_utf8(content: bytes, path: str) -> str:
+    try:
+        return content.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ToolExecutionError(f"project file is not valid UTF-8: {path}") from exc
+
+
+def _source_sha256(target: Path) -> str:
+    return _sha256_bytes(target.read_bytes()) if target.exists() else ABSENT_SOURCE_SHA256
+
+
+def _expected_source_sha256(arguments: Mapping[str, Any]) -> str:
+    value = _text_argument(arguments, "source_sha256").casefold()
+    if value != ABSENT_SOURCE_SHA256 and not _SHA256.fullmatch(value):
+        raise ToolExecutionError(
+            "source_sha256 must be a lowercase SHA-256 digest or the literal 'absent'"
+        )
+    return value
+
+
 def _text_argument(arguments: Mapping[str, Any], name: str) -> str:
     value = arguments.get(name)
     if not isinstance(value, str) or not value.strip():
@@ -137,7 +165,8 @@ class ReadFileTool:
     description = (
         "Read up to 400 lines from one UTF-8 project file using a safe workspace-relative "
         "path. Use optional inclusive start_line/end_line to page through large files; the "
-        "result reports total_lines, truncation, and next_start_line."
+        "result reports total_lines, truncation, next_start_line, the whole-file source_sha256, "
+        "and whether this page is the complete_file."
     )
     argument_schema = {
         "type": "object",
@@ -161,9 +190,11 @@ class ReadFileTool:
         if _is_sensitive_project_path(path):
             raise PolicyViolationError(f"refused to read sensitive project file: {path}")
         _, target = _safe_target(context.workspace, path, require_file=True)
-        if target.stat().st_size > self.max_bytes:
+        raw_content = target.read_bytes()
+        if len(raw_content) > self.max_bytes:
             raise ToolExecutionError(f"project file exceeds read limit: {path}")
-        content = target.read_text(encoding="utf-8", errors="replace")
+        source_sha256 = _sha256_bytes(raw_content)
+        content = _decode_utf8(raw_content, path)
         lines = content.splitlines(keepends=True)
         total_lines = len(lines)
         if not lines:
@@ -179,6 +210,9 @@ class ReadFileTool:
                     "total_lines": 0,
                     "truncated": False,
                     "next_start_line": None,
+                    "source_sha256": source_sha256,
+                    "byte_count": len(raw_content),
+                    "complete_file": True,
                 },
             )
         start_line = int(arguments.get("start_line", 1))
@@ -210,6 +244,9 @@ class ReadFileTool:
                 "total_lines": total_lines,
                 "truncated": truncated,
                 "next_start_line": end_line + 1 if end_line < total_lines else None,
+                "source_sha256": source_sha256,
+                "byte_count": len(raw_content),
+                "complete_file": start_line == 1 and end_line == total_lines,
             },
         )
 
@@ -271,16 +308,18 @@ class ModifyBuildScriptTool:
     name = "modify_build_script"
     effect = "mutate"
     description = (
-        "Replace a policy-allowed build script (normally Dockerfile or setup.sh) and persist "
-        "a unified diff. Business source is denied by default."
+        "Replace a completely-read policy-allowed build script (normally Dockerfile or "
+        "setup.sh) using a required source SHA-256 compare-and-swap precondition, then persist "
+        "a unified diff. Use source_sha256='absent' only when creating a new file."
     )
     argument_schema = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "minLength": 1},
             "content": {"type": "string", "minLength": 1},
+            "source_sha256": {"type": "string", "minLength": 1},
         },
-        "required": ["path", "content"],
+        "required": ["path", "content", "source_sha256"],
         "additionalProperties": False,
     }
     _APT_NETWORK_OPTIONS = (
@@ -296,18 +335,22 @@ class ModifyBuildScriptTool:
         security: SecurityConfig | None = None,
         *,
         max_bytes: int = 512 * 1024,
+        bound_apt_network_waits: bool = True,
     ) -> None:
         if max_bytes <= 0:
             raise ValueError("max_bytes must be positive")
         self.storage = storage
         self.security = security or SecurityConfig()
         self.max_bytes = max_bytes
+        self.bound_apt_network_waits = bound_apt_network_waits
 
     def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
         path = _text_argument(arguments, "path")
         content = _text_argument(arguments, "content")
+        expected_sha256 = _expected_source_sha256(arguments)
         requested_content = content
-        content = self._bound_apt_network_waits(path, content)
+        if self.bound_apt_network_waits:
+            content = self._bound_apt_network_waits(path, content)
         encoded = content.encode("utf-8")
         if len(encoded) > self.max_bytes:
             raise ToolExecutionError(f"replacement exceeds mutation limit: {path}")
@@ -323,7 +366,15 @@ class ModifyBuildScriptTool:
         _, target = _safe_target(context.workspace, path, require_file=False)
         if target.is_symlink() or (target.exists() and not target.is_file()):
             raise ToolExecutionError(f"mutation target is not a regular file: {path}")
-        before = target.read_text(encoding="utf-8", errors="replace") if target.exists() else ""
+        existed = target.exists()
+        before_bytes = target.read_bytes() if existed else b""
+        actual_sha256 = _sha256_bytes(before_bytes) if existed else ABSENT_SOURCE_SHA256
+        if actual_sha256 != expected_sha256:
+            raise ToolExecutionError(
+                f"source changed before mutation for {path}: expected {expected_sha256}, "
+                f"found {actual_sha256}"
+            )
+        before = _decode_utf8(before_bytes, path)
         if before == content:
             return ToolResult(
                 self.name,
@@ -333,6 +384,8 @@ class ModifyBuildScriptTool:
                     "path": path,
                     "changed": False,
                     "bounded_apt_network_retries": content != requested_content,
+                    "source_sha256_before": actual_sha256,
+                    "source_sha256_after": actual_sha256,
                 },
                 environment_diff=EnvironmentDiff(summary=f"no change to {path}"),
             )
@@ -353,8 +406,8 @@ class ModifyBuildScriptTool:
             temporary.unlink(missing_ok=True)
             raise ToolExecutionError(f"failed to modify {path}: {exc}") from exc
 
-        before_digest = hashlib.sha256(before.encode()).hexdigest() if before else None
-        after_digest = hashlib.sha256(encoded).hexdigest()
+        before_digest = actual_sha256 if existed else None
+        after_digest = _sha256_bytes(encoded)
         patch = "".join(
             difflib.unified_diff(
                 before.splitlines(keepends=True),
@@ -375,7 +428,7 @@ class ModifyBuildScriptTool:
         after_image = self._base_image(content) if is_dockerfile else None
         file_change = FileChange(
             path=PurePosixPath(path).as_posix(),
-            kind=ChangeKind.MODIFIED if before else ChangeKind.ADDED,
+            kind=ChangeKind.MODIFIED if existed else ChangeKind.ADDED,
             before_digest=before_digest,
             after_digest=after_digest,
         )
@@ -409,6 +462,8 @@ class ModifyBuildScriptTool:
                 "path": path,
                 "changed": True,
                 "bounded_apt_network_retries": content != requested_content,
+                "source_sha256_before": actual_sha256,
+                "source_sha256_after": after_digest,
             },
             artifacts=(artifact,),
             environment_diff=environment_diff,
@@ -439,3 +494,104 @@ class ModifyBuildScriptTool:
                 )
             )
         return "".join(lines)
+
+
+class PatchBuildScriptTool:
+    """Apply one exact, CAS-protected text replacement to a build script."""
+
+    name = "patch_build_script"
+    effect = "mutate"
+    description = (
+        "Replace exactly one occurrence of old_content in a policy-allowed existing build "
+        "script. source_sha256 must match the digest returned by read_file. This is preferred "
+        "for large or paged files because it does not require resending the whole file."
+    )
+    argument_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "source_sha256": {"type": "string", "minLength": 1},
+            "old_content": {"type": "string", "minLength": 1},
+            "new_content": {"type": "string"},
+        },
+        "required": ["path", "source_sha256", "old_content", "new_content"],
+        "additionalProperties": False,
+    }
+
+    def __init__(
+        self,
+        storage: Storage,
+        security: SecurityConfig | None = None,
+        *,
+        max_fragment_bytes: int = 64 * 1024,
+    ) -> None:
+        if max_fragment_bytes <= 0:
+            raise ValueError("max_fragment_bytes must be positive")
+        self.mutator = ModifyBuildScriptTool(
+            storage,
+            security,
+            bound_apt_network_waits=False,
+        )
+        self.max_fragment_bytes = max_fragment_bytes
+
+    def invoke(self, arguments: Mapping[str, Any], context: ToolContext) -> ToolResult:
+        path = _text_argument(arguments, "path")
+        expected_sha256 = _expected_source_sha256(arguments)
+        if expected_sha256 == ABSENT_SOURCE_SHA256:
+            raise ToolExecutionError("patch_build_script requires an existing source file")
+        old_content = _text_argument(arguments, "old_content")
+        new_content = arguments.get("new_content")
+        if not isinstance(new_content, str):
+            raise ToolExecutionError("tool argument 'new_content' must be a string")
+        if old_content == new_content:
+            raise ToolExecutionError("patch_build_script must change old_content")
+        if any(
+            len(value.encode("utf-8")) > self.max_fragment_bytes
+            for value in (old_content, new_content)
+        ):
+            raise ToolExecutionError("build-script patch fragment exceeds mutation limit")
+
+        is_build_script = any(
+            fnmatch.fnmatchcase(PurePosixPath(path).as_posix(), pattern)
+            for pattern in self.mutator.security.allowed_mutation_globs
+        )
+        if not is_build_script and not self.mutator.security.allow_source_changes:
+            raise PolicyViolationError(
+                f"business source mutation is disabled; refused to modify {path}"
+            )
+        _, target = _safe_target(context.workspace, path, require_file=True)
+        source_bytes = target.read_bytes()
+        actual_sha256 = _sha256_bytes(source_bytes)
+        if actual_sha256 != expected_sha256:
+            raise ToolExecutionError(
+                f"source changed before mutation for {path}: expected {expected_sha256}, "
+                f"found {actual_sha256}"
+            )
+        content = _decode_utf8(source_bytes, path)
+        occurrences = content.count(old_content)
+        if occurrences != 1:
+            raise ToolExecutionError(
+                "patch_build_script old_content must match exactly once; "
+                f"found {occurrences} occurrences in {path}"
+            )
+        result = self.mutator.invoke(
+            {
+                "path": path,
+                "content": content.replace(old_content, new_content, 1),
+                "source_sha256": expected_sha256,
+            },
+            context,
+        )
+        return ToolResult(
+            self.name,
+            result.succeeded,
+            result.summary.replace("updated", "patched", 1),
+            data={
+                **result.data,
+                "exact_patch": True,
+                "old_content_bytes": len(old_content.encode("utf-8")),
+                "new_content_bytes": len(new_content.encode("utf-8")),
+            },
+            artifacts=result.artifacts,
+            environment_diff=result.environment_diff,
+        )

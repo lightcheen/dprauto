@@ -337,13 +337,17 @@ START -> investigate/read-only evidence -> analyze_failure -> plan_fix
 - LLM 先通过最多三轮只读调查选择 `list_project_files`、`read_file` 或
   `search_project`，Evidence Pack 达到充分条件或预算上限后才分析失败并输出严格 JSON 的
   `FixPlan`/ToolCall。调查阶段不能运行命令、构建或修改文件；重复调查动作会停止。
-- `read_file`、`search_project`、`modify_build_script`、`run_command` 等 Tool 执行真实操作；
+- `read_file`、`search_project`、`patch_build_script`、`modify_build_script`、`run_command` 等
+  Tool 执行真实操作；
   每个 Tool 都声明严格参数 schema，并在副作用发生前校验。重建由 LangGraph 的
   `execute/rebuild` 节点统一调度，不允许 LLM 在修复动作内重复触发。
 - 默认只允许修改 `Dockerfile`、`setup.sh` 和固定的 Testability Overlay。路径穿越、symlink
   目标、业务源码修改、shell 命令和未被项目解析/构建计划识别的命令会被拒绝。
 - `.env`、私钥和证书文件不会被只读调查读取或被项目搜索返回；`.env.example`、
   `.env.sample` 和 `.env.template` 仍可作为无凭据配置证据。
+- `read_file` 的每一页都携带整个源文件的 SHA-256、字节数、总行数和 `complete_file`；内容被
+  分页或 LLM context 再裁剪后不会继续标记为完整。`patch_build_script` 只允许使用 prompt 中
+  可见的精确旧片段，并要求它在同一 SHA 版本中恰好出现一次，适合大文件局部修改。
 - 常见环境修复优先使用 `patch_system_packages`、`patch_python_dependencies` 和
   `patch_base_image`：它们只接收有界字面值，在 Dockerfile 中生成或更新一个带标记的最小
   块，并继续保存 unified diff。系统包工具不接收 shell/options，Python 工具不接收 URL、
@@ -353,7 +357,10 @@ START -> investigate/read-only evidence -> analyze_failure -> plan_fix
   添加到最终运行镜像。
 - 每轮只允许修改一个高风险环境维度。计划阶段拒绝 system/Python/runtime 工具混用，实际
   `EnvironmentDiff` 再复核 runtime、system packages、Python dependencies 和 startup；
-  `modify_build_script` 仅作为无法用结构化工具表达的单动作兜底，不能用来绕过上述限制。
+  `modify_build_script` 仅作为无法用结构化/精确 patch 表达的单动作兜底：已有文件必须有读取
+  到 EOF 且未被 context 裁剪的完整证明，并携带对应 `source_sha256`；新文件必须显式使用
+  `source_sha256=absent`。所有结构化、局部和整文件写入最终都进行 compare-and-swap，源文件
+  在计划后变化时拒绝覆盖，不能用来绕过上述限制。
 - 计划前会按失败阶段、类别和直接日志证据生成有界 repair search space。Testability 缺模块、
   插件或明确的 collection 兼容问题只暴露临时 verification overlay；系统包、Python 包、运行时
   和超时缩减各自只暴露相关工具。pytest/tox/nox 控制面冲突、Django 初始化和系统 executable

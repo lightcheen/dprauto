@@ -244,6 +244,9 @@ class AgentContextManager:
                 "end_line",
                 "total_lines",
                 "next_start_line",
+                "source_sha256",
+                "byte_count",
+                "complete_file",
                 "new_context_characters",
                 "seen_node_count",
                 "graph_truncated",
@@ -281,8 +284,8 @@ class AgentContextManager:
         state: AgentState,
         observations: tuple[ToolResult, ...],
         character_limit: int,
-    ) -> tuple[dict[str, str], ...]:
-        scripts: dict[str, str] = {}
+    ) -> tuple[dict[str, Any], ...]:
+        scripts: dict[str, dict[str, Any]] = {}
         profile = state.get("project_profile")
         allowed_paths = {".dprauto/requirements-verification.txt"}
         if profile:
@@ -299,25 +302,44 @@ class AgentContextManager:
                 and path in allowed_paths
                 and isinstance(content, str)
             ):
-                scripts[path] = AgentContextManager._bounded_text(
-                    content,
-                    character_limit,
-                )
+                bounded = AgentContextManager._bounded_text(content, character_limit)
+                entry = {
+                    "path": path,
+                    "content": bounded,
+                    "source_sha256": observation.data.get("source_sha256", ""),
+                    "total_lines": observation.data.get("total_lines"),
+                    "complete_file": bool(observation.data.get("complete_file"))
+                    and bounded == content,
+                    "truncated": bool(observation.data.get("truncated"))
+                    or bounded != content,
+                }
+                previous = scripts.get(path)
+                if previous is None or entry["complete_file"] or not previous["complete_file"]:
+                    scripts[path] = entry
         if plan:
             for generated in plan.generated_files:
                 name = PurePosixPath(generated.path).name.lower()
                 if name == "setup.sh" or name.startswith("dockerfile"):
+                    bounded = AgentContextManager._bounded_text(
+                        generated.content,
+                        character_limit,
+                    )
                     scripts.setdefault(
                         generated.path,
-                        AgentContextManager._bounded_text(
-                            generated.content,
-                            character_limit,
-                        ),
+                        {
+                            "path": generated.path,
+                            "content": bounded,
+                            "source_sha256": hashlib.sha256(
+                                generated.content.encode("utf-8")
+                            ).hexdigest(),
+                            "total_lines": len(
+                                generated.content.splitlines(keepends=True)
+                            ),
+                            "complete_file": bounded == generated.content,
+                            "truncated": bounded != generated.content,
+                        },
                     )
-        return tuple(
-            {"path": path, "content": content}
-            for path, content in sorted(scripts.items())
-        )
+        return tuple(scripts[path] for path in sorted(scripts))
 
     @staticmethod
     def _bounded_text(value: str, character_limit: int) -> str:
@@ -361,6 +383,11 @@ class AgentContextManager:
                     content,
                     middle,
                 )
+                if candidate_data[text_key] != content and text_key == "content":
+                    if "complete_file" in candidate_data:
+                        candidate_data["complete_file"] = False
+                    if "truncated" in candidate_data:
+                        candidate_data["truncated"] = True
                 candidate = {**record, "data": candidate_data}
                 if len(to_json_bytes(candidate).decode()) <= character_limit:
                     best = candidate_data[text_key]
@@ -368,6 +395,12 @@ class AgentContextManager:
                 else:
                     upper = middle - 1
             data[text_key] = best
+            if (
+                best != content
+                and text_key == "content"
+                and "complete_file" in data
+            ):
+                data["complete_file"] = False
             fitted = {**record, "data": data}
             if len(to_json_bytes(fitted).decode()) <= character_limit:
                 return fitted

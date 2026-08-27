@@ -15,6 +15,7 @@ from dprauto.domain.models import (
     FileChange,
     GeneratedFile,
 )
+from dprauto.errors import AgentWorkflowError
 
 
 def digest(content: str) -> str:
@@ -124,6 +125,43 @@ class RepairCandidateManagerTests(unittest.TestCase):
             self.assertEqual(rejected.status, "rejected")
             self.assertFalse((workspace / "Dockerfile").exists())
             self.assertFalse((workspace / "setup.sh").exists())
+
+    def test_accept_rejects_concurrent_change_to_accepted_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            original = "FROM python:3.11-slim\n"
+            external = "FROM python:3.12-slim\n"
+            candidate_content = original + "RUN python --version\n"
+            (workspace / "Dockerfile").write_text(original, encoding="utf-8")
+            storage = LocalArtifactStorage(workspace / "artifacts")
+            manager = RepairCandidateManager(storage)
+            self.addCleanup(manager.close)
+            candidate = manager.create({"workspace": str(workspace)}, 1)
+            self.addCleanup(manager.cleanup, candidate)
+            Path(candidate.workspace, "Dockerfile").write_text(
+                candidate_content,
+                encoding="utf-8",
+            )
+            change = FileChange(
+                "Dockerfile",
+                ChangeKind.MODIFIED,
+                digest(original),
+                digest(candidate_content),
+            )
+            diff = EnvironmentDiff(files=(change,), build_scripts=(change,))
+            candidate = manager.with_diff(candidate, diff, diff)
+            (workspace / "Dockerfile").write_text(external, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                AgentWorkflowError,
+                "accepted workspace changed before candidate promotion",
+            ):
+                manager.accept(candidate)
+
+            self.assertEqual(
+                (workspace / "Dockerfile").read_text(encoding="utf-8"),
+                external,
+            )
 
     def test_multiround_candidate_promotes_the_entire_candidate_chain(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

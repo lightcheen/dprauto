@@ -12,11 +12,14 @@ from dprauto.agent.models import (
     FixPlan,
     InvestigationDecision,
     ToolCall,
+    ToolContext,
     ToolResult,
 )
 from dprauto.agent.state import create_agent_state
 from dprauto.agent.tools import (
     ListProjectFilesTool,
+    ModifyBuildScriptTool,
+    PatchBuildScriptTool,
     PatchPythonDependenciesTool,
     PatchSystemPackagesTool,
     PatchVerificationDependenciesTool,
@@ -622,6 +625,161 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertIn("one high-risk environment dimension", reason)
         self.assertIn("python-dependencies", reason)
         self.assertIn("system-packages", reason)
+
+    def test_whole_file_plan_requires_complete_matching_read_proof(self) -> None:
+        tools = ToolRegistry(
+            (
+                ReadFileTool(max_lines=100),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                ModifyBuildScriptTool(self.storage),
+                PatchBuildScriptTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        content = "".join(f"RUN step-{number}\n" for number in range(1, 301))
+        (self.root / "Dockerfile").write_text(content, encoding="utf-8")
+        observation = tools.invoke(
+            "read_file",
+            {"path": "Dockerfile"},
+            ToolContext("proof-run", 0, str(self.root)),
+        )
+        state = self.initial_state(failure())
+        state["tool_results"] = (observation,)
+        plan = FixPlan(
+            "replace the whole paged file",
+            (
+                ToolCall(
+                    "modify_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "content": content.replace("step-20", "step-twenty"),
+                        "source_sha256": observation.data["source_sha256"],
+                    },
+                ),
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, failure(), state)
+
+        self.assertIn("complete read_file proof through EOF", reason)
+        self.assertIn("use patch_build_script", reason)
+
+    def test_whole_file_plan_accepts_complete_matching_read_proof(self) -> None:
+        tools = ToolRegistry(
+            (
+                ReadFileTool(),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                ModifyBuildScriptTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        observation = tools.invoke(
+            "read_file",
+            {"path": "Dockerfile"},
+            ToolContext("complete-proof-run", 0, str(self.root)),
+        )
+        state = self.initial_state(failure())
+        state["tool_results"] = (observation,)
+        plan = FixPlan(
+            "replace a completely observed file",
+            (
+                ToolCall(
+                    "modify_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "content": "FROM scratch\nRUN true\n",
+                        "source_sha256": observation.data["source_sha256"],
+                    },
+                ),
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, failure(), state)
+
+        self.assertEqual(reason, "")
+
+    def test_exact_patch_plan_accepts_prompt_visible_paged_evidence(self) -> None:
+        tools = ToolRegistry(
+            (
+                ReadFileTool(max_lines=100),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                ModifyBuildScriptTool(self.storage),
+                PatchBuildScriptTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        content = "".join(f"RUN step-{number}\n" for number in range(1, 301))
+        (self.root / "Dockerfile").write_text(content, encoding="utf-8")
+        observation = tools.invoke(
+            "read_file",
+            {"path": "Dockerfile"},
+            ToolContext("patch-proof-run", 0, str(self.root)),
+        )
+        state = self.initial_state(failure())
+        state["tool_results"] = (observation,)
+        plan = FixPlan(
+            "patch one observed instruction",
+            (
+                ToolCall(
+                    "patch_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "source_sha256": observation.data["source_sha256"],
+                        "old_content": "RUN step-20\n",
+                        "new_content": "RUN step-20 --bounded\n",
+                    },
+                ),
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, failure(), state)
+
+        self.assertEqual(reason, "")
+
+    def test_exact_patch_plan_rejects_unobserved_anchor(self) -> None:
+        tools = ToolRegistry(
+            (
+                ReadFileTool(max_lines=100),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchBuildScriptTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        content = "".join(f"RUN step-{number}\n" for number in range(1, 301))
+        (self.root / "Dockerfile").write_text(content, encoding="utf-8")
+        observation = tools.invoke(
+            "read_file",
+            {"path": "Dockerfile"},
+            ToolContext("patch-proof-run", 0, str(self.root)),
+        )
+        state = self.initial_state(failure())
+        state["tool_results"] = (observation,)
+        plan = FixPlan(
+            "patch an instruction outside the observed page",
+            (
+                ToolCall(
+                    "patch_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "source_sha256": observation.data["source_sha256"],
+                        "old_content": "RUN step-250\n",
+                        "new_content": "RUN step-250 --unseen\n",
+                    },
+                ),
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, failure(), state)
+
+        self.assertIn("prompt-visible read_file evidence", reason)
 
     def test_plan_rejects_verification_overlay_outside_test_stage(self) -> None:
         tools = ToolRegistry(

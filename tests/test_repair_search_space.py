@@ -15,6 +15,7 @@ def specifications():
         for name in (
             "modify_build_script",
             "patch_base_image",
+            "patch_build_script",
             "patch_python_dependencies",
             "patch_system_packages",
             "patch_verification_dependencies",
@@ -95,9 +96,13 @@ class RepairSearchSpaceTests(unittest.TestCase):
             evidence=("timeout_profile=python-package-install",),
         )
 
-        _, tools = bounded_repair_search_space(failure, specifications())
+        metadata, tools = bounded_repair_search_space(failure, specifications())
 
-        self.assertEqual(tuple(tools), ("modify_build_script",))
+        self.assertEqual(
+            tuple(tools),
+            ("modify_build_script", "patch_build_script"),
+        )
+        self.assertEqual(metadata["preferred_tools"], ("patch_build_script",))
 
     def test_system_and_python_failures_have_distinct_spaces(self) -> None:
         system = FailureInfo(
@@ -120,11 +125,11 @@ class RepairSearchSpaceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(system_tools),
-            ("modify_build_script", "patch_system_packages"),
+            ("modify_build_script", "patch_build_script", "patch_system_packages"),
         )
         self.assertEqual(
             tuple(python_tools),
-            ("modify_build_script", "patch_python_dependencies"),
+            ("modify_build_script", "patch_build_script", "patch_python_dependencies"),
         )
 
     def test_failure_family_ignores_volatile_numbers_but_keeps_missing_module(self) -> None:
