@@ -132,12 +132,28 @@ class MultilangProjectParserTests(unittest.TestCase):
             (root / "src/main.c").write_text("int helper(void) { return 0; }\n", encoding="utf-8")
             (root / "src/lib.cpp").write_text("int value() { return 1; }\n", encoding="utf-8")
             (root / "tests/test.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+            (root / "tests/legacy.py").write_text(
+                "#!/usr/bin/python2\nprint 'legacy'\n",
+                encoding="utf-8",
+            )
+            (root / "tests/optional.py").write_text(
+                "#!/usr/bin/python3\nprint('optional')\n",
+                encoding="utf-8",
+            )
+            (root / "tests/docker").mkdir()
+            (root / "tests/docker/Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
             (root / "CMakeLists.txt").write_text(
                 """cmake_minimum_required(VERSION 3.20)
 project(native_demo)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
+option(ENABLE_TESTS "Build tests" ON)
+option(NATIVE_DEVELOPER_MODE "Enable developer targets" OFF)
 enable_testing()
+add_custom_target(all_tests COMMAND tests/legacy.py)
 add_subdirectory(src)
 add_subdirectory(tests)
 """,
@@ -153,6 +169,13 @@ add_subdirectory(tests)
                 {"c_standard": "11", "cpp_standard": "20"},
             )
             self.assertEqual(profile.metadata["subprojects"], ("src", "tests"))
+            self.assertEqual(
+                profile.metadata["cmake_configuration_arguments"],
+                ("-DENABLE_TESTS=ON", "-DNATIVE_DEVELOPER_MODE=ON"),
+            )
+            self.assertEqual(profile.metadata["cmake_test_build_target"], "all_tests")
+            self.assertEqual(profile.metadata["test_required_executables"], ("python2",))
+            self.assertEqual(profile.dockerfiles, ())
             self.assertEqual(
                 profile.metadata["build_pipeline"],
                 ("cmake -S . -B build", "cmake --build build"),
@@ -179,6 +202,37 @@ add_subdirectory(tests)
                 ("./autogen.sh", "./configure", "make"),
             )
             self.assertIn("make check", self._commands(profile, CommandPurpose.TEST))
+
+    def test_native_root_cli_gets_runtime_probe_but_library_examples_do_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "README.md").write_text(
+                "## Quickstart\n\n```sh\n./demo_example\n```\n",
+                encoding="utf-8",
+            )
+            (root / "main.cpp").write_text(
+                'int main() { return 0; } // accepts --version\n',
+                encoding="utf-8",
+            )
+            (root / "CMakeLists.txt").write_text(
+                "project(demo)\nadd_executable(demo main.cpp)\n",
+                encoding="utf-8",
+            )
+
+            cli = self.parser.parse(SourceReference("fixture://cli"), root)
+            self.assertEqual(cli.project_type, cli.project_type.CLI)
+            self.assertIn(
+                "build/demo --version",
+                self._commands(cli, CommandPurpose.RUN),
+            )
+
+            (root / "CMakeLists.txt").write_text(
+                "project(demo)\nadd_library(demo main.cpp)\n",
+                encoding="utf-8",
+            )
+            library = self.parser.parse(SourceReference("fixture://library"), root)
+            self.assertEqual(library.project_type, library.project_type.LIBRARY)
+            self.assertFalse(self._commands(library, CommandPurpose.RUN))
 
     def test_registry_rejects_duplicate_parser_names(self) -> None:
         parser = self.parser.registry.registrations[0].parser
@@ -246,7 +300,7 @@ add_subdirectory(tests)
             case for case in manifest["cases"] if case["source"]["state"] == "ready"
         ]
 
-        self.assertEqual(len(ready_cases), 17)
+        self.assertEqual(len(ready_cases), 21)
         for case in ready_cases:
             with self.subTest(case_id=case["case_id"]):
                 source_path = Path(case["source"]["path"])
@@ -291,7 +345,7 @@ add_subdirectory(tests)
             (JVMTemplateStrategy(None), NativeTemplateStrategy(None))  # type: ignore[arg-type]
         )
 
-        self.assertEqual(len(cases), 9)
+        self.assertEqual(len(cases), 13)
         for case in cases:
             with self.subTest(case_id=case["case_id"]):
                 source_path = Path(case["source"]["path"])

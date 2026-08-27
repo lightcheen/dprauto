@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -83,6 +84,22 @@ def _is_ordinary_test_command(command: str) -> bool:
     if any(token in {"mvn", "mvnw", "gradlew"} for token in tokens) and "test" in tokens:
         return True
     return "make" in tokens and any(token in {"test", "check"} for token in tokens)
+
+
+def _local_git_head(path: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=path,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip().casefold() if result.returncode == 0 else ""
 
 
 def validate_manifest(
@@ -160,7 +177,32 @@ def validate_manifest(
         if state == "ready":
             _require(bool(source.get("revision")), f"{label}: ready source needs a revision", errors)
             if isinstance(path_value, str):
-                _require(Path(path_value).is_dir(), f"{label}: ready source directory is missing: {path_value}", errors)
+                source_path = Path(path_value)
+                _require(source_path.is_dir(), f"{label}: ready source directory is missing: {path_value}", errors)
+                # Dataset exports may intentionally omit .git metadata. Sources
+                # fetched directly by this suite carry a URL and must match the
+                # pinned local checkout during strict evaluation.
+                if (
+                    strict_sources
+                    and source_path.is_dir()
+                    and source.get("revision")
+                    and source.get("url")
+                ):
+                    actual_revision = _local_git_head(source_path)
+                    expected_revision = str(source["revision"]).casefold()
+                    _require(
+                        bool(actual_revision),
+                        f"{label}: strict source has no readable git HEAD: {path_value}",
+                        errors,
+                    )
+                    _require(
+                        actual_revision.startswith(expected_revision),
+                        (
+                            f"{label}: local git HEAD {actual_revision or '<missing>'} "
+                            f"does not match pinned revision {expected_revision}"
+                        ),
+                        errors,
+                    )
         elif state == "fetch_required":
             _require(bool(source.get("url")), f"{label}: fetch_required source needs a URL", errors)
             _require(bool(source.get("revision_note")), f"{label}: unpinned source needs a revision_note", errors)

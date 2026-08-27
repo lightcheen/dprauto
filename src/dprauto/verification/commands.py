@@ -37,10 +37,18 @@ class TestCommandSelector:
 
     __test__ = False
 
-    def __init__(self, *, max_test_files: int = 8) -> None:
+    def __init__(
+        self,
+        *,
+        max_test_files: int = 8,
+        max_parallel_workers: int = 1,
+    ) -> None:
         if not 1 <= max_test_files <= 32:
             raise ValueError("max_test_files must be between 1 and 32")
+        if not 1 <= max_parallel_workers <= 32:
+            raise ValueError("max_parallel_workers must be between 1 and 32")
         self.max_test_files = max_test_files
+        self.max_parallel_workers = max_parallel_workers
 
     def select(
         self,
@@ -88,6 +96,7 @@ class TestCommandSelector:
         original = selected.command
         bounded, targets, reason = self._bounded_local_command(profile, selected)
         capture_safe = self._with_pytest_capture_disabled(profile, bounded)
+        parallel_safe = self._with_ctest_parallelism(capture_safe)
         kinds: list[str] = []
         if targets:
             kinds.append("bounded-file-slice")
@@ -99,13 +108,47 @@ class TestCommandSelector:
                 "; disabled pytest output capture because project source rewraps "
                 "sys.stdout/sys.stderr at import time"
             )
+        if parallel_safe.command != capture_safe.command:
+            kinds.append("ctest-bounded-parallel")
+            reason += f"; bounded CTest concurrency to {self.max_parallel_workers} workers"
         kind = "+".join(kinds) or "project-command"
         return TestCommandSelection(
-            capture_safe,
+            parallel_safe,
             original,
             kind,
             targets,
             reason,
+        )
+
+    def _with_ctest_parallelism(self, command: ProjectCommand) -> ProjectCommand:
+        if self.max_parallel_workers <= 1:
+            return command
+        try:
+            tokens = shlex.split(command.command.display)
+        except ValueError:
+            return command
+        if (
+            not tokens
+            or PurePosixPath(tokens[0]).name.casefold() != "ctest"
+            or any(
+                token in {"-j", "--parallel"}
+                or token.startswith(("-j", "--parallel="))
+                for token in tokens[1:]
+            )
+        ):
+            return command
+        spec = CommandSpec(
+            (*tokens, "--parallel", str(self.max_parallel_workers)),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+        )
+        return ProjectCommand(
+            command.name,
+            spec,
+            f"parallel-safe:{command.source}",
+            command.confidence,
         )
 
     def _bounded_local_command(

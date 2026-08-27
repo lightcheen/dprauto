@@ -39,7 +39,8 @@ class TestabilityVerifier:
         self.runtime = runtime
         self.config = config or VerificationConfig()
         self.selector = selector or TestCommandSelector(
-            max_test_files=self.config.max_test_files_per_slice
+            max_test_files=self.config.max_test_files_per_slice,
+            max_parallel_workers=self.config.max_parallel_test_workers,
         )
         self.environment_planner = environment_planner or TestEnvironmentPlanner(self.config)
         self.dependency_planner = dependency_planner or TestDependencyPlanner(

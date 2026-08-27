@@ -32,19 +32,18 @@ class MultilangEvaluationTests(unittest.TestCase):
 
         self.assertEqual(report["case_count"], 21)
         self.assertEqual(report["languages"], {"c": 4, "cpp": 5, "java": 4, "python": 8})
-        self.assertEqual(report["source_states"], {"fetch_required": 4, "ready": 17})
-        self.assertEqual(report["ground_truth_review"], {"provisional_source_missing": 4, "reviewed": 17})
-        self.assertEqual(len(report["fetch_required_case_ids"]), 4)
+        self.assertEqual(report["source_states"], {"ready": 21})
+        self.assertEqual(report["ground_truth_review"], {"reviewed": 21})
+        self.assertEqual(report["fetch_required_case_ids"], [])
         self.assertFalse(report["execution_performed"])
 
-    def test_strict_validation_rejects_unfetched_cxxcrafter_sources(self) -> None:
-        with self.assertRaisesRegex(ManifestValidationError, "source must be fetched and pinned"):
-            validate_manifest(
-                self.manifest,
-                self.ground_truth,
-                manifest_path=DEFAULT_MANIFEST,
-                strict_sources=True,
-            )
+    def test_strict_validation_accepts_pinned_cxxcrafter_sources(self) -> None:
+        validate_manifest(
+            self.manifest,
+            self.ground_truth,
+            manifest_path=DEFAULT_MANIFEST,
+            strict_sources=True,
+        )
 
     def test_test_command_cannot_be_replaced_by_download_command(self) -> None:
         ground_truth = copy.deepcopy(self.ground_truth)
@@ -71,6 +70,18 @@ class MultilangEvaluationTests(unittest.TestCase):
                 manifest,
                 self.ground_truth,
                 manifest_path=DEFAULT_MANIFEST,
+            )
+
+    def test_strict_validation_rejects_a_revision_not_at_local_head(self) -> None:
+        manifest = copy.deepcopy(self.manifest)
+        manifest["cases"][-1]["source"]["revision"] = "0" * 40
+
+        with self.assertRaisesRegex(ManifestValidationError, "does not match pinned revision"):
+            validate_manifest(
+                manifest,
+                self.ground_truth,
+                manifest_path=DEFAULT_MANIFEST,
+                strict_sources=True,
             )
 
     def test_ground_truth_must_cover_every_manifest_case_once(self) -> None:

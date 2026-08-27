@@ -159,6 +159,26 @@ def build_context(
 
 
 class CommandSelectionTests(unittest.TestCase):
+    def test_ctest_parallelism_is_bounded_by_verification_policy(self) -> None:
+        selected = TestCommandSelector(max_parallel_workers=4).select_with_details(
+            profile(
+                ProjectType.LIBRARY,
+                project_command(
+                    "ctest --test-dir build --output-on-failure",
+                    CommandPurpose.TEST,
+                    "inferred:CMakeLists.txt:test-layout",
+                ),
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(
+            selected.command.command.display,
+            "ctest --test-dir build --output-on-failure --parallel 4",
+        )
+        self.assertIn("ctest-bounded-parallel", selected.kind)
+
     def test_standard_jvm_test_beats_special_ci_test_target(self) -> None:
         selected = TestCommandSelector().select(
             ProjectProfile(

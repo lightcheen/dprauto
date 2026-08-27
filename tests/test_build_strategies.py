@@ -79,7 +79,15 @@ def jvm_profile(*, system="maven", wrapper=True, java="17", commands=()):
     )
 
 
-def native_profile(*, system="cmake", languages=("C++",), build_files=()):
+def native_profile(
+    *,
+    system="cmake",
+    languages=("C++",),
+    build_files=(),
+    metadata=None,
+    project_type=ProjectType.LIBRARY,
+    commands=(),
+):
     defaults = {
         "cmake": ("CMakeLists.txt",),
         "meson": ("meson.build",),
@@ -90,10 +98,11 @@ def native_profile(*, system="cmake", languages=("C++",), build_files=()):
         "example-native",
         SourceReference("fixture", revision="789abc"),
         languages=languages,
-        project_type=ProjectType.LIBRARY,
+        project_type=project_type,
         package_managers=(system,),
         build_files=build_files or defaults[system],
-        metadata={"primary_build_system": system},
+        commands=commands,
+        metadata={"primary_build_system": system, **(metadata or {})},
     )
 
 
@@ -170,15 +179,22 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertEqual(plan.strategy, "native-template")
         self.assertEqual(plan.metadata["build_system"], "cmake")
         self.assertEqual(
+            {item.path for item in plan.generated_files},
+            {"Dockerfile", "Dockerfile.dockerignore"},
+        )
+        self.assertIn(".git", plan.generated_files[1].content)
+        self.assertEqual(
             plan.metadata["build_commands"],
-            ("cmake -S . -B build", "cmake --build build --parallel 2"),
+            ("cmake -S . -B build", "cmake --build build --parallel 4"),
         )
         self.assertEqual(
             plan.metadata["system_packages"],
             ("ca-certificates", "g++", "make", "pkg-config", "cmake"),
         )
         self.assertIn("apt-get", dockerfile)
+        self.assertIn("USER root", dockerfile)
         self.assertIn("DPRAUTO_NATIVE_BUILD_OK", dockerfile)
+        self.assertIn('test "$count" -gt 0', plan.metadata["runtime_probe_command"])
 
     def test_native_autotools_bootstraps_only_when_root_requires_it(self) -> None:
         generated = NativeTemplateStrategy(self.runner, self.config).create_plan(
@@ -195,6 +211,30 @@ class BuildStrategyTests(unittest.TestCase):
             configured.metadata["build_commands"][0],
             "chmod +x ./configure && ./configure",
         )
+
+    def test_native_cmake_builds_declared_ordinary_test_target_only(self) -> None:
+        plan = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(metadata={"cmake_test_build_target": "all_tests"})
+        )
+
+        self.assertEqual(
+            plan.metadata["build_commands"][1],
+            "cmake --build build --target all_tests --parallel 4",
+        )
+
+    def test_native_cli_runnability_executes_the_root_binary(self) -> None:
+        run = ProjectCommand(
+            "run-1",
+            CommandSpec(("build/demo --version",), purpose=CommandPurpose.RUN, shell=True),
+            "inferred:root-executable-target",
+            0.9,
+        )
+        plan = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(project_type=ProjectType.CLI, commands=(run,))
+        )
+
+        self.assertEqual(plan.metadata["runtime_probe_type"], "native-cli-command")
+        self.assertIn("build/demo --version", plan.metadata["runtime_probe_command"])
 
     def test_runner_clamps_command_timeout_to_remaining_budget(self) -> None:
         strategy = TemplateStrategy(self.runner, self.config)

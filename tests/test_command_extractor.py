@@ -148,6 +148,30 @@ steps:
         self.assertEqual(by_text["./gradlew spotlessCheck"], CommandPurpose.OTHER)
         self.assertEqual(by_text["make fuzz"], CommandPurpose.OTHER)
 
+    def test_ci_container_and_run_named_helpers_are_not_application_entries(self) -> None:
+        workflow = """
+steps:
+  - run: docker run --rm toolchain-image make test
+  - run: bash ./p2996/run_docker.sh bash
+  - run: ./linkandrun jsonexamples/twitter.json
+"""
+
+        commands = CommandExtractor().extract_ci(".github/workflows/ci.yml", workflow)
+        by_text = {command.text: command.purpose for command in commands}
+
+        self.assertEqual(
+            by_text["docker run --rm toolchain-image make test"],
+            CommandPurpose.OTHER,
+        )
+        self.assertEqual(
+            by_text["bash ./p2996/run_docker.sh bash"],
+            CommandPurpose.OTHER,
+        )
+        self.assertEqual(
+            by_text["./linkandrun jsonexamples/twitter.json"],
+            CommandPurpose.OTHER,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

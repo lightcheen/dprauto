@@ -342,6 +342,7 @@ class CommandExtractor:
     def _classify(command: str, context: str) -> CommandPurpose:
         combined = f"{context} {command}".lower()
         command_lower = command.lower()
+        ci_context = context.strip().casefold() == "ci"
         # Installation is checked before tests because dependency commands may
         # legitimately contain package names such as pytest.
         if re.search(
@@ -359,6 +360,16 @@ class CommandExtractor:
             return CommandPurpose.INSTALL
         if re.search(r"\bmake\s+(?:install|setup|dependencies|deps)\b", command_lower):
             return CommandPurpose.INSTALL
+
+        # A CI job may use a container or a helper whose name contains "run"
+        # to prepare a toolchain, cross-compile, or execute one matrix leg. It
+        # is orchestration evidence, not evidence of the repository's normal
+        # application entrypoint.
+        if ci_context and re.search(
+            r"\bdocker\s+(?:run|compose\s+up)\b",
+            command_lower,
+        ):
+            return CommandPurpose.OTHER
 
         # These commands can be useful CI gates, but they do not demonstrate
         # that the project's ordinary tests can execute. Classify them before
@@ -415,7 +426,10 @@ class CommandExtractor:
             return CommandPurpose.TEST
         if any(word in combined for word in ("install", "setup", "dependency", "dependencies")):
             return CommandPurpose.INSTALL
-        if any(word in combined for word in ("run", "start", "usage", "quickstart", "quick start")):
+        if not ci_context and any(
+            word in combined
+            for word in ("run", "start", "usage", "quickstart", "quick start")
+        ):
             return CommandPurpose.RUN
         if "build" in combined:
             return CommandPurpose.BUILD

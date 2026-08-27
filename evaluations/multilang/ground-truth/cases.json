@@ -288,47 +288,47 @@
     },
     {
       "case_id": "c-8cc",
-      "review_state": "provisional_source_missing",
+      "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["make"],
-      "commands": {"build": ["make"], "test": ["make test"], "run": ["./8cc --help"], "setup": []},
-      "test_contract": {"system_executables": ["make", "cc"], "services": [], "environment": {}},
-      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
-      "false_targets": [],
-      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+      "commands": {"build": ["make"], "test": ["make test"], "run": ["./8cc -h"], "setup": []},
+      "test_contract": {"system_executables": ["make", "cc", "python2"], "services": [], "environment": {}, "toolchain_compatibility": "Modern PIE-by-default linkers require LDFLAGS=-no-pie for compiler-generated test objects."},
+      "evidence": ["README.md", "Makefile", "main.c"],
+      "false_targets": ["make fulltest"],
+      "notes": "make test is the ordinary unit-test target; fulltest is the slower three-stage compiler bootstrap check and is not the default Testability goal. The pinned source's negative-test runner has a python2 shebang and must not be silently treated as python3-compatible."
     },
     {
       "case_id": "cpp-mold",
-      "review_state": "provisional_source_missing",
+      "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["cmake"],
-      "commands": {"build": ["cmake -S . -B build", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": ["build/mold --version"], "setup": []},
-      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
-      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
-      "false_targets": [],
-      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+      "commands": {"build": ["cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=c++ -B build", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": ["build/mold --version"], "setup": []},
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest", "make"], "services": [], "environment": {}, "native_dependencies": ["distribution packages declared by install-build-deps.sh"]},
+      "evidence": ["README.md", "CMakeLists.txt", "install-build-deps.sh", "test/CMakeLists.txt"],
+      "false_targets": ["./dist.sh", "sudo cmake --build build --target install"],
+      "notes": "The package/install workflows are not build, Testability, or Runnability goals; the built linker version command is the stable runtime probe."
     },
     {
       "case_id": "cpp-leveldb",
-      "review_state": "provisional_source_missing",
+      "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["cmake"],
       "commands": {"build": ["cmake -S . -B build -DLEVELDB_BUILD_TESTS=ON", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
-      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}},
-      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
+      "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}, "source_dependencies": ["third_party/googletest and third_party/benchmark git submodules at pinned revisions"]},
+      "evidence": ["README.md", "CMakeLists.txt", ".gitmodules"],
       "false_targets": [],
-      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+      "notes": "LevelDB is a library with no application run requirement; tests are enabled by the root LEVELDB_BUILD_TESTS option and require the pinned googletest submodule."
     },
     {
       "case_id": "cpp-simdjson",
-      "review_state": "provisional_source_missing",
+      "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["cmake"],
-      "commands": {"build": ["cmake -S . -B build -DSIMDJSON_DEVELOPER_MODE=ON", "cmake --build build"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
+      "commands": {"build": ["cmake -S . -B build -DSIMDJSON_DEVELOPER_MODE=ON", "cmake --build build --target all_tests"], "test": ["ctest --test-dir build --output-on-failure"], "run": [], "setup": []},
       "test_contract": {"system_executables": ["cmake", "c++", "ctest"], "services": [], "environment": {}, "platform": "CPU feature detection must remain enabled and observable."},
-      "evidence": ["CXXCrafter top100_dataset.csv; source inspection pending"],
-      "false_targets": [],
-      "notes": "Commands must be re-reviewed and revision pinned after the explicit source fetch."
+      "evidence": ["CMakeLists.txt", ".github/workflows/ubuntu24.yml", "README.md"],
+      "false_targets": ["docker run", "bash ./p2996/run_docker.sh bash", "./linkandrun jsonexamples/twitter.json"],
+      "notes": "Developer mode is required for the repository test targets. CI container/helper commands and README quickstart examples are not library application entrypoints."
     }
   ]
 }

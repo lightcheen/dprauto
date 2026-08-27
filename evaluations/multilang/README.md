@@ -10,14 +10,15 @@ Run the validator from the DPRAuto repository root:
 python3 evaluations/multilang/run_evaluation.py
 ```
 
-`--strict-sources` is the gate for later execution milestones. It currently
-fails by design because four CXXCrafter repositories have not been fetched or
-pinned. `--output PATH` writes the deterministic readiness report only when an
-output path is explicitly provided.
+`--strict-sources` is the execution gate. Since M9 it also compares directly
+fetched sources' local Git HEAD with the pinned manifest revision and passes
+for all 21 cases. `--output PATH` writes the deterministic readiness report
+only when an output path is explicitly provided.
 
 ## Test project directories
 
-The 17 local snapshots below are ready for later evaluation:
+The original 17 local dataset snapshots below are ready for evaluation; the
+four CXXCrafter sources added in M9 are listed immediately afterward.
 
 | Language | Repository | Dataset | Source directory |
 |---|---|---|---|
@@ -39,7 +40,7 @@ The 17 local snapshots below are ready for later evaluation:
 | C | libevent/libevent | ExecutionAgent | `/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-libevent-libevent-a994a52d5373` |
 | C | distcc/distcc | ExecutionAgent | `/home/master/auto-build/CNB/cnb-benchmark/work/full-run/repos/executionagent-distcc-distcc-a627b26f08cd` |
 
-The four reserved CXXCrafter source directories are deliberately absent in M0:
+M9 fetched the four CXXCrafter repositories into the directories reserved in M0:
 
 | Language | Repository | Dataset row | Reserved directory |
 |---|---|---|---|
@@ -49,9 +50,11 @@ The four reserved CXXCrafter source directories are deliberately absent in M0:
 | C++ | simdjson/simdjson | `top100_dataset.csv` | `/home/master/auto-build/CXXCrafter/datasets/top100-src/simdjson` |
 
 Dataset catalogs are recorded as absolute, auditable paths in `manifest.json`.
-Each ready source has a pinned dataset revision. The CXXCrafter CSV does not
-provide commit revisions, so these cases remain `fetch_required` and their
-ground truth remains provisional until a later explicit fetch-and-pin step.
+Each source now has a pinned revision. Because the CXXCrafter CSV provides
+repository URLs but no revisions, M9 resolved each remote HEAD once, recorded
+the full commit ID in `manifest.json`, and initialized LevelDB's test submodules
+at the commits pinned by that revision. Strict source validation therefore
+covers all 21 cases without floating branches.
 
 ## Ground-truth rules
 
@@ -153,3 +156,13 @@ candidate promotion verifies both the accepted workspace's before digest and the
 digest. The isolated real-data probe uses ccache's
 `dockerfiles/ubuntu-24.04/Dockerfile`; see `M8_CAS_BUILD_SCRIPT_MUTATION_2026-08-27.md` for its exact
 source directory, digest, diff and stale-write rejection.
+
+## M9 pinned CXXCrafter native long-tail validation
+
+M9 fetches the four reserved CXXCrafter C/C++ sources at full pinned commits and makes strict
+evaluation compare each local Git HEAD with its manifest revision. Real 8cc, mold, LevelDB and
+simdjson builds drive CLI-versus-library command semantics, root-only native Dockerfile selection,
+generated-Dockerfile ignore policy, bounded CTest parallelism, minimal CMake test targets and
+test-driver-reachable shebang executable contracts. See
+`M9_CXXCRAFTER_NATIVE_LONGTAIL_2026-08-27.md` for the exact source/submodule directories, commands,
+timings, pass/fail evidence and remaining Python 2/platform boundary.

@@ -99,7 +99,7 @@ def _read_float(value: str, name: str, *, minimum: float, maximum: float) -> flo
 @dataclass(frozen=True)
 class BuildConfig:
     default_strategy: str = "deterministic"
-    timeout_seconds: int = 1800
+    timeout_seconds: int = 3600
     strategy_portfolio_enabled: bool = True
     max_strategy_attempts: int = 3
     allow_network: bool = True
@@ -113,7 +113,7 @@ class BuildConfig:
     maven_base_image: str = "maven:3.9.9-eclipse-temurin-{version}"
     gradle_base_image: str = "gradle:8.12.1-jdk{version}"
     native_base_image: str = "debian:bookworm-slim"
-    max_build_jobs: int = 2
+    max_build_jobs: int = 4
     pack_binary: str = "pack"
     cnb_builder: str = "paketobuildpacks/builder-jammy-full"
     cnb_lifecycle_image: str = ""
@@ -199,7 +199,7 @@ class AgentConfig:
 
 @dataclass(frozen=True)
 class VerificationConfig:
-    command_timeout_seconds: int = 120
+    command_timeout_seconds: int = 300
     dependency_command_timeout_seconds: int = 180
     web_startup_timeout_seconds: int = 30
     web_path: str = "/"
@@ -369,7 +369,7 @@ def load_config(
     build = BuildConfig(
         default_strategy=get("BUILD_DEFAULT_STRATEGY", "deterministic"),
         timeout_seconds=_read_int(
-            get("BUILD_TIMEOUT_SECONDS", "1800"), "BUILD_TIMEOUT_SECONDS"
+            get("BUILD_TIMEOUT_SECONDS", "3600"), "BUILD_TIMEOUT_SECONDS"
         ),
         strategy_portfolio_enabled=_read_bool(
             get("BUILD_STRATEGY_PORTFOLIO_ENABLED", "true"),
@@ -396,7 +396,7 @@ def load_config(
         gradle_base_image=get("BUILD_GRADLE_BASE_IMAGE", "gradle:8.12.1-jdk{version}"),
         native_base_image=get("BUILD_NATIVE_BASE_IMAGE", "debian:bookworm-slim"),
         max_build_jobs=_read_int(
-            get("BUILD_MAX_BUILD_JOBS", "2"), "BUILD_MAX_BUILD_JOBS"
+            get("BUILD_MAX_BUILD_JOBS", "4"), "BUILD_MAX_BUILD_JOBS"
         ),
         pack_binary=get("BUILD_PACK_BINARY", "pack"),
         cnb_builder=get("BUILD_CNB_BUILDER", "paketobuildpacks/builder-jammy-full"),
@@ -456,7 +456,7 @@ def load_config(
     )
     verification = VerificationConfig(
         command_timeout_seconds=_read_int(
-            get("VERIFICATION_COMMAND_TIMEOUT_SECONDS", "120"),
+            get("VERIFICATION_COMMAND_TIMEOUT_SECONDS", "300"),
             "VERIFICATION_COMMAND_TIMEOUT_SECONDS",
         ),
         dependency_command_timeout_seconds=_read_int(

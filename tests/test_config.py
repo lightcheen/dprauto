@@ -19,7 +19,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_investigation_rounds, 3)
         self.assertEqual(config.agent.max_investigation_actions, 6)
         self.assertEqual(config.agent.max_evidence_characters, 10_000)
-        self.assertEqual(config.verification.command_timeout_seconds, 120)
+        self.assertEqual(config.verification.command_timeout_seconds, 300)
         self.assertEqual(
             config.verification.dependency_command_timeout_seconds,
             180,
@@ -55,7 +55,8 @@ class ConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(config.build.gradle_base_image, "gradle:8.12.1-jdk{version}")
         self.assertEqual(config.build.native_base_image, "debian:bookworm-slim")
-        self.assertEqual(config.build.max_build_jobs, 2)
+        self.assertEqual(config.build.timeout_seconds, 3600)
+        self.assertEqual(config.build.max_build_jobs, 4)
         self.assertEqual(config.verification.docker_network, "")
         self.assertEqual(config.storage.root, Path("runs"))
 

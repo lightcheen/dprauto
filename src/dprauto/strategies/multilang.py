@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 
 from dprauto.config import BuildConfig
-from dprauto.domain.enums import BuildStage, CommandPurpose
+from dprauto.domain.enums import BuildStage, CommandPurpose, ProjectType
 from dprauto.domain.models import (
     BuildPlan,
     BuildResult,
@@ -26,6 +26,10 @@ from dprauto.strategies.common import (
 
 JVM_RUNTIME_MARKER = "DPRAUTO_JVM_ARTIFACT_OK"
 NATIVE_RUNTIME_MARKER = "DPRAUTO_NATIVE_BUILD_OK"
+GENERATED_DOCKERIGNORE = """# DPRAuto template context policy
+.git
+.dprauto
+"""
 
 
 def _docker_build_command(config: BuildConfig, image: str) -> CommandSpec:
@@ -62,6 +66,15 @@ def _plan(
     image = stable_image_reference(profile, config.image_repository)
     generated = (
         GeneratedFile("Dockerfile", dockerfile, media_type="text/x-dockerfile"),
+        # Docker gives a Dockerfile-specific ignore file precedence over the
+        # repository root .dockerignore. Project-owned ignore rules are often
+        # tailored to a different Dockerfile and may exclude pom.xml,
+        # CMakeLists.txt, or other inputs required by this generated template.
+        GeneratedFile(
+            "Dockerfile.dockerignore",
+            GENERATED_DOCKERIGNORE,
+            media_type="text/plain",
+        ),
     )
     command = _docker_build_command(config, image)
     complete_metadata = {
@@ -228,9 +241,10 @@ class NativeTemplateStrategy:
         packages = self._packages(profile, system)
         install_command = self._install_command(packages)
         build_commands = self._build_commands(profile, system)
-        probe = self._runtime_probe(system)
+        probe, probe_type = self._runtime_probe(profile, system)
         lines = (["# syntax=docker/dockerfile:1"] if self.config.use_cache else []) + [
             f"FROM {self.config.native_base_image}",
+            "USER root",
             "ENTRYPOINT []",
             "WORKDIR /workspace",
         ]
@@ -265,7 +279,7 @@ class NativeTemplateStrategy:
                 "dependency_installation_commands": (install_command,),
                 "runtime_probe_command": probe,
                 "runtime_probe_marker": NATIVE_RUNTIME_MARKER,
-                "runtime_probe_type": "native-build-artifacts",
+                "runtime_probe_type": probe_type,
                 "max_build_jobs": self.config.max_build_jobs,
             },
         )
@@ -356,7 +370,18 @@ class NativeTemplateStrategy:
             configure = "cmake -S . -B build"
             if arguments:
                 configure += " " + " ".join(arguments)
-            return (configure, f"cmake --build build --parallel {jobs}")
+            raw_target = profile.metadata.get("cmake_test_build_target", "")
+            target = (
+                raw_target
+                if isinstance(raw_target, str)
+                and raw_target in {"all_tests", "tests", "check"}
+                else ""
+            )
+            build = "cmake --build build"
+            if target:
+                build += f" --target {target}"
+            build += f" --parallel {jobs}"
+            return (configure, build)
         if system == "meson":
             return ("meson setup build", f"meson compile -C build -j {jobs}")
         if system == "autotools":
@@ -371,12 +396,34 @@ class NativeTemplateStrategy:
         return (f"make -j{jobs}",)
 
     @staticmethod
-    def _runtime_probe(system: str) -> str:
+    def _runtime_probe(profile: ProjectProfile, system: str) -> tuple[str, str]:
+        if profile.project_type is ProjectType.CLI:
+            command = next(
+                (
+                    item.command.display
+                    for item in profile.commands
+                    if item.command.purpose is CommandPurpose.RUN
+                    and item.source == "inferred:root-executable-target"
+                    and re.fullmatch(
+                        r"(?:\./|build/)[A-Za-z0-9_.+-]+ (?:--version|--help|-h)",
+                        item.command.display,
+                    )
+                ),
+                "",
+            )
+            if command:
+                return (
+                    f"{command} && echo {NATIVE_RUNTIME_MARKER} && echo DPRAUTO_CLI_COMMAND_OK=1",
+                    "native-cli-command",
+                )
         build_directory = "build" if system in {"cmake", "meson"} else "."
         return (
-            f"test -d {build_directory}; "
-            f"count=$(find {build_directory} -type f "
-            "\\( -perm -111 -o -name '*.a' -o -name '*.so' -o -name '*.dylib' \\) "
-            "| wc -l); "
-            f"echo {NATIVE_RUNTIME_MARKER}; echo DPRAUTO_ARTIFACT_COUNT=$count"
+            (
+                f"test -d {build_directory} && "
+                f"count=$(find {build_directory} -type f "
+                "\\( -perm -111 -o -name '*.a' -o -name '*.so' -o -name '*.dylib' \\) "
+                "| wc -l) && test \"$count\" -gt 0 && "
+                f"echo {NATIVE_RUNTIME_MARKER} && echo DPRAUTO_ARTIFACT_COUNT=$count"
+            ),
+            "native-build-artifacts",
         )

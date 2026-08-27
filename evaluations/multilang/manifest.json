@@ -259,10 +259,9 @@
       "focus": ["make", "compiler-bootstrap", "test-target"],
       "source": {
         "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/8cc",
-        "state": "fetch_required",
-        "revision": null,
-        "url": "https://github.com/rui314/8cc.git",
-        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+        "state": "ready",
+        "revision": "b480958396f159d3794f0d4883172b21438a8597",
+        "url": "https://github.com/rui314/8cc.git"
       }
     },
     {
@@ -274,10 +273,9 @@
       "focus": ["cmake", "system-toolchain", "integration-tests"],
       "source": {
         "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/mold",
-        "state": "fetch_required",
-        "revision": null,
-        "url": "https://github.com/rui314/mold.git",
-        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+        "state": "ready",
+        "revision": "e633272dc92c83c6c56c4d8449279da468701193",
+        "url": "https://github.com/rui314/mold.git"
       }
     },
     {
@@ -289,10 +287,9 @@
       "focus": ["cmake", "native-library", "ctest"],
       "source": {
         "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/leveldb",
-        "state": "fetch_required",
-        "revision": null,
-        "url": "https://github.com/google/leveldb.git",
-        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+        "state": "ready",
+        "revision": "7ee830d02b623e8ffe0b95d59a74db1e58da04c5",
+        "url": "https://github.com/google/leveldb.git"
       }
     },
     {
@@ -304,10 +301,9 @@
       "focus": ["cmake", "cpu-features", "ctest"],
       "source": {
         "path": "/home/master/auto-build/CXXCrafter/datasets/top100-src/simdjson",
-        "state": "fetch_required",
-        "revision": null,
-        "url": "https://github.com/simdjson/simdjson.git",
-        "revision_note": "CXXCrafter CSV names the repository but does not pin a commit; pin during the explicit fetch milestone."
+        "state": "ready",
+        "revision": "3839ac681a4a6b4fd09b4d7e03229b35bcd909d7",
+        "url": "https://github.com/simdjson/simdjson.git"
       }
     }
   ]

@@ -66,11 +66,29 @@ class NativeProjectParser:
         dependencies = self._dependency_files(scanned)
         readmes = readme_files(scanned)
         workflows = ci_files(scanned)
-        inferred = self._inferred_commands(scanned, build_systems)
-        commands = project_commands(
-            (*extracted_commands(scanned, readmes, workflows, self.command_extractor), *inferred)
-        )
         project_name = self._project_name(scanned, build_systems) or scanned.root.name
+        project_type = self._project_type(scanned, build_systems, project_name)
+        inferred = self._inferred_commands(
+            scanned,
+            build_systems,
+            project_type=project_type,
+            project_name=project_name,
+        )
+        discovered = extracted_commands(
+            scanned,
+            readmes,
+            workflows,
+            self.command_extractor,
+        )
+        if project_type is ProjectType.LIBRARY:
+            discovered = tuple(
+                command
+                for command in discovered
+                if command.purpose is not CommandPurpose.RUN
+            )
+        commands = project_commands(
+            (*discovered, *inferred)
+        )
         language_counts = self.language_detector.counts(scanned)
         languages = tuple(
             language
@@ -80,7 +98,9 @@ class NativeProjectParser:
         standards = self._language_standards(scanned)
         subprojects = self._subprojects(scanned, build_systems)
         cmake_arguments = self._cmake_configuration_arguments(scanned, build_systems)
+        cmake_test_target = self._cmake_test_build_target(scanned, build_systems)
         system_packages = self._system_dependency_packages(scanned, build_systems)
+        test_executables, test_executable_evidence = self._test_required_executables(scanned)
         project_id = f"{project_name}@{source.revision}" if source.revision else project_name
         build_pipeline = tuple(
             command.command.display
@@ -97,12 +117,15 @@ class NativeProjectParser:
             project_id=project_id,
             source=source,
             languages=languages,
-            project_type=ProjectType.LIBRARY,
+            project_type=project_type,
             runtime_constraints=standards,
             package_managers=build_systems,
             dependency_files=dependencies,
             build_files=build_files,
-            dockerfiles=dockerfiles(scanned),
+            # Nested native Dockerfiles usually build a test harness,
+            # benchmark, packaging artifact, or cross-platform helper. Only a
+            # root Dockerfile represents this selected native workspace.
+            dockerfiles=tuple(path for path in dockerfiles(scanned) if depth(path) == 1),
             readme_files=readmes,
             ci_files=workflows,
             commands=commands,
@@ -116,7 +139,10 @@ class NativeProjectParser:
                 "language_file_counts": language_counts,
                 "build_pipeline": build_pipeline,
                 "cmake_configuration_arguments": cmake_arguments,
+                "cmake_test_build_target": cmake_test_target,
                 "system_dependency_packages": system_packages,
+                "test_required_executables": test_executables,
+                "test_prerequisite_evidence": test_executable_evidence,
                 "test_commands": test_commands,
                 "scan_file_count": len(scanned.files),
                 "scan_skipped_files": scanned.skipped_files,
@@ -208,6 +234,58 @@ class NativeProjectParser:
         return ""
 
     @staticmethod
+    def _project_type(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+        project_name: str,
+    ) -> ProjectType:
+        """Distinguish root CLI targets from libraries and developer tools."""
+
+        escaped = re.escape(project_name)
+        if "cmake" in systems and re.search(
+            rf"(?im)^\s*add_executable\s*\(\s*{escaped}(?:\s|\))",
+            scanned.read_text("CMakeLists.txt"),
+        ):
+            return ProjectType.CLI
+        if "make" in systems and re.search(
+            rf"(?m)^\s*{escaped}\s*:",
+            scanned.read_text("Makefile"),
+        ):
+            shallow_sources = "\n".join(
+                scanned.read_text(path)
+                for path in scanned.files
+                if depth(path) <= 2
+                and PurePosixPath(path).suffix.casefold() in {".c", ".cc", ".cpp", ".cxx"}
+            )
+            if re.search(r"\bmain\s*\(", shallow_sources):
+                return ProjectType.CLI
+        return ProjectType.LIBRARY
+
+    @staticmethod
+    def _runtime_command(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+        project_name: str,
+    ) -> str:
+        evidence = "\n".join(
+            scanned.read_text(path)
+            for path in scanned.files
+            if depth(path) <= 2
+            and (
+                PurePosixPath(path).name.casefold().startswith("readme")
+                or PurePosixPath(path).suffix.casefold() in {".c", ".cc", ".cpp", ".cxx"}
+            )
+        )
+        executable = f"build/{project_name}" if "cmake" in systems else f"./{project_name}"
+        if "--version" in evidence:
+            return f"{executable} --version"
+        if re.search(r"(?m)(?:['\"\s])-h(?:['\"\s]|$)", evidence):
+            return f"{executable} -h"
+        if "--help" in evidence:
+            return f"{executable} --help"
+        return ""
+
+    @staticmethod
     def _language_standards(scanned: ScannedProject) -> dict[str, str]:
         cmake = scanned.read_text("CMakeLists.txt")
         constraints: dict[str, str] = {}
@@ -239,7 +317,12 @@ class NativeProjectParser:
         ):
             name = match.group(1)
             normalized_name = name.casefold()
-            if "test" not in normalized_name and "regress" not in normalized_name:
+            test_switch = "test" in normalized_name or "regress" in normalized_name
+            developer_test_switch = (
+                normalized_name.endswith("developer_mode")
+                and bool(re.search(r"(?i)\benable_testing\s*\(", cmake))
+            )
+            if not test_switch and not developer_test_switch:
                 continue
             value = "OFF" if "disable" in normalized_name else "ON"
             selected.append(f"-D{name}={value}")
@@ -282,6 +365,59 @@ class NativeProjectParser:
         return tuple(dict.fromkeys(selected))
 
     @staticmethod
+    def _cmake_test_build_target(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> str:
+        if "cmake" not in systems:
+            return ""
+        cmake = scanned.read_text("CMakeLists.txt")
+        for target in ("all_tests", "tests", "check"):
+            if re.search(
+                rf"(?im)^\s*add_custom_target\s*\(\s*{re.escape(target)}(?:\s|\))",
+                cmake,
+            ):
+                return target
+        return ""
+
+    @staticmethod
+    def _test_required_executables(
+        scanned: ScannedProject,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        test_driver_text = "\n".join(
+            scanned.read_text(path)
+            for path in scanned.files
+            if PurePosixPath(path).name.casefold()
+            in {"makefile", "gnumakefile", "cmakelists.txt", "meson.build"}
+            or PurePosixPath(path).suffix.casefold() == ".mk"
+        )
+        executables: list[str] = []
+        evidence: list[str] = []
+        for path in scanned.files:
+            parts = PurePosixPath(path).parts
+            if not any(part.casefold() in {"test", "tests"} for part in parts[:-1]):
+                continue
+            # A shebang in an optional helper is not part of the selected
+            # Testability dependency contract. Require the ordinary native
+            # build/test driver to reference this script path.
+            if path not in test_driver_text and f"./{path}" not in test_driver_text:
+                continue
+            first_line = scanned.read_text(path).splitlines()[:1]
+            if not first_line or not first_line[0].startswith("#!"):
+                continue
+            shebang = first_line[0][2:].strip().split()
+            if not shebang:
+                continue
+            executable = PurePosixPath(shebang[0]).name
+            if executable == "env" and len(shebang) > 1:
+                executable = shebang[1]
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}", executable):
+                continue
+            executables.append(executable)
+            evidence.append(f"shebang:{path}:{executable}")
+        return tuple(dict.fromkeys(executables)), tuple(dict.fromkeys(evidence))
+
+    @staticmethod
     def _subprojects(
         scanned: ScannedProject,
         systems: tuple[str, ...],
@@ -321,6 +457,9 @@ class NativeProjectParser:
         cls,
         scanned: ScannedProject,
         systems: tuple[str, ...],
+        *,
+        project_type: ProjectType,
+        project_name: str,
     ) -> tuple[ExtractedCommand, ...]:
         commands: list[ExtractedCommand] = []
         if "cmake" in systems:
@@ -421,4 +560,15 @@ class NativeProjectParser:
                     ),
                 )
             )
+        if project_type is ProjectType.CLI:
+            runtime = cls._runtime_command(scanned, systems, project_name)
+            if runtime:
+                commands.append(
+                    ExtractedCommand(
+                        runtime,
+                        CommandPurpose.RUN,
+                        "inferred:root-executable-target",
+                        0.9,
+                    )
+                )
         return tuple(commands)
