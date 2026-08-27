@@ -42,6 +42,7 @@ class SQLiteAgentPersistence:
                 ("dprauto.agent.models", "EvidenceRecord"),
                 ("dprauto.agent.models", "FixPlan"),
                 ("dprauto.agent.models", "RepairCandidate"),
+                ("dprauto.agent.models", "RepairRoundFeedback"),
                 ("dprauto.agent.models", "ToolCall"),
                 ("dprauto.agent.models", "ToolResult"),
                 ("dprauto.application.build", "BuildStrategyAttempt"),

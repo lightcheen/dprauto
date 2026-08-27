@@ -13,8 +13,10 @@ from dprauto.agent.models import (
     EvidencePack,
     EvidenceRecord,
     FixPlan,
+    RepairRoundFeedback,
     ToolResult,
 )
+from dprauto.agent.search_space import failure_family
 from dprauto.agent.state import AgentState
 from dprauto.config import AgentConfig
 from dprauto.domain.models import EnvironmentDiff, FailureInfo, ProjectProfile
@@ -77,6 +79,7 @@ class AgentContextManager:
             "current_failure": self._failure(state.get("failure"), key_log_limit=3_000),
             "recent_modifications": summary.recent_modifications,
             "failed_methods": summary.failed_methods,
+            "round_feedback": summary.round_feedback,
             "context_summary": summary.narrative[-4_000:],
         }
         if self._size(payload) <= self.config.max_context_characters:
@@ -101,6 +104,7 @@ class AgentContextManager:
         payload["resolved_issues"] = summary.resolved_issues[-2:]
         payload["recent_modifications"] = summary.recent_modifications[-2:]
         payload["failed_methods"] = summary.failed_methods[-2:]
+        payload["round_feedback"] = summary.round_feedback[-2:]
         payload["context_summary"] = summary.narrative[-500:]
         if self._size(payload) > self.config.max_context_characters:
             raise AgentWorkflowError(
@@ -117,6 +121,7 @@ class AgentContextManager:
         plan: FixPlan,
         fingerprint: str,
         outcome: str,
+        attempt_number: int,
         environment_diff: EnvironmentDiff | None,
     ) -> ContextSummary:
         resolved = list(previous.resolved_issues)
@@ -142,14 +147,50 @@ class AgentContextManager:
                     ),
                 )
             )
+        feedback = list(previous.round_feedback)
+        before_family = failure_family(previous_failure)
+        after_family = failure_family(current_failure)
+        if outcome == "succeeded" or current_failure is None:
+            progress = "succeeded"
+        elif current_failure.category.value == "regression":
+            progress = "regressed"
+        elif before_family == after_family:
+            progress = "stagnant"
+        elif previous_failure and previous_failure.failure_stage != current_failure.failure_stage:
+            progress = "advanced-stage"
+        else:
+            progress = "changed-failure"
+        dimensions = self._environment_dimensions(environment_diff)
+        feedback.append(
+            RepairRoundFeedback(
+                attempt_number=attempt_number,
+                method_fingerprint=fingerprint,
+                outcome=outcome,
+                progress=progress,
+                failure_before=(previous_failure.fingerprint if previous_failure else ""),
+                failure_after=(current_failure.fingerprint if current_failure else ""),
+                failure_family_before=before_family,
+                failure_family_after=after_family,
+                environment_dimensions=dimensions,
+                summary=(
+                    environment_diff.summary
+                    if environment_diff and environment_diff.summary
+                    else plan.summary or plan.hypothesis
+                )[:500],
+            )
+        )
         resolved = resolved[-self.config.max_resolved_issues :]
         modifications = modifications[-self.config.max_recent_modifications :]
         failed = failed[-self.config.max_failed_methods :]
-        narrative = self._narrative(resolved, modifications, failed, current_failure)
+        feedback = feedback[-self.config.max_failed_methods :]
+        narrative = self._narrative(
+            resolved, modifications, failed, feedback, current_failure
+        )
         return ContextSummary(
             resolved_issues=tuple(resolved),
             recent_modifications=tuple(modifications),
             failed_methods=tuple(failed),
+            round_feedback=tuple(feedback),
             narrative=narrative,
         )
 
@@ -166,6 +207,7 @@ class AgentContextManager:
                 -self.config.max_recent_modifications :
             ],
             failed_methods=failed,
+            round_feedback=summary.round_feedback[-self.config.max_failed_methods :],
             narrative=summary.narrative,
         )
 
@@ -388,7 +430,7 @@ class AgentContextManager:
         }
 
     @staticmethod
-    def _narrative(resolved, modifications, failed, current_failure) -> str:
+    def _narrative(resolved, modifications, failed, feedback, current_failure) -> str:
         parts = []
         if resolved:
             parts.append("Resolved: " + " | ".join(resolved[-3:]))
@@ -399,11 +441,37 @@ class AgentContextManager:
                 "Failed methods: "
                 + " | ".join(f"{item.fingerprint} {item.hypothesis}" for item in failed[-3:])
             )
+        if feedback:
+            parts.append(
+                "Round feedback: "
+                + " | ".join(
+                    f"round {item.attempt_number} {item.progress} "
+                    f"{','.join(item.environment_dimensions) or 'no-dimension'}"
+                    for item in feedback[-3:]
+                )
+            )
         if current_failure:
             parts.append(
                 f"Current failure: {current_failure.fingerprint} {current_failure.message}"
             )
         return "\n".join(parts)[-4_000:] or "No repair attempts have completed yet."
+
+    @staticmethod
+    def _environment_dimensions(diff: EnvironmentDiff | None) -> tuple[str, ...]:
+        if diff is None:
+            return ()
+        dimensions: list[str] = []
+        if diff.base_image is not None or diff.python_version is not None:
+            dimensions.append("runtime")
+        if diff.system_packages:
+            dimensions.append("system-packages")
+        if diff.python_dependencies:
+            dimensions.append("python-dependencies")
+        if diff.startup_arguments:
+            dimensions.append("startup")
+        if diff.build_scripts and not dimensions:
+            dimensions.append("build-script")
+        return tuple(dict.fromkeys(dimensions))
 
     @staticmethod
     def _size(payload: dict[str, Any]) -> int:

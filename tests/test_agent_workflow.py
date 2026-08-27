@@ -5,7 +5,15 @@ from pathlib import Path
 
 from dprauto.adapters.storage import LocalArtifactStorage
 from dprauto.adapters.python import PythonEnvironmentDiffer
-from dprauto.agent.models import FixPlan, InvestigationDecision, ToolCall, ToolResult
+from dprauto.agent.context import method_fingerprint
+from dprauto.agent.models import (
+    AttemptedMethod,
+    ContextSummary,
+    FixPlan,
+    InvestigationDecision,
+    ToolCall,
+    ToolResult,
+)
 from dprauto.agent.state import create_agent_state
 from dprauto.agent.tools import (
     ListProjectFilesTool,
@@ -86,6 +94,63 @@ class ReadOnlyPlanner(FixedPlanner):
             "inspect the current build script",
             (ToolCall("read_file", {"path": "Dockerfile"}),),
             "read the Dockerfile",
+        )
+
+
+class FeedbackCorrectingPlanner(FixedPlanner):
+    def __init__(self):
+        super().__init__()
+        self.feedback = []
+
+    def plan_fix(self, state, diagnosis, available_tools):
+        self.plan_calls += 1
+        self.available_tools.append(available_tools)
+        self.feedback.append(state.get("plan_feedback", ()))
+        if self.plan_calls == 1:
+            return FixPlan(
+                "guess a Python package",
+                (
+                    ToolCall(
+                        "patch_python_dependencies",
+                        {"path": "Dockerfile", "packages": ["libpq"]},
+                    ),
+                ),
+            )
+        return FixPlan(
+            "install the evidenced system package",
+            (
+                ToolCall(
+                    "patch_system_packages",
+                    {
+                        "path": "Dockerfile",
+                        "package_manager": "apt",
+                        "packages": ["libpq-dev"],
+                    },
+                ),
+            ),
+        )
+
+
+class DuplicateCorrectingPlanner(FixedPlanner):
+    def __init__(self):
+        super().__init__()
+        self.feedback = []
+
+    def plan_fix(self, state, diagnosis, available_tools):
+        self.plan_calls += 1
+        self.feedback.append(state.get("plan_feedback", ()))
+        suffix = "first" if self.plan_calls == 1 else "alternative"
+        return FixPlan(
+            f"{suffix} build script repair",
+            (
+                ToolCall(
+                    "modify_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "content": f"FROM scratch\n# {suffix}\n",
+                    },
+                ),
+            ),
         )
 
 
@@ -399,6 +464,107 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertTrue(
             any(item.key.endswith("environment-diff.json") for item in final["artifacts"])
         )
+        self.assertTrue(
+            any(item.key.endswith("repair-search-space.json") for item in final["artifacts"])
+        )
+        self.assertEqual(len(final["context_summary"].round_feedback), 2)
+        self.assertEqual(final["context_summary"].round_feedback[-1].progress, "stagnant")
+
+    def test_plan_gate_feedback_replans_inside_the_same_repair_round(self) -> None:
+        planner = FeedbackCorrectingPlanner()
+        tools = ToolRegistry(
+            (
+                StaticTool("read_file", lambda arguments, context: None),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchSystemPackagesTool(self.storage),
+                PatchPythonDependenciesTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(planner, tools, self.storage)
+        self.addCleanup(workflow.close)
+        state = self.initial_state(
+            FailureInfo(
+                FailureCategory.SYSTEM_DEPENDENCY,
+                BuildStage.BUILD,
+                "PostgreSQL headers are missing",
+                "system:libpq",
+                key_log="fatal error: libpq-fe.h: No such file or directory",
+            )
+        )
+        state["diagnosis"] = "libpq headers are required by the selected build"
+
+        update = workflow.plan_fix(state)
+
+        self.assertEqual(update["phase"], AgentPhase.PROPOSING)
+        self.assertEqual(planner.plan_calls, 2)
+        self.assertEqual(update["fix_plan"].actions[0].tool, "patch_system_packages")
+        self.assertEqual(
+            tuple(planner.available_tools[0]),
+            ("patch_system_packages",),
+        )
+        self.assertIn("outside the bounded search space", planner.feedback[1][0])
+        self.assertEqual(update["llm_call_count"], 2)
+
+    def test_duplicate_method_feedback_requests_an_alternative_before_stopping(self) -> None:
+        planner = DuplicateCorrectingPlanner()
+        workflow = self.workflow(planner, failure())
+        self.addCleanup(workflow.close)
+        state = self.initial_state(failure())
+        state["diagnosis"] = "the build script requires a different repair"
+        first_plan = FixPlan(
+            "first build script repair",
+            (
+                ToolCall(
+                    "modify_build_script",
+                    {
+                        "path": "Dockerfile",
+                        "content": "FROM scratch\n# first\n",
+                    },
+                ),
+            ),
+        )
+        state["context_summary"] = ContextSummary(
+            failed_methods=(
+                AttemptedMethod(
+                    method_fingerprint(first_plan),
+                    first_plan.hypothesis,
+                    "failed",
+                ),
+            )
+        )
+
+        update = workflow.plan_fix(state)
+
+        self.assertEqual(update["phase"], AgentPhase.PROPOSING)
+        self.assertEqual(planner.plan_calls, 2)
+        self.assertIn("duplicate repair method", planner.feedback[1][0])
+        self.assertIn("alternative", update["fix_plan"].hypothesis)
+
+    def test_failure_family_stops_volatile_fingerprint_churn(self) -> None:
+        planner = FixedPlanner()
+        initial = FailureInfo(
+            FailureCategory.BUILD_COMMAND,
+            BuildStage.BUILD,
+            "command failed after 12 seconds",
+            "volatile:initial",
+            key_log="RuntimeError: worker 17 failed",
+        )
+        current = FailureInfo(
+            FailureCategory.BUILD_COMMAND,
+            BuildStage.BUILD,
+            "command failed after 99 seconds",
+            "volatile:current",
+            key_log="RuntimeError: worker 42 failed",
+        )
+
+        final = self.workflow(planner, current).run(
+            self.initial_state(initial), self.root
+        )
+
+        self.assertEqual(final["attempt_number"], 2)
+        self.assertIn("no causal progress", final["stop_reason"])
+        self.assertEqual(final["stagnant_failure_count"], 2)
 
     def test_infrastructure_failure_stops_before_llm_or_mutation(self) -> None:
         planner = FixedPlanner()
@@ -579,6 +745,73 @@ class AgentWorkflowTests(unittest.TestCase):
         reason = workflow._plan_policy_violation(plan, contradictory_failure)
 
         self.assertIn("already satisfied", reason)
+
+    def test_plan_rejects_dependency_not_named_by_missing_module_evidence(self) -> None:
+        tools = ToolRegistry(
+            (
+                StaticTool("read_file", lambda arguments, context: None),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchVerificationDependenciesTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        plan = FixPlan(
+            "guess an unrelated package",
+            (
+                ToolCall(
+                    "patch_verification_dependencies",
+                    {"packages": ["requests-cache"]},
+                ),
+            ),
+        )
+        missing = FailureInfo(
+            FailureCategory.TEST,
+            BuildStage.TEST,
+            "Testability failed",
+            "test:missing-sybil",
+            key_log="ModuleNotFoundError: No module named 'sybil'",
+        )
+
+        reason = workflow._plan_policy_violation(plan, missing)
+
+        self.assertIn("not named by the failure evidence", reason)
+        self.assertIn("sybil", reason)
+
+    def test_plan_accepts_package_named_collection_compatibility_overlay(self) -> None:
+        tools = ToolRegistry(
+            (
+                StaticTool("read_file", lambda arguments, context: None),
+                StaticTool("get_build_log", lambda arguments, context: None),
+                StaticTool("build_image", lambda arguments, context: None),
+                PatchVerificationDependenciesTool(self.storage),
+            )
+        )
+        workflow = AgentWorkflow(object(), tools, self.storage)
+        self.addCleanup(workflow.close)
+        plan = FixPlan(
+            "pin the package named by the collection compatibility warning",
+            (
+                ToolCall(
+                    "patch_verification_dependencies",
+                    {"packages": ["python-multipart<0.0.14"]},
+                ),
+            ),
+        )
+        compatibility_failure = FailureInfo(
+            FailureCategory.TEST,
+            BuildStage.TEST,
+            "Testability collection failed",
+            "test:python-multipart-compatibility",
+            key_log=(
+                "PendingDeprecationWarning: Please use import python_multipart instead"
+            ),
+        )
+
+        reason = workflow._plan_policy_violation(plan, compatibility_failure)
+
+        self.assertEqual(reason, "")
 
     def test_explicit_preflight_failure_rejects_candidate_without_full_rebuild(self) -> None:
         planner = FixedPlanner()
@@ -826,9 +1059,9 @@ class AgentWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(final["phase"], AgentPhase.STOPPED)
-        self.assertIn("non-mutating tool read_file", final["stop_reason"])
+        self.assertIn("outside the bounded search space", final["stop_reason"])
         self.assertEqual(final["attempt_number"], 0)
-        self.assertEqual(planner.plan_calls, 1)
+        self.assertEqual(planner.plan_calls, 2)
         self.assertEqual((self.root / "Dockerfile").read_text(), "FROM scratch\n")
 
     def test_maximum_attempts_is_an_independent_hard_stop(self) -> None:

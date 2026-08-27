@@ -114,12 +114,36 @@ class AttemptedMethod:
 
 
 @dataclass(frozen=True, slots=True)
+class RepairRoundFeedback:
+    """Bounded execution feedback carried from one repair round to the next."""
+
+    attempt_number: int
+    method_fingerprint: str
+    outcome: str
+    progress: str
+    failure_before: str = ""
+    failure_after: str = ""
+    failure_family_before: str = ""
+    failure_family_after: str = ""
+    environment_dimensions: tuple[str, ...] = ()
+    summary: str = ""
+
+    def __post_init__(self) -> None:
+        if self.attempt_number <= 0:
+            raise ModelValidationError("repair round feedback.attempt_number must be positive")
+        _required(self.method_fingerprint, "repair round feedback.method_fingerprint")
+        _required(self.outcome, "repair round feedback.outcome")
+        _required(self.progress, "repair round feedback.progress")
+
+
+@dataclass(frozen=True, slots=True)
 class ContextSummary:
     """Bounded repair memory that is safe to include in each LLM request."""
 
     resolved_issues: tuple[str, ...] = ()
     recent_modifications: tuple[str, ...] = ()
     failed_methods: tuple[AttemptedMethod, ...] = ()
+    round_feedback: tuple[RepairRoundFeedback, ...] = ()
     narrative: str = "No repair attempts have completed yet."
 
 
@@ -139,6 +163,7 @@ class RepairRecord:
     failure_after: FailureInfo | None = None
     environment_diff: EnvironmentDiff | None = None
     artifacts: tuple[ArtifactRef, ...] = ()
+    round_feedback: RepairRoundFeedback | None = None
 
     def __post_init__(self) -> None:
         _required(self.run_id, "repair record.run_id")

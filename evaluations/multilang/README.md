@@ -134,3 +134,12 @@ modules, fixtures, and pytest configuration, then slices broad dev/qa requiremen
 declared constraints needed by that slice. Dagshub's real pipeline excludes FiftyOne and datasets,
 installs four test requirements, and passes 108 tests. See
 `M6_MINIMAL_TEST_DEPENDENCY_CLOSURE_2026-08-26.md` for all audited directories and fallback limits.
+
+## M7 bounded repair search and execution feedback
+
+M7 narrows mutation tools from classified failure evidence before LLM planning, feeds policy and
+duplicate-method rejection back into a bounded same-round replan, and carries structured real
+preflight/build/test outcomes into later rounds. Replayed M9/M10 failures expose only the causal
+Testability overlay for sybil, Piccolo's PostgreSQL extra, aiohttp, requests-cache, and
+python-multipart; deterministic service/executable/runner-contract cases remain outside the LLM
+space. See `M7_BOUNDED_REPAIR_SEARCH_FEEDBACK_2026-08-27.md` for exact source and run directories.

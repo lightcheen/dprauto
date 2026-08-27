@@ -404,6 +404,61 @@ class LLMRepairPlannerTests(unittest.TestCase):
         self.assertIn("runtime_image_must_remain_unchanged", payload)
         self.assertIn("patch_verification_dependencies", payload)
 
+    def test_plan_payload_carries_bounded_search_space_and_gate_feedback(self) -> None:
+        client = RecordingLLMClient(
+            [
+                LLMResponse(
+                    "",
+                    structured={
+                        "hypothesis": "use the remaining system-package action",
+                        "actions": [
+                            {
+                                "tool": "patch_system_packages",
+                                "arguments": {
+                                    "path": "Dockerfile",
+                                    "package_manager": "apt",
+                                    "packages": ["libpq-dev"],
+                                },
+                            }
+                        ],
+                    },
+                )
+            ]
+        )
+        state = failed_state()
+        state["repair_search_space"] = {
+            "allowed_tools": ("patch_system_packages",),
+            "evidence_signals": ("system package evidence",),
+        }
+        state["plan_feedback"] = (
+            "proposal 1: patch_python_dependencies is outside the bounded search space",
+        )
+
+        LLMRepairPlanner(client).plan_fix(
+            state,
+            "libpq headers are missing",
+            {
+                "patch_system_packages": {
+                    "effect": "mutate",
+                    "argument_schema": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string"},
+                            "package_manager": {"type": "string"},
+                            "packages": {"type": "array"},
+                        },
+                        "required": ["path", "package_manager", "packages"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        )
+
+        payload = client.requests[0].messages[1].content
+        self.assertIn('"repair_search_space"', payload)
+        self.assertIn("outside the bounded search space", payload)
+        self.assertIn("binding rejection evidence", client.requests[0].messages[0].content)
+
 
 if __name__ == "__main__":
     unittest.main()

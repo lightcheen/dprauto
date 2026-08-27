@@ -41,6 +41,7 @@ class AgentState(TypedDict, total=False):
     phase: AgentPhase
     attempt_number: int
     repeated_failure_count: int
+    stagnant_failure_count: int
     agent_participated: bool
     llm_call_count: int
     context_summary: ContextSummary
@@ -51,6 +52,8 @@ class AgentState(TypedDict, total=False):
     failure: FailureInfo | None
     failure_history: tuple[FailureInfo, ...]
     diagnosis: str
+    repair_search_space: dict[str, object]
+    plan_feedback: tuple[str, ...]
     evidence_pack: EvidencePack
     fix_plan: FixPlan
     tool_results: tuple[ToolResult, ...]
@@ -81,6 +84,7 @@ def create_agent_state(run_id: str) -> AgentState:
         phase=AgentPhase.CREATED,
         attempt_number=0,
         repeated_failure_count=0,
+        stagnant_failure_count=0,
         agent_participated=False,
         llm_call_count=0,
         context_summary=ContextSummary(),

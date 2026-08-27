@@ -172,6 +172,7 @@ class AgentConfig:
     max_investigation_rounds: int = 3
     max_investigation_actions: int = 6
     max_evidence_characters: int = 10_000
+    max_plan_feedback_rounds: int = 2
 
     def __post_init__(self) -> None:
         if self.max_attempts <= 0:
@@ -188,6 +189,7 @@ class AgentConfig:
             ("max_investigation_rounds", self.max_investigation_rounds),
             ("max_investigation_actions", self.max_investigation_actions),
             ("max_evidence_characters", self.max_evidence_characters),
+            ("max_plan_feedback_rounds", self.max_plan_feedback_rounds),
         ):
             if value <= 0:
                 raise ConfigurationError(f"agent.{name} must be positive")
@@ -446,6 +448,10 @@ def load_config(
         max_evidence_characters=_read_int(
             get("AGENT_MAX_EVIDENCE_CHARACTERS", "10000"),
             "AGENT_MAX_EVIDENCE_CHARACTERS",
+        ),
+        max_plan_feedback_rounds=_read_int(
+            get("AGENT_MAX_PLAN_FEEDBACK_ROUNDS", "2"),
+            "AGENT_MAX_PLAN_FEEDBACK_ROUNDS",
         ),
     )
     verification = VerificationConfig(

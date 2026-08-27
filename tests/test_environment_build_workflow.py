@@ -686,7 +686,7 @@ class EnvironmentBuildWorkflowTests(unittest.TestCase):
         self.assertEqual(planner.analysis_calls, 0)
         self.assertIn("test assertions failed", result.stop_reason)
 
-    def test_collection_warning_is_eligible_for_environment_repair(self):
+    def test_collection_warning_enters_agent_but_cannot_mutate_runtime_image(self):
         workflow, planner, _ = self._workflow(
             [
                 (self._build_result(33, True), None),
@@ -700,8 +700,16 @@ class EnvironmentBuildWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result.final_status, EnvironmentBuildStatus.VERIFICATION_FAILED)
         self.assertTrue(result.agent_participated)
-        self.assertEqual(result.repair_attempts, 1)
+        self.assertEqual(result.repair_attempts, 0)
         self.assertEqual(planner.analysis_calls, 1)
+        self.assertEqual(planner.plan_calls, 0)
+        self.assertIn("repair search space is empty", result.stop_reason)
+        self.assertTrue(
+            any(
+                item.key.endswith("repair-search-space.json")
+                for item in result.artifacts
+            )
+        )
         self.assertNotIn("test assertions failed", result.stop_reason)
 
     def test_build_succeeds_but_tests_keep_failing(self):
@@ -727,7 +735,7 @@ class EnvironmentBuildWorkflowTests(unittest.TestCase):
                 (self._build_result(0, True), None),
                 (self._timed_out_build_result(1), self._failure(1)),
             ],
-            [self._report(0, test="fail")],
+            [self._report(0, run="fail")],
             max_attempts=1,
         )
 

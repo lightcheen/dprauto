@@ -21,6 +21,11 @@ from dprauto.agent.models import (
     ToolContext,
     ToolResult,
 )
+from dprauto.agent.search_space import (
+    bounded_repair_search_space,
+    dependency_candidates,
+    failure_family,
+)
 from dprauto.agent.state import AgentState
 from dprauto.agent.tools.registry import ToolRegistry
 from dprauto.config import AgentConfig
@@ -121,6 +126,7 @@ class AgentWorkflow:
         state.setdefault("deadline_at", deadline_from(started_at, self.config.max_total_seconds))
         state.setdefault("attempt_number", 0)
         state.setdefault("repeated_failure_count", 0)
+        state.setdefault("stagnant_failure_count", 0)
         state.setdefault("agent_participated", False)
         state.setdefault("llm_call_count", 0)
         state.setdefault("tool_results", ())
@@ -389,47 +395,123 @@ class AgentWorkflow:
         budget_stop = self._time_budget_stop(state)
         if budget_stop:
             return budget_stop
-        llm_call_count = state.get("llm_call_count", 0) + 1
-        try:
-            # Rebuild is an orchestration edge after apply_fix, not an LLM choice.
-            # Excluding it prevents a timed-out build tool call from terminating the
-            # apply node before FailureInfo can be evaluated for the next round.
-            planning_tools = {
-                name: specification
-                for name, specification in self.tools.specifications.items()
-                if specification.get("effect") == "mutate"
-            }
-            if not planning_tools:
-                return self._stopped("no mutating repair tools are available")
-            plan = self.planner.plan_fix(state, diagnosis, planning_tools)
-        except DPRAutoError as exc:
-            return self._stopped(str(exc), llm_call_count=llm_call_count)
-        policy_violation = self._plan_policy_violation(plan, state.get("failure"))
-        if policy_violation:
-            return self._stopped(policy_violation, llm_call_count=llm_call_count)
-        fingerprint = method_fingerprint(plan)
-        already_attempted = any(
+        failure = state.get("failure")
+        if failure is None:
+            return self._stopped("plan_fix requires a classified FailureInfo")
+        search_space, planning_tools = bounded_repair_search_space(
+            failure,
+            self.tools.specifications,
+        )
+        if not planning_tools:
+            signals = "; ".join(search_space["evidence_signals"])
+            return self._stopped(
+                f"repair search space is empty for this failure: {signals}",
+                repair_search_space=search_space,
+                artifacts=self._search_space_artifacts(state, search_space, ()),
+            )
+
+        llm_call_count = state.get("llm_call_count", 0)
+        feedback: list[str] = []
+        for proposal_number in range(1, self.config.max_plan_feedback_rounds + 1):
+            if time_budget_exhausted(state.get("deadline_at")):
+                return self._stopped(
+                    self._time_budget_stop_reason(),
+                    llm_call_count=llm_call_count,
+                    repair_search_space=search_space,
+                    plan_feedback=tuple(feedback),
+                    artifacts=self._search_space_artifacts(
+                        state, search_space, tuple(feedback)
+                    ),
+                )
+            llm_call_count += 1
+            planning_state: AgentState = dict(state)
+            planning_state["repair_search_space"] = search_space
+            planning_state["plan_feedback"] = tuple(feedback)
+            try:
+                plan = self.planner.plan_fix(planning_state, diagnosis, planning_tools)
+            except DPRAutoError as exc:
+                return self._stopped(
+                    str(exc),
+                    llm_call_count=llm_call_count,
+                    repair_search_space=search_space,
+                    plan_feedback=tuple(feedback),
+                    artifacts=self._search_space_artifacts(
+                        state, search_space, tuple(feedback)
+                    ),
+                )
+
+            outside = tuple(
+                action.tool for action in plan.actions if action.tool not in planning_tools
+            )
+            violation = (
+                "repair plan selected tool(s) outside the bounded search space: "
+                + ", ".join(dict.fromkeys(outside))
+                if outside
+                else self._plan_policy_violation(plan, failure)
+            )
+            fingerprint = method_fingerprint(plan)
+            if not violation and self._method_already_attempted(state, fingerprint):
+                violation = (
+                    "duplicate repair method rejected before execution: " + fingerprint
+                )
+            if not violation:
+                return {
+                    "phase": AgentPhase.PROPOSING,
+                    "llm_call_count": llm_call_count,
+                    "fix_plan": plan,
+                    "current_method_fingerprint": fingerprint,
+                    "repair_search_space": search_space,
+                    "plan_feedback": tuple(feedback),
+                    "artifacts": self._search_space_artifacts(
+                        state, search_space, tuple(feedback)
+                    ),
+                    "summaries": self._append(
+                        state.get("summaries", ()),
+                        f"plan: {plan.summary or plan.hypothesis}",
+                    ),
+                }
+            feedback.append(f"proposal {proposal_number}: {violation}")
+
+        return self._stopped(
+            "repair planning feedback exhausted: " + feedback[-1],
+            llm_call_count=llm_call_count,
+            repair_search_space=search_space,
+            plan_feedback=tuple(feedback),
+            artifacts=self._search_space_artifacts(
+                state, search_space, tuple(feedback)
+            ),
+        )
+
+    def _method_already_attempted(self, state: AgentState, fingerprint: str) -> bool:
+        attempted = any(
             item.fingerprint == fingerprint
             for item in state.get("context_summary", ContextSummary()).failed_methods
         )
         if self.persistence is not None:
-            already_attempted = already_attempted or self.persistence.was_attempted(
+            attempted = attempted or self.persistence.was_attempted(
                 state["run_id"], fingerprint
             )
-        if already_attempted:
-            return self._stopped(
-                f"duplicate repair method rejected before execution: {fingerprint}"
-            )
-        return {
-            "phase": AgentPhase.PROPOSING,
-            "llm_call_count": llm_call_count,
-            "fix_plan": plan,
-            "current_method_fingerprint": fingerprint,
-            "summaries": self._append(
-                state.get("summaries", ()),
-                f"plan: {plan.summary or plan.hypothesis}",
+        return attempted
+
+    def _search_space_artifacts(
+        self,
+        state: AgentState,
+        search_space: Mapping[str, Any],
+        feedback: tuple[str, ...],
+    ) -> tuple:
+        round_number = state.get("attempt_number", 0) + 1
+        artifact = self.storage.save(
+            f"agent-runs/{state['run_id']}/rounds/{round_number:02d}/repair-search-space.json",
+            to_json_bytes(
+                {
+                    "round": round_number,
+                    "search_space": search_space,
+                    "plan_feedback": feedback,
+                }
             ),
-        }
+            media_type="application/json",
+        )
+        return self._append(state.get("artifacts", ()), artifact, limit=200)
 
     def apply_fix(self, state: AgentState) -> dict[str, Any]:
         plan = state.get("fix_plan")
@@ -822,6 +904,7 @@ class AgentWorkflow:
                     else "build succeeded"
                 ),
                 "repeated_failure_count": 0,
+                "stagnant_failure_count": 0,
                 "summaries": self._append(
                     state.get("summaries", ()),
                     (
@@ -844,6 +927,11 @@ class AgentWorkflow:
             if previous is not None and previous.fingerprint == failure.fingerprint
             else 0
         )
+        stagnant = (
+            state.get("stagnant_failure_count", 0) + 1
+            if previous is not None and failure_family(previous) == failure_family(failure)
+            else 0
+        )
         updated_history = self._append(
             history,
             failure,
@@ -861,6 +949,11 @@ class AgentWorkflow:
                 f"same failure repeated {repeated} consecutive repair rounds: "
                 f"{failure.fingerprint}"
             )
+        elif stagnant >= self.config.max_repeated_failures:
+            stop_reason = (
+                f"no causal progress after {stagnant} consecutive repair rounds: "
+                f"{failure_family(failure)}"
+            )
         elif time_budget_exhausted(state.get("deadline_at")):
             stop_reason = self._time_budget_stop_reason()
 
@@ -868,6 +961,7 @@ class AgentWorkflow:
             "phase": AgentPhase.STOPPED if stop_reason else AgentPhase.CLASSIFYING,
             "failure_history": updated_history,
             "repeated_failure_count": repeated,
+            "stagnant_failure_count": stagnant,
             "summaries": self._append(
                 state.get("summaries", ()),
                 f"round {attempt_number}: {failure.category.value} ({failure.fingerprint})",
@@ -1215,6 +1309,7 @@ class AgentWorkflow:
             plan=plan,
             fingerprint=fingerprint,
             outcome=outcome,
+            attempt_number=state["attempt_number"],
             environment_diff=state.get("environment_diff"),
         )
         update: dict[str, Any] = {"context_summary": summary}
@@ -1233,6 +1328,7 @@ class AgentWorkflow:
             failure_after=current_failure,
             environment_diff=state.get("environment_diff"),
             artifacts=state.get("artifacts", ())[-20:],
+            round_feedback=(summary.round_feedback[-1] if summary.round_feedback else None),
         )
         history_artifact = self.persistence.record(record)
         update["artifacts"] = self._append(
@@ -1354,6 +1450,7 @@ class AgentWorkflow:
                     "patch_system_packages",
                     "patch_python_dependencies",
                     "patch_base_image",
+                    "modify_build_script",
                 }
             ):
                 return (
@@ -1385,11 +1482,12 @@ class AgentWorkflow:
 
         if failure is None:
             return "repair plan rejected: verification dependency evidence is unavailable"
-        evidence = "\n".join((*failure.evidence, failure.key_log))
+        evidence = "\n".join((*failure.evidence, failure.message, failure.key_log))
         normalized = evidence.casefold()
         direct_dependency_markers = (
             "modulenotfounderror",
             "no module named",
+            "importerror: cannot import name",
             "distributionnotfound",
             "packagenotfounderror",
             "versionconflict",
@@ -1411,26 +1509,51 @@ class AgentWorkflow:
             _python_requirement_name(item).startswith("pytest-")
             for item in requested
         )
-        if not any(marker in normalized for marker in direct_dependency_markers) and not (
-            plugin_marker and pytest_plugin_requested
+        normalized_names = tuple(_python_requirement_name(item) for item in requested)
+        normalized_evidence = normalized.replace("_", "-")
+        candidates = dependency_candidates(failure)
+        compatibility_marker = (
+            "deprecationwarning" in normalized
+            and (
+                ("please use" in normalized and "import" in normalized)
+                or "deprecated" in normalized
+            )
+            and bool(normalized_names)
+            and all(name in normalized_evidence for name in normalized_names)
+        )
+        if (
+            not any(marker in normalized for marker in direct_dependency_markers)
+            and not (plugin_marker and pytest_plugin_requested)
+            and not compatibility_marker
         ):
             return (
                 "repair plan rejected: verification dependency changes require direct "
-                "missing-module, missing-plugin, distribution, or version-conflict evidence "
-                "from the Testability failure"
+                "missing-module, missing-plugin, distribution, version-conflict, or "
+                "package-named collection compatibility evidence from Testability"
             )
 
         for item in requested:
             name = re.escape(_python_requirement_name(item))
             already_satisfied = re.search(
                 rf"requirement already satisfied:\s+{name}(?:\b|\[)",
-                normalized.replace("_", "-"),
+                normalized_evidence,
             )
             if already_satisfied:
                 return (
                     "repair plan rejected: Testability evidence says the requested "
                     f"dependency is already satisfied: {item}"
                 )
+        unexpected = tuple(
+            name for name in normalized_names if candidates and name not in candidates
+        )
+        if unexpected:
+            return (
+                "repair plan rejected: requested verification dependency is not named by "
+                "the failure evidence (expected one of "
+                + ", ".join(candidates)
+                + "): "
+                + ", ".join(unexpected)
+            )
         return ""
 
     @staticmethod

@@ -354,6 +354,17 @@ START -> investigate/read-only evidence -> analyze_failure -> plan_fix
 - 每轮只允许修改一个高风险环境维度。计划阶段拒绝 system/Python/runtime 工具混用，实际
   `EnvironmentDiff` 再复核 runtime、system packages、Python dependencies 和 startup；
   `modify_build_script` 仅作为无法用结构化工具表达的单动作兜底，不能用来绕过上述限制。
+- 计划前会按失败阶段、类别和直接日志证据生成有界 repair search space。Testability 缺模块、
+  插件或明确的 collection 兼容问题只暴露临时 verification overlay；系统包、Python 包、运行时
+  和超时缩减各自只暴露相关工具。pytest/tox/nox 控制面冲突、Django 初始化和系统 executable
+  不会被泛化成任意 Dockerfile 修改。
+- 计划门禁拒绝或命中已经失败的方法时，不立即浪费整个修复轮次；拒绝原因会作为绑定反馈传回
+  planner，默认最多生成 2 个候选计划。可通过 `DPRAUTO_AGENT_MAX_PLAN_FEEDBACK_ROUNDS`
+  调整这个正整数上限。
+- 每次真实 preflight/build/test 后保留有界 `RepairRoundFeedback`：前后失败 fingerprint/family、
+  实际环境维度和 `succeeded`/`stagnant`/`advanced-stage`/`changed-failure`/`regressed` 进展。
+  下一轮 LLM context 会收到这些执行反馈；即使日志中的时间、worker id 等使 fingerprint 改变，
+  连续相同因果失败族仍会触发无进展停止。
 - 每个修复轮次保存 unified diff 与 `environment-diff.json`，并在成功、最大轮数、最大
   总时长、重复错误、基础设施失败或无实际环境变更时终止。
 - 每次完整重建前，对候选目录中的 `setup.sh` 执行 shell 语法检查，对 Dockerfile 执行

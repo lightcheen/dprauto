@@ -130,6 +130,7 @@ class AgentContextManagerTests(unittest.TestCase):
                 "current_failure",
                 "recent_modifications",
                 "failed_methods",
+                "round_feedback",
                 "context_summary",
             },
         )

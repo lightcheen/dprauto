@@ -276,6 +276,8 @@ class LLMRepairPlanner:
             "context": context,
             "available_tools": available_tools,
             "policy": self._repair_policy(state),
+            "repair_search_space": state.get("repair_search_space", {}),
+            "plan_feedback": state.get("plan_feedback", ()),
         }
         encoded = to_json_bytes(payload).decode()
         feedback = ""
@@ -308,7 +310,8 @@ class LLMRepairPlanner:
                             "must change the build "
                             "environment before rebuilding. Observation evidence has already been "
                             "provided in the context; do not plan read, search, log, command-run, "
-                            "or build tools.",
+                            "or build tools. Treat plan_feedback as binding rejection evidence: "
+                            "do not repeat the rejected tool, arguments, or repair method.",
                         ),
                         LLMMessage("user", user_content),
                     ),
