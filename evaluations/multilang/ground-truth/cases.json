@@ -40,7 +40,7 @@
       "commands": {
         "build": ["python -m build"],
         "test": ["python -m pytest"],
-        "run": [],
+        "run": ["dagshub --help"],
         "setup": []
       },
       "test_contract": {
@@ -50,7 +50,7 @@
         "environment": {},
         "dependency_rule": "Compute imports for the selected test slice; do not install the entire requirements-dev.txt when it pulls unrelated FiftyOne/PyArrow dependencies."
       },
-      "evidence": ["pytest.ini", ".github/workflows/python-package.yml"],
+      "evidence": ["pyproject.toml", "pytest.ini", ".github/workflows/python-package.yml"],
       "false_targets": [],
       "notes": "This case guards the minimal test dependency closure."
     },
@@ -84,7 +84,7 @@
       "commands": {
         "build": ["python -m build"],
         "test": ["python manage.py test"],
-        "run": ["python manage.py check"],
+        "run": ["python manage.py runserver 0.0.0.0:8000"],
         "setup": ["select the project settings module", "run only migrations required by the selected tests"]
       },
       "test_contract": {
@@ -94,7 +94,7 @@
         "environment": {"DJANGO_SETTINGS_MODULE": "project-specific; discover from manage.py"},
         "framework_initialization": ["django.setup", "settings validation"]
       },
-      "evidence": ["manage.py", "pyproject.toml"],
+      "evidence": ["manage.py", "pyproject.toml", "README.md"],
       "false_targets": ["python -m pytest without Django settings discovery"],
       "notes": "Generic pytest is not accepted when it bypasses the repository's Django bootstrap."
     },

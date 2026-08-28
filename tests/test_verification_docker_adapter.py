@@ -2,7 +2,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from dprauto.adapters.storage import LocalArtifactStorage
 from dprauto.adapters.verification.docker import DockerContainerRuntime
@@ -248,6 +248,82 @@ class DockerVerificationAdapterTests(unittest.TestCase):
                 create[create.index("--workdir") + 1],
                 "/workspace/services/web",
             )
+
+    def test_web_probe_uses_bridge_port_mapping_when_configured_network_is_host(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = DockerContainerRuntime(
+                LocalArtifactStorage(Path(directory) / "artifacts"),
+                BuildConfig(docker_binary="docker"),
+                VerificationConfig(docker_network="host"),
+            )
+            calls = []
+
+            def fake_run(argv, **kwargs):
+                calls.append(list(argv))
+                return subprocess.CompletedProcess(argv, 1, stdout=b"create stopped")
+
+            with patch(
+                "dprauto.adapters.verification.docker.subprocess.run",
+                side_effect=fake_run,
+            ):
+                runtime.probe_web(
+                    "fixture:web",
+                    CommandSpec(
+                        ("python manage.py runserver 0.0.0.0:8000",),
+                        purpose=CommandPurpose.RUN,
+                        shell=True,
+                    ),
+                    container_port=8000,
+                    timeout_seconds=1,
+                )
+
+            create = calls[0]
+            self.assertIn("--publish", create)
+            self.assertNotIn("--network", create)
+            self.assertNotIn("host", create)
+
+    def test_web_probe_disables_environment_proxies_for_local_http(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = DockerContainerRuntime(
+                LocalArtifactStorage(Path(directory) / "artifacts"),
+                BuildConfig(docker_binary="docker"),
+            )
+
+            def fake_run(argv, **kwargs):
+                return subprocess.CompletedProcess(argv, 0, stdout=b"ok\n")
+
+            response = MagicMock()
+            response.status = 200
+            response.__enter__.return_value = response
+            opener = MagicMock()
+            opener.open.side_effect = [ConnectionResetError(104, "reset"), response]
+            with (
+                patch(
+                    "dprauto.adapters.verification.docker.subprocess.run",
+                    side_effect=fake_run,
+                ),
+                patch.object(runtime, "_is_running", return_value=True),
+                patch.object(runtime, "_port_open", return_value=True),
+                patch(
+                    "dprauto.adapters.verification.docker.urllib.request.build_opener",
+                    return_value=opener,
+                ) as build_opener,
+            ):
+                probe = runtime.probe_web(
+                    "fixture:web",
+                    CommandSpec(
+                        ("python manage.py runserver 0.0.0.0:8000",),
+                        purpose=CommandPurpose.RUN,
+                        shell=True,
+                    ),
+                    container_port=8000,
+                    timeout_seconds=1,
+                )
+
+            self.assertTrue(probe.http_reachable)
+            self.assertEqual(probe.http_status, 200)
+            self.assertEqual(build_opener.call_count, 2)
+            self.assertEqual(opener.open.call_args.args[0].split(":", 1)[0], "http")
 
 
 if __name__ == "__main__":

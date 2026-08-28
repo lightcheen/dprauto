@@ -9,19 +9,9 @@ from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 from dprauto.adapters.python.test_matrix import matrix_entry, preferred_matrix_name
+from dprauto.command_semantics import is_smoke_command, select_run_command
 from dprauto.domain.enums import CommandPurpose
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile
-
-_SMOKE_PATTERN = re.compile(
-    r"(?:^|\s)(?:(?i:--help|-h|--version)|-V)(?:\s|$)|"
-    r"(?i:python\d*\s+-c\s+.*\bimport\b)|"
-    r"(?i:python\d*\s+-m\s+compileall\b)",
-)
-
-
-def is_smoke_command(command: ProjectCommand) -> bool:
-    return bool(_SMOKE_PATTERN.search(command.command.display))
-
 
 @dataclass(frozen=True, slots=True)
 class TestCommandSelection:
@@ -543,12 +533,3 @@ class TestCommandSelector:
         if compact:
             return f"{compact.group(1)}.{int(compact.group(2))}"
         return ""
-
-
-def select_run_command(profile: ProjectProfile) -> ProjectCommand | None:
-    candidates = [
-        item
-        for item in profile.commands
-        if item.command.purpose is CommandPurpose.RUN and not is_smoke_command(item)
-    ]
-    return max(candidates, key=lambda item: item.confidence, default=None)

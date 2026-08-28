@@ -221,7 +221,7 @@ class NativeTemplateStrategy:
     name = "native-template"
     _SYSTEMS = frozenset({"cmake", "meson", "autotools", "make"})
     _EVIDENCE_PACKAGES = frozenset(
-        {"liblzma-dev", "libssl-dev", "python3", "zlib1g-dev"}
+        {"liblzma-dev", "libpopt-dev", "libssl-dev", "python3", "zlib1g-dev"}
     )
 
     def __init__(self, runner: RecordedBuildRunner, config: BuildConfig | None = None) -> None:
@@ -370,16 +370,7 @@ class NativeTemplateStrategy:
             configure = "cmake -S . -B build"
             if arguments:
                 configure += " " + " ".join(arguments)
-            raw_target = profile.metadata.get("cmake_test_build_target", "")
-            target = (
-                raw_target
-                if isinstance(raw_target, str)
-                and raw_target in {"all_tests", "tests", "check"}
-                else ""
-            )
             build = "cmake --build build"
-            if target:
-                build += f" --target {target}"
             build += f" --parallel {jobs}"
             return (configure, build)
         if system == "meson":
@@ -387,7 +378,10 @@ class NativeTemplateStrategy:
         if system == "autotools":
             root_files = set(profile.build_files)
             if "autogen.sh" in root_files:
-                configure = "chmod +x ./autogen.sh && ./autogen.sh"
+                configure = (
+                    "chmod +x ./autogen.sh && ./autogen.sh && "
+                    "if [ ! -f Makefile ]; then chmod +x ./configure && ./configure; fi"
+                )
             elif "configure" in root_files:
                 configure = "chmod +x ./configure && ./configure"
             else:

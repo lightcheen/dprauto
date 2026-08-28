@@ -207,7 +207,7 @@ add_subdirectory(tests)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "configure.ac").write_text(
-                "AC_INIT([demo],[1.0])\n",
+                "AC_INIT([demo],[1.0])\nPKG_CHECK_MODULES(POPT, [popt >= 1.7])\n",
                 encoding="utf-8",
             )
             (root / "Makefile.in").write_text(
@@ -215,7 +215,9 @@ add_subdirectory(tests)
                 encoding="utf-8",
             )
             (root / "src").mkdir()
-            (root / "src/demo.c").write_text(
+            (root / "src" / "demo").mkdir()
+            (root / "src" / "demo" / "core").mkdir()
+            (root / "src" / "demo" / "core" / "options.c").write_text(
                 'int main(void) { return 0; } /* --version */\n',
                 encoding="utf-8",
             )
@@ -224,6 +226,7 @@ add_subdirectory(tests)
 
             self.assertEqual(profile.project_type, profile.project_type.CLI)
             self.assertIn("./demo --version", self._commands(profile, CommandPurpose.RUN))
+            self.assertIn("libpopt-dev", profile.metadata["system_dependency_packages"])
 
     def test_native_root_cli_gets_runtime_probe_but_library_examples_do_not(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

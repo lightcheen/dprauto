@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 from dprauto.config import BuildConfig
+from dprauto.command_semantics import select_run_command
 from dprauto.domain.enums import BuildStage, CommandPurpose
 from dprauto.domain.models import (
     BuildPlan,
@@ -495,12 +496,7 @@ class TemplateStrategy:
                         "target=/var/lib/apt,sharing=locked "
                     )
             lines.append(f"RUN {mounts}{command}")
-        run_commands = [
-            item
-            for item in profile.commands
-            if item.command.purpose is CommandPurpose.RUN
-        ]
-        if run_commands:
-            selected = max(run_commands, key=lambda item: item.confidence)
+        selected = select_run_command(profile)
+        if selected is not None:
             lines.append(f"CMD {json.dumps(['/bin/sh', '-lc', selected.command.display])}")
         return "\n".join(lines) + "\n"

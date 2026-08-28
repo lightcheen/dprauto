@@ -471,7 +471,13 @@ class DockerContainerRuntime:
             "--publish",
             f"127.0.0.1:{host_port}:{container_port}",
         ]
-        if self.verification_config.docker_network:
+        # Docker discards published ports in host-network mode. Web probes use
+        # the default bridge for that mode so their random host port remains
+        # isolated and observable.
+        if (
+            self.verification_config.docker_network
+            and self.verification_config.docker_network != "host"
+        ):
             create.extend(("--network", self.verification_config.docker_network))
         create.extend(docker_proxy_environment_arguments(self.build_config))
         if command is not None:
@@ -516,7 +522,10 @@ class DockerContainerRuntime:
                 port_open = self._port_open(host_port)
                 if port_open:
                     try:
-                        with urllib.request.urlopen(
+                        local_opener = urllib.request.build_opener(
+                            urllib.request.ProxyHandler({})
+                        )
+                        with local_opener.open(
                             f"http://127.0.0.1:{host_port}{path}", timeout=1
                         ) as response:
                             http_status = response.status
@@ -526,7 +535,7 @@ class DockerContainerRuntime:
                         http_status = exc.code
                         http_reachable = True
                         break
-                    except (urllib.error.URLError, TimeoutError):
+                    except (urllib.error.URLError, OSError):
                         pass
                 time.sleep(0.2)
             logs = subprocess.run(

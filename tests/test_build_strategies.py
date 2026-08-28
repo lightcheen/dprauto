@@ -46,12 +46,13 @@ def python_profile(
     python_constraint=">=3.11",
     commands=(),
     metadata=None,
+    project_type=ProjectType.SCRIPT,
 ):
     return ProjectProfile(
         "example-python",
         SourceReference("fixture", revision="abc123"),
         languages=("Python",),
-        project_type=ProjectType.SCRIPT,
+        project_type=project_type,
         runtime_constraints={"python": python_constraint},
         package_managers=managers,
         dependency_files=dependencies,
@@ -212,15 +213,72 @@ class BuildStrategyTests(unittest.TestCase):
             "chmod +x ./configure && ./configure",
         )
 
-    def test_native_cmake_builds_declared_ordinary_test_target_only(self) -> None:
+        bootstrapped = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(
+                system="autotools",
+                languages=("C",),
+                build_files=("autogen.sh", "configure.ac"),
+            )
+        )
+        self.assertIn("./autogen.sh", bootstrapped.metadata["build_commands"][0])
+        self.assertIn("if [ ! -f Makefile ]", bootstrapped.metadata["build_commands"][0])
+        self.assertIn("./configure", bootstrapped.metadata["build_commands"][0])
+
+    def test_native_cmake_never_executes_a_test_target_during_image_build(self) -> None:
         plan = NativeTemplateStrategy(self.runner, self.config).create_plan(
             native_profile(metadata={"cmake_test_build_target": "all_tests"})
         )
 
         self.assertEqual(
             plan.metadata["build_commands"][1],
-            "cmake --build build --target all_tests --parallel 4",
+            "cmake --build build --parallel 4",
         )
+
+    def test_python_web_image_uses_only_a_persistent_server_command(self) -> None:
+        check = ProjectCommand(
+            "check",
+            CommandSpec(
+                ("python manage.py check",),
+                purpose=CommandPurpose.RUN,
+                shell=True,
+            ),
+            "framework:manage.py",
+            0.99,
+        )
+        server = ProjectCommand(
+            "server",
+            CommandSpec(
+                ("python manage.py runserver",),
+                purpose=CommandPurpose.RUN,
+                shell=True,
+            ),
+            "README.md",
+            0.8,
+        )
+        migration = ProjectCommand(
+            "migration",
+            CommandSpec(
+                ("python manage.py migrate",),
+                purpose=CommandPurpose.INSTALL,
+                shell=True,
+            ),
+            "README.md",
+            0.8,
+        )
+
+        plan = TemplateStrategy(self.runner, self.config).create_plan(
+            python_profile(
+                commands=(check, server, migration),
+                project_type=ProjectType.WEB,
+            )
+        )
+        dockerfile = plan.generated_files[0].content
+
+        self.assertIn(
+            "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000",
+            dockerfile,
+        )
+        self.assertNotIn("python manage.py check", dockerfile)
 
     def test_native_cli_runnability_executes_the_root_binary(self) -> None:
         run = ProjectCommand(

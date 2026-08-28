@@ -292,7 +292,7 @@ class NativeProjectParser:
         evidence = "\n".join(
             scanned.read_text(path)
             for path in scanned.files
-            if depth(path) <= 2
+            if depth(path) <= 4
             and (
                 PurePosixPath(path).name.casefold().startswith("readme")
                 or PurePosixPath(path).suffix.casefold() in {".c", ".cc", ".cpp", ".cxx"}
@@ -384,6 +384,11 @@ class NativeProjectParser:
             configure = scanned.read_text("configure.ac") or scanned.read_text("configure.in")
             if re.search(r"\b(?:AM_PATH_PYTHON|PYTHON)\b", configure):
                 selected.append("python3")
+            if re.search(
+                r"(?i)\bPKG_CHECK_MODULES\s*\(\s*POPT\s*,\s*\[?\s*popt\b",
+                configure,
+            ):
+                selected.append("libpopt-dev")
         return tuple(dict.fromkeys(selected))
 
     @staticmethod

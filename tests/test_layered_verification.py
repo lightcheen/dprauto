@@ -50,6 +50,7 @@ class FakeRuntime:
         self.web = WebProbe(True, True, True, 8000, 43210, 200)
         self.commands = []
         self.output_by_command = {}
+        self.exit_code_by_command = {}
         self.environments = []
 
     def inspect_image(self, image_reference: str) -> ImageInspection:
@@ -69,7 +70,7 @@ class FakeRuntime:
             output = f"DPRAUTO_IMPORT_OK\nDPRAUTO_API_COUNT={self.library_api_count}\n"
         result = CommandResult(
             actual,
-            self.exit_code,
+            self.exit_code_by_command.get(actual.display, self.exit_code),
             stdout=ArtifactRef("fake/run.log"),
             timed_out=False,
         )
@@ -1182,6 +1183,11 @@ fiftyone==0.23.8
         failed = verifier.verify(build_context(project, self.workspace))
         self.assertEqual(failed.status, VerificationStatus.FAILED)
 
+        self.runtime.web = WebProbe(True, True, True, 8000, 43210, 500)
+        server_error = verifier.verify(build_context(project, self.workspace))
+        self.assertEqual(server_error.status, VerificationStatus.FAILED)
+        self.assertIn("server-error", server_error.checks[-1].summary)
+
     def test_cli_and_script_require_observable_behavior(self) -> None:
         verifier = RunnabilityVerifier(self.runtime)
         cli = profile(ProjectType.CLI, project_command("sample", CommandPurpose.RUN, "setup.py"))
@@ -1210,6 +1216,23 @@ fiftyone==0.23.8
             [command.display for command in self.runtime.commands], ["sample", "sample --help"]
         )
         self.assertTrue(result.metadata["empty_output_help_fallback"])
+
+    def test_cli_nonzero_usage_exit_is_retried_with_help(self) -> None:
+        verifier = RunnabilityVerifier(self.runtime)
+        cli = profile(ProjectType.CLI, project_command("sample", CommandPurpose.RUN, "setup.py"))
+        self.runtime.exit_code_by_command["sample"] = 2
+        self.runtime.output_by_command["sample"] = "Usage: sample [OPTIONS] COMMAND"
+        self.runtime.output_by_command["sample --help"] = "Usage: sample [OPTIONS] COMMAND"
+
+        result = verifier.verify(build_context(cli, self.workspace))
+
+        self.assertTrue(result.passed)
+        self.assertEqual(
+            [command.display for command in self.runtime.commands],
+            ["sample", "sample --help"],
+        )
+        self.assertTrue(result.metadata["help_fallback_used"])
+        self.assertEqual(result.metadata["help_fallback_reason"], "initial-command-failed")
 
     def test_jvm_library_uses_strategy_owned_artifact_probe(self) -> None:
         project = replace(

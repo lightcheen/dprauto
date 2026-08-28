@@ -115,6 +115,10 @@ class PythonProjectParser:
         package_managers = self._package_managers(scanned, dependency_files)
         python_constraint, version_evidence = self._python_version(scanned, ci_files)
         entry_points = self._entry_points(scanned)
+        optional_entry_points = self._optional_entry_points(scanned, entry_points)
+        runtime_entry_points = tuple(
+            entry for entry in entry_points if entry not in optional_entry_points
+        )
         dependencies = self._dependencies(scanned, dependency_files)
         runtime_dependencies = self._runtime_dependencies(scanned, dependency_files)
         system_dependency_hints = self._system_dependency_hints(
@@ -134,7 +138,7 @@ class PythonProjectParser:
             dependency_files,
             build_files,
             package_managers,
-            entry_points,
+            runtime_entry_points,
         )
         commands = self._project_commands((*extracted_commands, *inferred_commands))
         framework_commands, framework_metadata = self._framework_contract(scanned)
@@ -152,7 +156,7 @@ class PythonProjectParser:
         project_type, type_evidence = self._project_type(
             scanned,
             dependencies,
-            entry_points,
+            runtime_entry_points,
             commands,
             build_files,
         )
@@ -198,6 +202,7 @@ class PythonProjectParser:
                 "import_modules": import_modules,
                 "python_version_evidence": version_evidence,
                 "entry_points": entry_points,
+                "optional_entry_points": optional_entry_points,
                 "dependency_names": tuple(sorted(dependencies)),
                 "runtime_dependency_names": tuple(sorted(runtime_dependencies)),
                 "system_dependency_hints": system_dependency_hints,
@@ -839,6 +844,44 @@ class PythonProjectParser:
             )
         return tuple(dict.fromkeys(entries))
 
+    def _optional_entry_points(
+        self,
+        scanned: ScannedProject,
+        entry_points: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Detect console scripts whose implementation explicitly requires an extra."""
+
+        if not entry_points:
+            return ()
+        pyproject = scanned.read_text("pyproject.toml")
+        definitions: dict[str, str] = {}
+        for section_name in ("project.scripts", "tool.poetry.scripts"):
+            section = self._toml_section(pyproject, section_name)
+            for match in re.finditer(
+                r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=\s*[\"']([A-Za-z0-9_.]+):[^\"']+[\"']",
+                section,
+            ):
+                definitions[match.group(1)] = match.group(2)
+        selected: list[str] = []
+        for entry, module in definitions.items():
+            module_path = module.replace(".", "/") + ".py"
+            content = scanned.read_text(module_path)
+            if not content:
+                content = scanned.read_text(module.replace(".", "/") + "/__init__.py")
+            if self._requires_optional_extra(content):
+                selected.append(entry)
+        return tuple(dict.fromkeys(selected))
+
+    @staticmethod
+    def _requires_optional_extra(content: str) -> bool:
+        return bool(
+            re.search(r"\bexcept\s+ImportError\b", content)
+            and re.search(
+                r"(?i)install[^\n]{0,160}\[[A-Za-z0-9_.-]+\]",
+                content,
+            )
+        )
+
     def _dependencies(
         self,
         scanned: ScannedProject,
@@ -1160,8 +1203,8 @@ class PythonProjectParser:
                     return True
         return False
 
-    @staticmethod
-    def _module_entry(scanned: ScannedProject) -> str:
+    @classmethod
+    def _module_entry(cls, scanned: ScannedProject) -> str:
         candidates = [path for path in scanned.files if path.endswith("/__main__.py")]
         if not candidates:
             return ""
@@ -1171,6 +1214,17 @@ class PythonProjectParser:
         parts = list(PurePosixPath(path).parts[:-1])
         if parts and parts[0] == "src":
             parts.pop(0)
+        entry_content = scanned.read_text(path)
+        imported_modules = re.findall(
+            r"(?m)^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)",
+            entry_content,
+        )
+        for module in imported_modules:
+            target = scanned.read_text(module.replace(".", "/") + ".py")
+            if not target:
+                target = scanned.read_text(module.replace(".", "/") + "/__init__.py")
+            if cls._requires_optional_extra(target):
+                return ""
         return ".".join(parts)
 
     @staticmethod
@@ -1180,7 +1234,21 @@ class PythonProjectParser:
             candidates = [
                 path
                 for path in scanned.files
-                if PurePosixPath(path).name.lower() == name and len(PurePosixPath(path).parts) <= 2
+                if PurePosixPath(path).name.lower() == name
+                and len(PurePosixPath(path).parts) <= 2
+                and not any(
+                    part.casefold()
+                    in {
+                        "doc",
+                        "docs",
+                        "docs_src",
+                        "example",
+                        "examples",
+                        "test",
+                        "tests",
+                    }
+                    for part in PurePosixPath(path).parts[:-1]
+                )
             ]
             if candidates:
                 return min(candidates, key=lambda path: (len(PurePosixPath(path).parts), path))
@@ -1233,16 +1301,32 @@ class PythonProjectParser:
     @staticmethod
     def _web_entry_source(scanned: ScannedProject) -> bool:
         for path in scanned.files:
-            name = PurePosixPath(path).name.lower()
+            parsed = PurePosixPath(path)
+            name = parsed.name.lower()
             if name not in {"app.py", "asgi.py", "main.py", "server.py", "wsgi.py"}:
                 continue
-            if len(PurePosixPath(path).parts) > 4:
+            if len(parsed.parts) > 4 or any(
+                part.casefold()
+                in {"doc", "docs", "docs_src", "example", "examples", "test", "tests"}
+                for part in parsed.parts[:-1]
+            ):
                 continue
             content = scanned.read_text(path).lower()
-            if any(
+            imports_web_dependency = any(
                 f"import {name}" in content or f"from {name}" in content
                 for name in _WEB_DEPENDENCIES
-            ):
+            )
+            starts_application = bool(
+                re.search(
+                    r"\b(?:app|application)\s*=|"
+                    r"\b(?:fastapi|flask)\s*\(|"
+                    r"\bget_(?:wsgi|asgi)_application\s*\(|"
+                    r"\bcreate_app\s*\(|"
+                    r"\b(?:uvicorn|hypercorn)\.run\s*\(",
+                    content,
+                )
+            )
+            if imports_web_dependency and starts_application:
                 return True
         return False
 

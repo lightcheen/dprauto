@@ -176,3 +176,15 @@ zero Agent/LLM calls. Standard builds pass for 15/21 and strict build/install/te
 failures, incomplete selected-test prerequisite closure, and over-budget ordinary suites. See
 `M10_FULL21_DETERMINISTIC_RESULTS_2026-08-28.md` for the exact 21 source directories, commands,
 per-project evidence, timing, failure clusters, and next implementation order.
+
+## M11 command-semantics firewall
+
+M11 shares one role-aware run selector between generated images and verification, requires positive
+server behavior for Web commands, rejects optional/tests/docs entrypoints, retries explicit CLI
+help probes, separates CMake tests from image builds, completes Autotools configure ordering, and
+fixes Web probing under Docker host-network configuration. Repository-evidenced Django migrations
+are executed before `runserver`, while proxy responses and HTTP 5xx are rejected. On the five pinned
+false-target cases, build success moves from 3/5 to 5/5 and strict success from 0/5 to 2/5 without
+an Agent or LLM.
+See `M11_COMMAND_SEMANTICS_RESULTS_2026-08-28.md` for exact directories, implementation identity,
+commands, layer transitions, and the remaining dependency/user/process failures.

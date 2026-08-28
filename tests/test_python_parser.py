@@ -61,6 +61,61 @@ class PythonProjectParserTests(unittest.TestCase):
         )
         self.assertEqual(profile.metadata["entry_points"], ("profile-cli",))
 
+    def test_optional_console_script_and_documentation_app_do_not_make_a_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sample").mkdir()
+            (root / "sample" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "sample" / "cli.py").write_text(
+                """try:
+    from optional_cli import main as optional_main
+except ImportError:
+    optional_main = None
+
+def main():
+    if optional_main is None:
+        raise RuntimeError('install sample[standard]')
+""",
+                encoding="utf-8",
+            )
+            (root / "sample" / "__main__.py").write_text(
+                "from sample.cli import main\nmain()\n",
+                encoding="utf-8",
+            )
+            (root / "sample" / "middleware").mkdir()
+            (root / "sample" / "middleware" / "wsgi.py").write_text(
+                "from starlette.middleware.wsgi import WSGIMiddleware\n",
+                encoding="utf-8",
+            )
+            (root / "docs_src" / "example").mkdir(parents=True)
+            (root / "docs_src" / "example" / "main.py").write_text(
+                "from fastapi import FastAPI\napp = FastAPI()\n",
+                encoding="utf-8",
+            )
+            (root / "tests").mkdir()
+            (root / "tests" / "main.py").write_text(
+                "raise AssertionError('not an application entrypoint')\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                """[project]
+name = "sample"
+version = "1.0"
+dependencies = ["fastapi"]
+
+[project.scripts]
+sample = "sample.cli:main"
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://optional-cli"), root)
+
+        self.assertEqual(profile.project_type, ProjectType.LIBRARY)
+        self.assertEqual(profile.metadata["entry_points"], ("sample",))
+        self.assertEqual(profile.metadata["optional_entry_points"], ("sample",))
+        self.assertNotIn("sample", command_texts(profile, CommandPurpose.RUN))
+
     def test_same_command_text_is_preserved_for_distinct_purposes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

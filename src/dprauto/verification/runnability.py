@@ -69,6 +69,11 @@ class RunnabilityVerifier:
             timeout_seconds=timeout_seconds,
             path=self.config.web_path,
         )
+        http_ok = bool(
+            probe.http_reachable
+            and probe.http_status is not None
+            and 100 <= probe.http_status < 500
+        )
         checks = (
             VerificationCheck(
                 "web-process",
@@ -82,8 +87,16 @@ class RunnabilityVerifier:
             ),
             VerificationCheck(
                 "web-http",
-                VerificationStatus.PASSED if probe.http_reachable else VerificationStatus.FAILED,
-                f"HTTP responded with status {probe.http_status}" if probe.http_reachable else "HTTP endpoint was unreachable",
+                VerificationStatus.PASSED if http_ok else VerificationStatus.FAILED,
+                (
+                    f"HTTP responded with acceptable status {probe.http_status}"
+                    if http_ok
+                    else (
+                        f"HTTP responded with server-error status {probe.http_status}"
+                        if probe.http_reachable and probe.http_status is not None
+                        else "HTTP endpoint was unreachable"
+                    )
+                ),
                 metadata={"output_excerpt": probe.output_excerpt},
             ),
         )
@@ -100,10 +113,14 @@ class RunnabilityVerifier:
             timeout_seconds=timeout_seconds,
         )
         fallback_used = False
+        fallback_reason = ""
         if (
             selected is not None
-            and execution.command_result.succeeded
-            and not execution.output_excerpt.strip()
+            and not self._has_help_or_version_argument(selected.command)
+            and (
+                not execution.command_result.succeeded
+                or not execution.output_excerpt.strip()
+            )
         ):
             fallback_timeout = self._timeout_or_zero(
                 self.config.command_timeout_seconds, context
@@ -118,6 +135,11 @@ class RunnabilityVerifier:
                     help_execution.command_result.succeeded
                     and help_execution.output_excerpt.strip()
                 ):
+                    fallback_reason = (
+                        "initial-command-failed"
+                        if not execution.command_result.succeeded
+                        else "initial-command-produced-no-output"
+                    )
                     execution = help_execution
                     fallback_used = True
         exit_ok = execution.command_result.succeeded
@@ -140,7 +162,23 @@ class RunnabilityVerifier:
         return self._result(
             checks,
             command_result=execution.command_result,
-            metadata={"empty_output_help_fallback": fallback_used},
+            metadata={
+                "help_fallback_used": fallback_used,
+                "help_fallback_reason": fallback_reason,
+                "empty_output_help_fallback": (
+                    fallback_used
+                    and fallback_reason == "initial-command-produced-no-output"
+                ),
+            },
+        )
+
+    @staticmethod
+    def _has_help_or_version_argument(command: CommandSpec) -> bool:
+        return bool(
+            re.search(
+                r"(?:^|\s)(?:--help|-h|--version|-V)(?:\s|$)",
+                command.display,
+            )
         )
 
     @staticmethod
