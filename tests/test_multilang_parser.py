@@ -203,6 +203,28 @@ add_subdirectory(tests)
             )
             self.assertIn("make check", self._commands(profile, CommandPurpose.TEST))
 
+    def test_native_autotools_bin_program_is_a_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "configure.ac").write_text(
+                "AC_INIT([demo],[1.0])\n",
+                encoding="utf-8",
+            )
+            (root / "Makefile.in").write_text(
+                "bin_PROGRAMS = demo@EXEEXT@ helper@EXEEXT@\n",
+                encoding="utf-8",
+            )
+            (root / "src").mkdir()
+            (root / "src/demo.c").write_text(
+                'int main(void) { return 0; } /* --version */\n',
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://autotools-cli"), root)
+
+            self.assertEqual(profile.project_type, profile.project_type.CLI)
+            self.assertIn("./demo --version", self._commands(profile, CommandPurpose.RUN))
+
     def test_native_root_cli_gets_runtime_probe_but_library_examples_do_not(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

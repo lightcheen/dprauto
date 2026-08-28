@@ -280,9 +280,9 @@
       "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["autotools", "make"],
-      "commands": {"build": ["./autogen.sh", "./configure", "make -j2"], "test": ["make check"], "run": ["src/distcc --version"], "setup": []},
+      "commands": {"build": ["./autogen.sh", "./configure", "make -j2"], "test": ["make check"], "run": ["./distcc --version"], "setup": []},
       "test_contract": {"system_executables": ["autoconf", "automake", "make", "cc", "python3"], "services": [], "environment": {}, "process_model": "Some tests coordinate compiler client/server processes locally."},
-      "evidence": ["autogen.sh", "configure.ac", ".github/workflows/c-build.yml"],
+      "evidence": ["autogen.sh", "configure.ac", "Makefile.in", ".github/workflows/c-build.yml"],
       "false_targets": [],
       "notes": "Remote hosts are not required for the ordinary local make check target."
     },

@@ -166,3 +166,13 @@ generated-Dockerfile ignore policy, bounded CTest parallelism, minimal CMake tes
 test-driver-reachable shebang executable contracts. See
 `M9_CXXCRAFTER_NATIVE_LONGTAIL_2026-08-27.md` for the exact source/submodule directories, commands,
 timings, pass/fail evidence and remaining Python 2/platform boundary.
+
+## M10 fixed-21 deterministic multilingual execution
+
+M10 adds an implementation-aware, atomically checkpointed execution runner and runs all 21 pinned
+Python, Java, C and C++ cases through production deterministic build and layered verification with
+zero Agent/LLM calls. Standard builds pass for 15/21 and strict build/install/test/run passes for
+5/21. The complete records expose command-role false targets, four systematic JVM environment
+failures, incomplete selected-test prerequisite closure, and over-budget ordinary suites. See
+`M10_FULL21_DETERMINISTIC_RESULTS_2026-08-28.md` for the exact 21 source directories, commands,
+per-project evidence, timing, failure clusters, and next implementation order.

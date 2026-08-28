@@ -247,6 +247,28 @@ class NativeProjectParser:
             scanned.read_text("CMakeLists.txt"),
         ):
             return ProjectType.CLI
+        if "autotools" in systems:
+            makefile = scanned.read_text("Makefile.am") or scanned.read_text(
+                "Makefile.in"
+            )
+            lines = makefile.splitlines()
+            declared_programs: list[str] = []
+            for index, line in enumerate(lines):
+                match = re.match(r"^\s*(?:bin|sbin)_PROGRAMS\s*=\s*(.*)$", line)
+                if not match:
+                    continue
+                value = match.group(1)
+                parts = [value]
+                while parts[-1].rstrip().endswith("\\") and index + 1 < len(lines):
+                    index += 1
+                    parts.append(lines[index])
+                declared_programs.append("\n".join(parts))
+            programs = "\n".join(declared_programs)
+            if re.search(
+                rf"(?<![A-Za-z0-9_.+-]){escaped}(?:@EXEEXT@)?(?![A-Za-z0-9_.+-])",
+                programs,
+            ):
+                return ProjectType.CLI
         if "make" in systems and re.search(
             rf"(?m)^\s*{escaped}\s*:",
             scanned.read_text("Makefile"),
