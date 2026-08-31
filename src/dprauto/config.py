@@ -200,6 +200,7 @@ class AgentConfig:
 @dataclass(frozen=True)
 class VerificationConfig:
     command_timeout_seconds: int = 300
+    jvm_command_timeout_seconds: int = 900
     dependency_command_timeout_seconds: int = 180
     web_startup_timeout_seconds: int = 30
     web_path: str = "/"
@@ -222,6 +223,8 @@ class VerificationConfig:
     def __post_init__(self) -> None:
         if self.command_timeout_seconds <= 0:
             raise ConfigurationError("verification.command_timeout_seconds must be positive")
+        if self.jvm_command_timeout_seconds <= 0:
+            raise ConfigurationError("verification.jvm_command_timeout_seconds must be positive")
         if self.dependency_command_timeout_seconds <= 0:
             raise ConfigurationError(
                 "verification.dependency_command_timeout_seconds must be positive"
@@ -458,6 +461,10 @@ def load_config(
         command_timeout_seconds=_read_int(
             get("VERIFICATION_COMMAND_TIMEOUT_SECONDS", "300"),
             "VERIFICATION_COMMAND_TIMEOUT_SECONDS",
+        ),
+        jvm_command_timeout_seconds=_read_int(
+            get("VERIFICATION_JVM_COMMAND_TIMEOUT_SECONDS", "900"),
+            "VERIFICATION_JVM_COMMAND_TIMEOUT_SECONDS",
         ),
         dependency_command_timeout_seconds=_read_int(
             get("VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS", "180"),

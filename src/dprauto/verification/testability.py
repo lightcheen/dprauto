@@ -196,7 +196,7 @@ class TestabilityVerifier:
         requested_timeout_seconds = (
             self.config.dependency_command_timeout_seconds
             if dependency_setup
-            else self.config.command_timeout_seconds
+            else self._test_timeout_seconds(context)
         )
         timeout_seconds = clamped_timeout_seconds(
             requested_timeout_seconds,
@@ -316,6 +316,14 @@ class TestabilityVerifier:
         constraint = context.profile.runtime_constraints.get("python", "")
         exact = re.search(r"(?:==|~=)\s*(3\.\d{1,2})", constraint)
         return exact.group(1) if exact else ""
+
+    def _test_timeout_seconds(self, context: VerificationContext) -> int:
+        build_system = str(
+            context.profile.metadata.get("primary_build_system", "")
+        ).casefold()
+        if build_system in {"gradle", "maven"}:
+            return self.config.jvm_command_timeout_seconds
+        return self.config.command_timeout_seconds
 
     def _with_test_dependency_install(
         self,

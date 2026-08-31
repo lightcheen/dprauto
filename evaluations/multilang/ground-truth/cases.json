@@ -202,7 +202,7 @@
       "review_state": "reviewed",
       "workspace": ".",
       "build_systems": ["maven-wrapper"],
-      "commands": {"build": ["./mvnw -B -DskipTests package"], "test": ["./mvnw test -B -V --no-transfer-progress -Dlicense.skip=true"], "run": [], "setup": []},
+      "commands": {"build": ["./mvnw -B -DskipTests -Dlicense.skip=true -Dgitbuildhook.install.skip=true package"], "test": ["./mvnw test -B -V --no-transfer-progress -Dlicense.skip=true -Dgitbuildhook.install.skip=true"], "run": [], "setup": ["skip client-side Git hook installation because generated contexts omit .git"]},
       "test_contract": {"java_version": "17", "system_executables": ["java"], "services": [], "environment": {}, "optional_profile": "-PtestContainers requires a Docker service and is not part of the minimal default test contract."},
       "evidence": ["pom.xml", "mvnw", ".github/workflows/ci.yaml"],
       "false_targets": [],
@@ -214,7 +214,7 @@
       "workspace": ".",
       "build_systems": ["gradle-wrapper"],
       "commands": {"build": ["./gradlew assemble"], "test": ["./gradlew test"], "run": [], "setup": []},
-      "test_contract": {"java_version": "discover from Gradle toolchain", "system_executables": ["java"], "services": [], "environment": {}},
+      "test_contract": {"java_version": "11 launcher plus Temurin 8 default Gradle toolchain; BUILD_WITH_11 is optional", "system_executables": ["java"], "services": [], "environment": {}},
       "evidence": ["build.gradle", "gradlew", ".github/workflows/gradle_pr.yml"],
       "false_targets": [],
       "notes": "Use Gradle tasks, not example snippets from README."

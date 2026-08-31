@@ -130,6 +130,101 @@ VCS_METADATA_RULE = FailureRule(
     ),
 )
 
+BENCHMARK_SENTINEL_POLICY_RULE = FailureRule(
+    category=FailureCategory.POLICY,
+    message="Evaluation-only source marker entered the project build context",
+    possible_cause=(
+        "A dataset sentinel absent from the repository was copied into the image and rejected by "
+        "a license or source policy check"
+    ),
+    patterns=(r"/\.cnb-benchmark-source-ready",),
+    confidence=0.99,
+)
+
+MAVEN_WRAPPER_CONFIG_RULE = FailureRule(
+    category=FailureCategory.BUILD_TOOL,
+    message="Maven Wrapper inherited incompatible launcher configuration",
+    possible_cause=(
+        "The base image MAVEN_CONFIG path was expanded by the repository wrapper as a lifecycle "
+        "argument"
+    ),
+    patterns=(r"unknown lifecycle phase [\"']?/root/\.m2[\"']?",),
+    confidence=0.99,
+)
+
+MAVEN_LICENSE_METADATA_RULE = FailureRule(
+    category=FailureCategory.POLICY,
+    message="Maven license formatting requires omitted Git metadata",
+    possible_cause=(
+        "A license-format goal expects a Git work tree, while the generated container context "
+        "intentionally excludes repository metadata"
+    ),
+    patterns=(
+        r"license-maven-plugin[^\n]+one of setgitdir or setworktree must be called",
+    ),
+    confidence=0.99,
+)
+
+MAVEN_GIT_HOOK_METADATA_RULE = FailureRule(
+    category=FailureCategory.POLICY,
+    message="Maven client Git-hook installation requires omitted Git metadata",
+    possible_cause=(
+        "A developer-workstation hook goal ran inside a generated container context that "
+        "intentionally excludes repository metadata"
+    ),
+    patterns=(
+        r"git-build-hook-maven-plugin[^\n]+could not find or initialise a local git repository",
+    ),
+    confidence=0.99,
+)
+
+GRADLE_WRAPPER_DOWNLOAD_RULE = FailureRule(
+    category=FailureCategory.NETWORK,
+    kind=BuildFailureKind.NETWORK,
+    message="Gradle Wrapper distribution download timed out",
+    possible_cause=(
+        "The wrapper download exceeded its repository-configured network timeout before the "
+        "Gradle distribution was cached"
+    ),
+    retryable=True,
+    infrastructure_related=True,
+    patterns=(
+        r"downloading from https?://[^\n]+gradle-[^\n]+ failed: timeout \(\d+ms\)",
+        r"downloading https?://[^\n]+gradle-[^\n]+\n[^\n]*sockettimeoutexception: read timed out",
+        r"downloading https?://[^\n]+gradle-[\s\S]{0,2000}"
+        r"java\.net\.connectexception: connection refused",
+    ),
+    confidence=0.99,
+)
+
+JVM_TOOLCHAIN_RULE = FailureRule(
+    category=FailureCategory.TOOLCHAIN,
+    message="Required JVM toolchain is not installed",
+    possible_cause=(
+        "The selected container JDK does not match the repository's explicit Java toolchain "
+        "language version or vendor"
+    ),
+    patterns=(
+        r"cannot find a java installation[^\n]+matching: \{languageversion=\d+[^\n]+\}",
+        r"no matching toolchains found for requested specification",
+    ),
+    confidence=0.99,
+)
+
+JVM_RUNTIME_REQUIREMENT_RULE = FailureRule(
+    category=FailureCategory.RUNTIME_VERSION,
+    message="JVM runtime is too old for a build dependency",
+    possible_cause=(
+        "The build launcher JDK was selected from a compilation target instead of the runtime "
+        "required by Gradle or one of its plugins"
+    ),
+    patterns=(
+        r"dependency requires at least jvm runtime version \d+[^\n]+uses a java \d+ jvm",
+        r"run this build using a java \d+ or newer jvm",
+    ),
+    confidence=0.99,
+)
+
 PROJECT_RULES = (
     FailureRule(
         category=FailureCategory.BUILD_COMMAND,
@@ -285,7 +380,17 @@ class RuleBasedBuildFailureClassifier:
             for rule in PROJECT_RULES
             if rule.category is FailureCategory.PYTHON_DEPENDENCY
         )
-        ordered_rules: list[FailureRule] = [DOCKER_RULE, IMAGE_RESOLUTION_RULE]
+        ordered_rules: list[FailureRule] = [
+            DOCKER_RULE,
+            IMAGE_RESOLUTION_RULE,
+            BENCHMARK_SENTINEL_POLICY_RULE,
+            MAVEN_WRAPPER_CONFIG_RULE,
+            MAVEN_LICENSE_METADATA_RULE,
+            MAVEN_GIT_HOOK_METADATA_RULE,
+            GRADLE_WRAPPER_DOWNLOAD_RULE,
+            JVM_TOOLCHAIN_RULE,
+            JVM_RUNTIME_REQUIREMENT_RULE,
+        ]
         if stage in {BuildStage.STARTUP, BuildStage.TEST}:
             ordered_rules.append(EXTERNAL_SERVICE_RULE)
         # Explicit terminal project errors beat transient retry warnings. Network

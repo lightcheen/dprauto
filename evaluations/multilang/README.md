@@ -188,3 +188,15 @@ false-target cases, build success moves from 3/5 to 5/5 and strict success from 
 an Agent or LLM.
 See `M11_COMMAND_SEMANTICS_RESULTS_2026-08-28.md` for exact directories, implementation identity,
 commands, layer transitions, and the remaining dependency/user/process failures.
+
+## M12 deterministic JVM environment contract
+
+M12 isolates Maven Wrapper state, excludes evaluation-only context markers, binds Maven policy
+switches to repository evidence, and gives Gradle Wrapper downloads a cached bounded-retry proxy
+path. It separates the Gradle launcher JDK from the compilation toolchain, persists toolchain
+discovery into later test containers, derives stable bounded Gradle test classes from real source,
+and maps monorepo directories to their actual Gradle project names. On the four pinned Java cases,
+build, Installability, Testability, Runnability, and strict success all move from 0/4 in M10 to 4/4
+with zero Agent/LLM calls. See `M12_JVM_ENVIRONMENT_CONTRACT_RESULTS_2026-08-31.md` for the exact
+source directories, commands, implementation identity, timings, test evidence, and remaining JVM
+boundaries.

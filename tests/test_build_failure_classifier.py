@@ -255,6 +255,66 @@ class BuildFailureClassifierTests(unittest.TestCase):
                 self.assertTrue(failure.infrastructure_related)
                 self.assertNotEqual(failure.kind, BuildFailureKind.PROJECT_BUILD)
 
+    def test_jvm_environment_failures_have_deterministic_categories(self) -> None:
+        cases = (
+            (
+                "Files with unapproved licenses:\n  /.cnb-benchmark-source-ready",
+                FailureCategory.POLICY,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+            (
+                'Unknown lifecycle phase "/root/.m2". You must specify a valid lifecycle phase.',
+                FailureCategory.BUILD_TOOL,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+            (
+                "Failed to execute goal com.mycila:license-maven-plugin:5.0.0:format: "
+                "One of setGitDir or setWorkTree must be called.",
+                FailureCategory.POLICY,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+            (
+                "Failed to execute goal com.rudikershaw.gitbuildhook:"
+                "git-build-hook-maven-plugin:3.6.0:install: Could not find or initialise "
+                "a local git repository.",
+                FailureCategory.POLICY,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+            (
+                "Downloading https://services.gradle.org/distributions/gradle-8.14-bin.zip\n"
+                "Downloading from https://services.gradle.org/distributions/gradle-8.14-bin.zip "
+                "failed: timeout (10000ms)",
+                FailureCategory.NETWORK,
+                BuildFailureKind.NETWORK,
+                True,
+            ),
+            (
+                "Cannot find a Java installation on your machine matching: "
+                "{languageVersion=8, vendor=Eclipse Temurin, implementation=vendor-specific}",
+                FailureCategory.TOOLCHAIN,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+            (
+                "Dependency requires at least JVM runtime version 11. "
+                "This build uses a Java 8 JVM. Run this build using a Java 11 or newer JVM.",
+                FailureCategory.RUNTIME_VERSION,
+                BuildFailureKind.PROJECT_BUILD,
+                False,
+            ),
+        )
+        for text, category, kind, infrastructure_related in cases:
+            with self.subTest(category=category):
+                failure = self.classify_text(text)
+                self.assertEqual(failure.category, category)
+                self.assertEqual(failure.kind, kind)
+                self.assertEqual(failure.infrastructure_related, infrastructure_related)
+                self.assertEqual(failure.confidence, 0.99)
+
     def test_key_log_is_bounded_around_match_not_full_log(self) -> None:
         noise = "\n".join(f"unrelated line {index}" for index in range(200))
         text = f"{noise}\nCould not resolve host: pypi.org\n{noise}"

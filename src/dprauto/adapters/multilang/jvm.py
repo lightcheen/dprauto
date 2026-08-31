@@ -90,6 +90,22 @@ class JVMProjectParser:
             for command in commands
             if command.command.purpose is CommandPurpose.TEST
         )
+        maven_git_hook_install_source = self._maven_git_hook_install_source(
+            scanned,
+            build_systems,
+        )
+        optional_test_profile_variables = self._optional_test_profile_variables(
+            scanned,
+            workflows,
+        )
+        gradle_projects_by_directory = self._gradle_projects_by_directory(
+            scanned,
+            build_systems,
+        )
+        test_files, safe_test_files, unstable_test_files = self._test_files(scanned)
+        test_environment_variables, test_prerequisite_evidence = (
+            self._ci_test_environment(scanned, workflows, build_systems)
+        )
         return ProjectProfile(
             project_id=project_id,
             source=source,
@@ -115,11 +131,127 @@ class JVMProjectParser:
                 "java_target_version_evidence": target_version_evidence,
                 "language_file_counts": language_counts,
                 "test_commands": test_commands,
+                "maven_git_hook_install_source": maven_git_hook_install_source,
+                "optional_test_profile_variables": optional_test_profile_variables,
+                "gradle_projects_by_directory": gradle_projects_by_directory,
+                "test_files": test_files,
+                "safe_test_files": safe_test_files,
+                "unstable_test_files": unstable_test_files,
+                "test_environment_variables": test_environment_variables,
+                "test_prerequisite_evidence": test_prerequisite_evidence,
                 "scan_file_count": len(scanned.files),
                 "scan_skipped_files": scanned.skipped_files,
                 "scan_truncated": scanned.truncated,
             },
         )
+
+    @staticmethod
+    def _gradle_projects_by_directory(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> dict[str, str]:
+        if "gradle" not in systems:
+            return {}
+        projects: dict[str, str] = {}
+        for path in scanned.files:
+            build = PurePosixPath(path)
+            if (
+                len(build.parts) <= 1
+                or build.parts[0] in {"buildSrc", "gradle"}
+                or not build.name.endswith((".gradle", ".gradle.kts"))
+            ):
+                continue
+            directory = build.parent.as_posix()
+            if build.name in {"build.gradle", "build.gradle.kts"}:
+                project_name = build.parent.name
+            else:
+                project_name = re.sub(r"\.gradle(?:\.kts)?$", "", build.name)
+            projects.setdefault(directory, project_name)
+        return projects
+
+    @staticmethod
+    def _test_files(
+        scanned: ScannedProject,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+        tests: list[str] = []
+        safe: list[str] = []
+        unstable: list[str] = []
+        unstable_pattern = re.compile(
+            r"(?:^|[/_.-])(?:async|benchmark|concurrent|e2e|integration|network|"
+            r"performance|race|remote|scheduler|slow|stress|timeout)(?:[/_.-]|$)",
+            re.IGNORECASE,
+        )
+        for path in scanned.files:
+            normalized = path.casefold()
+            if not re.search(r"(?:^|/)src/test/(?:java|kotlin|groovy)/", normalized):
+                continue
+            if not normalized.endswith(("test.java", "tests.java", "test.kt", "test.groovy")):
+                continue
+            text = scanned.read_text(path)
+            if not re.search(
+                r"@(?:org\.junit\.)?(?:Test|ParameterizedTest|RepeatedTest|TestFactory)\b|"
+                r"extends\s+(?:TestCase|TestBase)\b",
+                text,
+            ):
+                continue
+            tests.append(path)
+            if unstable_pattern.search(path) or re.search(
+                r"\b(?:Thread\.sleep|CountDownLatch|TestTimedOutException)\b",
+                text,
+            ):
+                unstable.append(path)
+            else:
+                safe.append(path)
+        return tuple(tests), tuple(safe), tuple(unstable)
+
+    @staticmethod
+    def _ci_test_environment(
+        scanned: ScannedProject,
+        workflows: tuple[str, ...],
+        systems: tuple[str, ...],
+    ) -> tuple[dict[str, str], tuple[str, ...]]:
+        if "gradle" not in systems or not workflows:
+            return {}, ()
+        for path in ("build.gradle", "build.gradle.kts"):
+            if re.search(
+                r"System\.getenv\(\s*['\"]CI['\"]\s*\)",
+                scanned.read_text(path),
+            ):
+                return {"CI": "true"}, (f"{path}:System.getenv(CI)",)
+        return {}, ()
+
+    @staticmethod
+    def _maven_git_hook_install_source(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> str:
+        if "maven" not in systems:
+            return ""
+        pom = scanned.read_text("pom.xml")
+        plugin = re.search(
+            r"<plugin\b[^>]*>.*?<artifactId>\s*git-build-hook-maven-plugin\s*"
+            r"</artifactId>.*?</plugin>",
+            pom,
+            re.DOTALL,
+        )
+        if plugin and re.search(r"<goal>\s*install\s*</goal>", plugin.group(0)):
+            return "pom.xml:git-build-hook-maven-plugin:install"
+        return ""
+
+    @staticmethod
+    def _optional_test_profile_variables(
+        scanned: ScannedProject,
+        workflows: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        selected: list[str] = []
+        for path in workflows:
+            text = scanned.read_text(path)
+            for name, _profile in re.findall(
+                r"(?:echo\s+)?[\"']?([A-Z][A-Z0-9_]*_PROFILE)=(-P[A-Za-z0-9_.:-]+)",
+                text,
+            ):
+                selected.append(name)
+        return tuple(dict.fromkeys(selected))
 
     @staticmethod
     def _build_systems(scanned: ScannedProject) -> tuple[str, ...]:
@@ -256,14 +388,25 @@ class JVMProjectParser:
         elif "gradle" in systems:
             for path in ("build.gradle", "build.gradle.kts", "gradle.properties"):
                 text = scanned.read_text(path)
+                toolchains = [
+                    int(value)
+                    for value in re.findall(
+                        r"JavaLanguageVersion\.of\s*\(\s*(\d{1,2})\s*\)",
+                        text,
+                    )
+                ]
+                if toolchains:
+                    target = str(min(toolchains))
+                    target_evidence = f"{path}:toolchain"
+                    break
                 match = re.search(
-                    r"(?:JavaLanguageVersion\.of\s*\(|sourceCompatibility\s*=\s*"
-                    r"(?:JavaVersion\.VERSION_|['\"])?)(\d+)",
+                    r"sourceCompatibility\s*=\s*(?:JavaVersion\.VERSION_)?"
+                    r"(?:1[_\.]?)?(\d{1,2})",
                     text,
                 )
                 if match:
                     target = match.group(1)
-                    target_evidence = path
+                    target_evidence = f"{path}:sourceCompatibility"
                     break
 
         build_candidates: list[tuple[int, str]] = []

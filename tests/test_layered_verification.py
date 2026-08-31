@@ -206,6 +206,96 @@ class CommandSelectionTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected.command.display, "./mvnw -B test")
 
+    def test_jvm_ci_test_drops_only_evidenced_optional_profile_variable(self) -> None:
+        selected = TestCommandSelector().select(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                ci_files=(".github/workflows/ci.yml",),
+                commands=(
+                    project_command(
+                        "./mvnw test -B -Dlicense.skip=true $TEST_CONTAINERS_PROFILE",
+                        CommandPurpose.TEST,
+                        ".github/workflows/ci.yml",
+                        0.98,
+                    ),
+                    project_command(
+                        "./mvnw -B test",
+                        CommandPurpose.TEST,
+                        "inferred:mvnw",
+                        0.9,
+                    ),
+                ),
+                metadata={
+                    "optional_test_profile_variables": ("TEST_CONTAINERS_PROFILE",),
+                    "maven_git_hook_install_source": (
+                        "pom.xml:git-build-hook-maven-plugin:install"
+                    ),
+                },
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(
+            selected.command.display,
+            "./mvnw test -B -Dlicense.skip=true -Dgitbuildhook.install.skip=true",
+        )
+
+    def test_maven_version_output_flag_does_not_turn_test_into_smoke(self) -> None:
+        selected = TestCommandSelector().select(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                ci_files=(".github/workflows/ci.yml",),
+                commands=(
+                    project_command(
+                        "./mvnw test -B -V --no-transfer-progress",
+                        CommandPurpose.TEST,
+                        ".github/workflows/ci.yml",
+                        0.98,
+                    ),
+                    project_command(
+                        "./mvnw -B test",
+                        CommandPurpose.TEST,
+                        "inferred:mvnw",
+                        0.9,
+                    ),
+                ),
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(
+            selected.command.display,
+            "./mvnw test -B -V --no-transfer-progress",
+        )
+
+    def test_gradle_test_uses_image_proxy_launcher(self) -> None:
+        selected = TestCommandSelector().select(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                commands=(
+                    project_command(
+                        "./gradlew test",
+                        CommandPurpose.TEST,
+                        "inferred:gradlew",
+                        0.9,
+                    ),
+                ),
+                metadata={"primary_build_system": "gradle"},
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(
+            selected.command.display,
+            "/usr/local/bin/dprauto-gradle-proxy ./gradlew test",
+        )
+
     def test_windows_ci_variable_does_not_override_portable_ctest(self) -> None:
         selected = TestCommandSelector().select(
             ProjectProfile(
@@ -528,6 +618,85 @@ class CommandSelectionTests(unittest.TestCase):
             "pytest --cov=sample --cov-report xml --tb=short",
         )
 
+    def test_gradle_large_suite_uses_stable_repository_test_classes(self) -> None:
+        selection = TestCommandSelector(max_test_files=2).select_with_details(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                commands=(
+                    project_command(
+                        "./gradlew test",
+                        CommandPurpose.TEST,
+                        "inferred:gradlew",
+                    ),
+                ),
+                metadata={
+                    "primary_build_system": "gradle",
+                    "gradle_projects_by_directory": {},
+                    "test_files": (
+                        "src/test/java/example/AlphaTest.java",
+                        "src/test/java/example/BetaTest.java",
+                        "src/test/java/example/AsyncTest.java",
+                    ),
+                    "safe_test_files": (
+                        "src/test/java/example/AlphaTest.java",
+                        "src/test/java/example/BetaTest.java",
+                    ),
+                    "unstable_test_files": (
+                        "src/test/java/example/AsyncTest.java",
+                    ),
+                },
+            )
+        )
+
+        self.assertIsNotNone(selection)
+        self.assertEqual(selection.kind, "bounded-file-slice")
+        self.assertEqual(
+            selection.targets,
+            (
+                "src/test/java/example/AlphaTest.java",
+                "src/test/java/example/BetaTest.java",
+            ),
+        )
+        self.assertEqual(
+            selection.command.command.display,
+            "/usr/local/bin/dprauto-gradle-proxy ./gradlew test "
+            "--tests example.AlphaTest --tests example.BetaTest",
+        )
+
+    def test_gradle_test_slice_uses_repository_project_mapping(self) -> None:
+        selection = TestCommandSelector(max_test_files=1).select_with_details(
+            ProjectProfile(
+                "jvm-project",
+                SourceReference("fixture://jvm"),
+                languages=("Java",),
+                commands=(
+                    project_command("./gradlew test", CommandPurpose.TEST, "inferred:gradlew"),
+                ),
+                metadata={
+                    "primary_build_system": "gradle",
+                    "gradle_projects_by_directory": {"access": "spring-security-access"},
+                    "test_files": (
+                        "access/src/test/java/example/AccessTests.java",
+                        "access/src/test/java/example/AsyncTests.java",
+                    ),
+                    "safe_test_files": (
+                        "access/src/test/java/example/AccessTests.java",
+                    ),
+                    "unstable_test_files": (
+                        "access/src/test/java/example/AsyncTests.java",
+                    ),
+                },
+            )
+        )
+
+        self.assertEqual(
+            selection.command.command.display,
+            "/usr/local/bin/dprauto-gradle-proxy ./gradlew "
+            ":spring-security-access:test --tests example.AccessTests",
+        )
+
     def test_pytest_capture_is_disabled_for_import_time_stdio_rewrapping(self) -> None:
         selection = TestCommandSelector().select_with_details(
             ProjectProfile(
@@ -711,6 +880,36 @@ class VerificationPolicyTests(unittest.TestCase):
 
         self.assertEqual(result.metadata["timeout_policy"], "test-only")
         self.assertEqual(result.metadata["requested_timeout_seconds"], 41)
+
+    def test_testability_uses_jvm_timeout_and_ci_environment_contract(self) -> None:
+        project = ProjectProfile(
+            "jvm-project",
+            SourceReference("fixture://jvm"),
+            languages=("Java",),
+            project_type=ProjectType.LIBRARY,
+            package_managers=("gradle",),
+            commands=(
+                project_command("./gradlew test", CommandPurpose.TEST, "inferred:gradlew"),
+            ),
+            metadata={
+                "primary_build_system": "gradle",
+                "test_environment_variables": {"CI": "true"},
+                "test_prerequisite_evidence": ("build.gradle:System.getenv(CI)",),
+            },
+        )
+        verifier = TestabilityVerifier(
+            self.runtime,
+            config=VerificationConfig(
+                command_timeout_seconds=41,
+                jvm_command_timeout_seconds=701,
+            ),
+        )
+
+        result = verifier.verify(build_context(project, self.workspace))
+
+        self.assertEqual(result.metadata["requested_timeout_seconds"], 701)
+        self.assertEqual(result.metadata["test_environment_variable_names"], ("CI",))
+        self.assertEqual(self.runtime.environments[0].command_environment, {"CI": "true"})
 
     def test_testability_records_bounded_slice_and_original_command(self) -> None:
         project = profile(

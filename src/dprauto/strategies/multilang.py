@@ -6,6 +6,7 @@ import json
 import re
 from datetime import datetime
 
+from dprauto.command_semantics import GRADLE_PROXY_EXECUTABLE
 from dprauto.config import BuildConfig
 from dprauto.domain.enums import BuildStage, CommandPurpose, ProjectType
 from dprauto.domain.models import (
@@ -29,7 +30,12 @@ NATIVE_RUNTIME_MARKER = "DPRAUTO_NATIVE_BUILD_OK"
 GENERATED_DOCKERIGNORE = """# DPRAuto template context policy
 .git
 .dprauto
+.cnb-benchmark-source-ready
 """
+
+GRADLE_WRAPPER_NETWORK_TIMEOUT_MILLISECONDS = 120_000
+GRADLE_WRAPPER_PREFETCH_ATTEMPTS = 3
+GRADLE_WRAPPER_RETRY_DELAY_SECONDS = 5
 
 
 def _docker_build_command(config: BuildConfig, image: str) -> CommandSpec:
@@ -124,26 +130,81 @@ class JVMTemplateStrategy:
             raise ValueError(f"unsupported JVM build system: {system or 'missing'}")
         java_version = self._java_version(profile)
         wrapper = self._wrapper(profile, system)
+        toolchain_version = self._gradle_toolchain_version(
+            profile,
+            system,
+            java_version,
+        )
+        toolchain_base_image = (
+            self.config.maven_base_image.format(version=toolchain_version)
+            if toolchain_version
+            else ""
+        )
+        license_skip = ""
+        git_hook_source = ""
         if system == "maven":
             base_image = self.config.maven_base_image.format(version=java_version)
             executable = "./mvnw" if wrapper else "mvn"
-            build_command = f"{executable} -B -DskipTests package"
+            license_skip = self._maven_license_skip(profile)
+            license_option = " -Dlicense.skip=true" if license_skip else ""
+            git_hook_source = str(
+                profile.metadata.get("maven_git_hook_install_source", "")
+            )
+            git_hook_option = (
+                " -Dgitbuildhook.install.skip=true" if git_hook_source else ""
+            )
+            build_command = (
+                f"{executable} -B -DskipTests{license_option}{git_hook_option} package"
+            )
             artifact_glob = "*/target/*.jar"
+            prefetch_command = ""
         else:
             base_image = self.config.gradle_base_image.format(version=java_version)
             executable = "./gradlew" if wrapper else "gradle"
-            build_command = f"{executable} --no-daemon assemble"
+            gradle_launcher = (
+                f"{GRADLE_PROXY_EXECUTABLE} {executable}" if wrapper else executable
+            )
+            build_command = f"{gradle_launcher} --no-daemon assemble"
             artifact_glob = "*/build/libs/*.jar"
+            prefetch_command = self._gradle_wrapper_prefetch(executable) if wrapper else ""
         probe = self._runtime_probe(artifact_glob)
-        lines = (["# syntax=docker/dockerfile:1"] if self.config.use_cache else []) + [
+        lines = ["# syntax=docker/dockerfile:1"] if self.config.use_cache else []
+        if toolchain_base_image:
+            lines.append(f"FROM {toolchain_base_image} AS dprauto-jvm-toolchain")
+        lines.extend([
             f"FROM {base_image}",
             "USER root",
             "ENTRYPOINT []",
             "WORKDIR /workspace",
             "COPY . /workspace",
-        ]
+        ])
+        if toolchain_version:
+            toolchain_path = f"/opt/dprauto-jdks/temurin-{toolchain_version}"
+            lines.extend(
+                (
+                    "COPY --from=dprauto-jvm-toolchain "
+                    f"/opt/java/openjdk {toolchain_path}",
+                    "RUN printf '\\norg.gradle.java.installations.paths="
+                    f"{toolchain_path}\\n' >> gradle.properties",
+                )
+            )
+        if system == "maven" and wrapper:
+            # Some Maven Wrapper scripts expand MAVEN_CONFIG as CLI arguments.
+            # The official Maven image sets it to /root/.m2 for the system Maven
+            # launcher, which an older wrapper interprets as a lifecycle phase.
+            lines.append('ENV MAVEN_CONFIG=""')
+        if system == "gradle" and wrapper:
+            lines.extend(
+                (
+                    "ENV GRADLE_USER_HOME=/opt/dprauto-gradle",
+                    self._gradle_proxy_instruction(),
+                    self._gradle_wrapper_timeout_instruction(),
+                )
+            )
         if wrapper:
             lines.append(f"RUN chmod +x {executable}")
+        if prefetch_command:
+            lines.append(f"RUN {prefetch_command}")
         lines.extend(
             (
                 # Keep resolved dependencies in the image so later Testability
@@ -164,6 +225,8 @@ class JVMTemplateStrategy:
                 "language_family": "jvm",
                 "build_system": system,
                 "java_version": java_version,
+                "java_toolchain_version": toolchain_version,
+                "java_toolchain_base_image": toolchain_base_image,
                 "build_command": build_command,
                 "build_command_source": f"deterministic:{system}-root-marker",
                 "dependency_installation_commands": (build_command,),
@@ -171,6 +234,23 @@ class JVMTemplateStrategy:
                 "runtime_probe_marker": JVM_RUNTIME_MARKER,
                 "runtime_probe_type": "jvm-jar-classes",
                 "wrapper": wrapper,
+                "maven_config_isolated": system == "maven" and wrapper,
+                "maven_license_skip_evidence": license_skip,
+                "maven_git_hook_skip_evidence": git_hook_source,
+                "wrapper_distribution_prefetch_command": prefetch_command,
+                "wrapper_network_timeout_milliseconds": (
+                    GRADLE_WRAPPER_NETWORK_TIMEOUT_MILLISECONDS
+                    if system == "gradle" and wrapper
+                    else 0
+                ),
+                "wrapper_prefetch_attempts": (
+                    GRADLE_WRAPPER_PREFETCH_ATTEMPTS
+                    if system == "gradle" and wrapper
+                    else 0
+                ),
+                "gradle_proxy_launcher": (
+                    GRADLE_PROXY_EXECUTABLE if system == "gradle" and wrapper else ""
+                ),
                 "dependency_state_retained_in_image": True,
             },
         )
@@ -198,9 +278,93 @@ class JVMTemplateStrategy:
         return match.group(1) if match else self.config.default_java_version
 
     @staticmethod
+    def _gradle_toolchain_version(
+        profile: ProjectProfile,
+        system: str,
+        java_version: str,
+    ) -> str:
+        if system != "gradle":
+            return ""
+        evidence = str(profile.metadata.get("java_target_version_evidence", ""))
+        target = str(profile.metadata.get("java_target_version", ""))
+        if evidence.endswith(":toolchain") and target and target != java_version:
+            return target
+        return ""
+
+    @staticmethod
     def _wrapper(profile: ProjectProfile, system: str) -> bool:
         expected = "mvnw" if system == "maven" else "gradlew"
         return expected in profile.build_files
+
+    @staticmethod
+    def _maven_license_skip(profile: ProjectProfile) -> str:
+        for command in profile.commands:
+            display = command.command.display
+            if re.search(
+                r"\bmvnw?\b|(?:^|\s)\./mvnw\b",
+                display,
+                re.IGNORECASE,
+            ) and re.search(
+                r"-D[\"']?license\.skip(?:[\"']?=true)?\b",
+                display,
+                re.IGNORECASE,
+            ):
+                return command.source
+        return ""
+
+    @staticmethod
+    def _gradle_wrapper_timeout_instruction() -> str:
+        path = "gradle/wrapper/gradle-wrapper.properties"
+        timeout = GRADLE_WRAPPER_NETWORK_TIMEOUT_MILLISECONDS
+        return (
+            f"RUN if grep -q '^networkTimeout=' {path}; then "
+            f"sed -i 's/^networkTimeout=.*/networkTimeout={timeout}/' {path}; "
+            f"else printf '\\nnetworkTimeout={timeout}\\n' >> {path}; fi"
+        )
+
+    @staticmethod
+    def _gradle_proxy_instruction() -> str:
+        lines = (
+            "#!/bin/sh",
+            "proxy=${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}",
+            'if [ -n "$proxy" ]; then',
+            "  authority=${proxy#*://}",
+            "  authority=${authority%%/*}",
+            "  hostport=${authority##*@}",
+            "  host=${hostport%:*}",
+            "  port=${hostport##*:}",
+            '  if [ "$host" != "$hostport" ]; then',
+            '    JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }'
+            '-Dhttps.proxyHost=$host -Dhttps.proxyPort=$port '
+            '-Dhttp.proxyHost=$host -Dhttp.proxyPort=$port"',
+            "    export JAVA_TOOL_OPTIONS",
+            "  fi",
+            "fi",
+            'exec "$@"',
+        )
+        quoted = " ".join("'" + line.replace("'", "'\\''") + "'" for line in lines)
+        return (
+            f"RUN printf '%s\\n' {quoted} > {GRADLE_PROXY_EXECUTABLE} && "
+            f"chmod +x {GRADLE_PROXY_EXECUTABLE}"
+        )
+
+    @staticmethod
+    def _gradle_wrapper_prefetch(executable: str) -> str:
+        attempts = GRADLE_WRAPPER_PREFETCH_ATTEMPTS
+        delay = GRADLE_WRAPPER_RETRY_DELAY_SECONDS
+        cache = "/var/cache/dprauto-gradle"
+        return (
+            f"--mount=type=cache,id=dprauto-gradle-wrapper,target={cache},sharing=locked "
+            f"mkdir -p \"$GRADLE_USER_HOME\" {cache}; "
+            f"cp -a {cache}/. \"$GRADLE_USER_HOME/\" 2>/dev/null || true; "
+            f"for attempt in $(seq 1 {attempts}); do "
+            'echo "DPRAUTO_GRADLE_PREFETCH_ATTEMPT=$attempt"; '
+            f"{GRADLE_PROXY_EXECUTABLE} {executable} --no-daemon --version && "
+            f"{{ cp -a \"$GRADLE_USER_HOME/.\" {cache}/; exit 0; }}; "
+            f"cp -a \"$GRADLE_USER_HOME/.\" {cache}/ 2>/dev/null || true; "
+            f"test \"$attempt\" -lt {attempts} || exit 1; sleep {delay}; "
+            "done"
+        )
 
     @staticmethod
     def _runtime_probe(artifact_glob: str) -> str:

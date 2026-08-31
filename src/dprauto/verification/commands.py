@@ -9,7 +9,11 @@ from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 from dprauto.adapters.python.test_matrix import matrix_entry, preferred_matrix_name
-from dprauto.command_semantics import is_smoke_command, select_run_command
+from dprauto.command_semantics import (
+    GRADLE_PROXY_EXECUTABLE,
+    is_smoke_command,
+    select_run_command,
+)
 from dprauto.domain.enums import CommandPurpose
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile
 
@@ -64,13 +68,16 @@ class TestCommandSelector:
         safe_files = self._metadata_paths(profile, "safe_test_files")
         if test_files and not safe_files:
             return None
-        candidates = [
-            item
-            for item in profile.commands
-            if item.command.purpose is CommandPurpose.TEST and not is_smoke_command(item)
-            and not self._has_unresolved_variables(item.command.display)
-            and not self._unsafe_test_candidate(profile, item)
-        ]
+        candidates: list[ProjectCommand] = []
+        for item in profile.commands:
+            if item.command.purpose is not CommandPurpose.TEST or is_smoke_command(item):
+                continue
+            normalized = self._without_optional_profile_variables(profile, item)
+            if self._has_unresolved_variables(normalized.command.display):
+                continue
+            if self._unsafe_test_candidate(profile, normalized):
+                continue
+            candidates.append(normalized)
         if not candidates:
             return None
         selected = min(
@@ -82,6 +89,7 @@ class TestCommandSelector:
                 -item.confidence,
             ),
         )
+        selected = self._with_jvm_environment_options(profile, selected)
         selected = self._bounded_matrix_command(profile, selected, python_version)
         original = selected.command
         bounded, targets, reason = self._bounded_local_command(profile, selected)
@@ -148,20 +156,36 @@ class TestCommandSelector:
     ) -> tuple[ProjectCommand, tuple[str, ...], str]:
         normalized = self._without_coverage_observation(command)
         safe_files = self._metadata_paths(profile, "safe_test_files")
-        external_files = self._metadata_paths(profile, "external_test_files")
-        needs_targets = len(safe_files) > self.max_test_files or bool(external_files)
-        if (
-            not needs_targets
-            or not safe_files
-            or command.command.cwd
-            or not self._is_direct_pytest(command.command.display)
-        ):
+        risk_files = tuple(
+            dict.fromkeys(
+                (
+                    *self._metadata_paths(profile, "external_test_files"),
+                    *self._metadata_paths(profile, "unstable_test_files"),
+                )
+            )
+        )
+        needs_targets = len(safe_files) > self.max_test_files or bool(risk_files)
+        if not needs_targets or not safe_files or command.command.cwd:
             reason = (
                 "removed coverage-only observation arguments"
                 if normalized.command != command.command
                 else "selected the narrowest local project test command"
             )
             return normalized, (), reason
+        if self._is_direct_gradle_test(command.command.display):
+            bounded = self._bounded_gradle_command(profile, command, safe_files)
+            if bounded is not None:
+                bounded_command, targets = bounded
+                return (
+                    bounded_command,
+                    targets,
+                    (
+                        f"selected {len(targets)} stable JVM test class(es) from "
+                        f"{len(safe_files)} safe and {len(risk_files)} risk file(s)"
+                    ),
+                )
+        if not self._is_direct_pytest(command.command.display):
+            return normalized, (), "selected the narrowest local project test command"
         targets = self._representative_targets(safe_files)
         bounded_spec = CommandSpec(
             ("python", "-m", "pytest", *targets),
@@ -179,9 +203,79 @@ class TestCommandSelector:
             targets,
             (
                 f"selected {len(targets)} local test file(s) from "
-                f"{len(safe_files)} safe and {len(external_files)} external-risk file(s)"
+                f"{len(safe_files)} safe and {len(risk_files)} risk file(s)"
             ),
         )
+
+    def _bounded_gradle_command(
+        self,
+        profile: ProjectProfile,
+        command: ProjectCommand,
+        safe_files: tuple[str, ...],
+    ) -> tuple[ProjectCommand, tuple[str, ...]] | None:
+        converted = [
+            value
+            for path in safe_files
+            if (value := self._gradle_test_class(path)) is not None
+        ]
+        if not converted:
+            return None
+        first_project = converted[0][0]
+        same_project = [value for value in converted if value[0] == first_project]
+        selected = same_project[: self.max_test_files]
+        targets = tuple(path for _project, _class_name, path in selected)
+        classes = tuple(class_name for _project, class_name, _path in selected)
+        try:
+            tokens = shlex.split(command.command.display)
+        except ValueError:
+            return None
+        test_index = next(
+            (index for index, token in enumerate(tokens) if token.casefold() == "test"),
+            -1,
+        )
+        if test_index < 0:
+            return None
+        project_name = first_project
+        mapped = profile.metadata.get("gradle_projects_by_directory", {})
+        if isinstance(mapped, Mapping):
+            value = mapped.get(first_project, "")
+            if isinstance(value, str) and value:
+                project_name = value
+        task = "test" if not project_name else f":{project_name.replace('/', ':')}:test"
+        normalized = [*tokens]
+        normalized[test_index] = task
+        for class_name in classes:
+            normalized.extend(("--tests", class_name))
+        spec = CommandSpec(
+            (shlex.join(normalized),),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+            shell=True,
+        )
+        return (
+            ProjectCommand(
+                command.name,
+                spec,
+                f"bounded:{command.source}",
+                command.confidence,
+            ),
+            targets,
+        )
+
+    @staticmethod
+    def _gradle_test_class(path: str) -> tuple[str, str, str] | None:
+        match = re.fullmatch(
+            r"(?:(.*?)/)?src/test/(?:java|kotlin|groovy)/(.+)\.(?:java|kt|groovy)",
+            path,
+            re.IGNORECASE,
+        )
+        if not match:
+            return None
+        project = (match.group(1) or "").strip("/")
+        class_name = match.group(2).replace("/", ".")
+        return project, class_name, path
 
     def _representative_targets(self, paths: tuple[str, ...]) -> tuple[str, ...]:
         groups: dict[str, list[str]] = {}
@@ -214,7 +308,7 @@ class TestCommandSelector:
             if (
                 path.is_absolute()
                 or ".." in path.parts
-                or path.suffix.casefold() != ".py"
+                or path.suffix.casefold() not in {".py", ".java", ".kt", ".groovy"}
             ):
                 continue
             selected.append(path.as_posix())
@@ -338,8 +432,107 @@ class TestCommandSelector:
         )
 
     @staticmethod
+    def _is_direct_gradle_test(command: str) -> bool:
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return False
+        executables = {PurePosixPath(token).name.casefold() for token in tokens[:2]}
+        return bool(executables & {"gradle", "gradlew"}) and "test" in {
+            token.casefold() for token in tokens
+        }
+
+    @staticmethod
+    def _without_optional_profile_variables(
+        profile: ProjectProfile,
+        command: ProjectCommand,
+    ) -> ProjectCommand:
+        raw = profile.metadata.get("optional_test_profile_variables", ())
+        if not isinstance(raw, (list, tuple)):
+            return command
+        optional = {
+            item
+            for item in raw[:32]
+            if isinstance(item, str) and re.fullmatch(r"[A-Z][A-Z0-9_]*", item)
+        }
+        if not optional:
+            return command
+        try:
+            tokens = shlex.split(command.command.display)
+        except ValueError:
+            return command
+        filtered = [
+            token
+            for token in tokens
+            if not (
+                (match := re.fullmatch(r"\$\{?([A-Z][A-Z0-9_]*)\}?", token))
+                and match.group(1) in optional
+            )
+        ]
+        if filtered == tokens or not filtered:
+            return command
+        spec = CommandSpec(
+            (shlex.join(filtered),),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+            shell=True,
+        )
+        return ProjectCommand(
+            command.name,
+            spec,
+            command.source,
+            command.confidence,
+        )
+
+    @staticmethod
+    def _with_jvm_environment_options(
+        profile: ProjectProfile,
+        command: ProjectCommand,
+    ) -> ProjectCommand:
+        try:
+            tokens = shlex.split(command.command.display)
+        except ValueError:
+            return command
+        if not tokens:
+            return command
+        executable = PurePosixPath(tokens[0]).name.casefold()
+        normalized = list(tokens)
+        if (
+            str(profile.metadata.get("primary_build_system", "")).casefold() == "gradle"
+            and executable in {"gradle", "gradlew"}
+        ):
+            normalized.insert(0, GRADLE_PROXY_EXECUTABLE)
+        elif (
+            profile.metadata.get("maven_git_hook_install_source")
+            and executable in {"mvn", "mvnw"}
+        ):
+            option = "-Dgitbuildhook.install.skip=true"
+            if not any(token.casefold() == option.casefold() for token in normalized):
+                normalized.append(option)
+        if normalized == tokens:
+            return command
+        spec = CommandSpec(
+            (shlex.join(normalized),),
+            purpose=command.command.purpose,
+            cwd=command.command.cwd,
+            environment=command.command.environment,
+            timeout_seconds=command.command.timeout_seconds,
+            shell=True,
+        )
+        return ProjectCommand(
+            command.name,
+            spec,
+            f"container-contract:{command.source}",
+            command.confidence,
+        )
+
+    @staticmethod
     def _command_rank(command: str) -> int:
         text = command.lower()
+        if TestCommandSelector._is_direct_jvm_test(command):
+            return 0
         if re.fullmatch(
             r"(?:\./)?mvnw?\s+-b\s+test|"
             r"(?:\./)?gradlew?\s+(?:--no-daemon\s+)?test|"
@@ -367,6 +560,33 @@ class TestCommandSelector:
         if re.search(r"\b(ruff|mypy|format|typecheck|docs?)\b", text):
             return 4
         return 2
+
+    @staticmethod
+    def _is_direct_jvm_test(command: str) -> bool:
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return False
+        if not tokens:
+            return False
+        executable = PurePosixPath(tokens[0]).name.casefold()
+        if executable in {"mvn", "mvnw"}:
+            goals = [
+                token.casefold()
+                for token in tokens[1:]
+                if not token.startswith("-") and "=" not in token
+            ]
+            return goals == ["test"]
+        if executable in {"gradle", "gradlew"}:
+            tasks = [
+                token.casefold()
+                for token in tokens[1:]
+                if not token.startswith("-") and "=" not in token
+            ]
+            return bool(tasks) and all(
+                task == "test" or task.endswith(":test") for task in tasks
+            )
+        return False
 
     @classmethod
     def _unsafe_test_candidate(

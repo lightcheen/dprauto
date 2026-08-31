@@ -20,6 +20,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_investigation_actions, 6)
         self.assertEqual(config.agent.max_evidence_characters, 10_000)
         self.assertEqual(config.verification.command_timeout_seconds, 300)
+        self.assertEqual(config.verification.jvm_command_timeout_seconds, 900)
         self.assertEqual(
             config.verification.dependency_command_timeout_seconds,
             180,
@@ -90,6 +91,7 @@ class ConfigurationTests(unittest.TestCase):
                 "DPRAUTO_AGENT_MAX_EVIDENCE_CHARACTERS": "7000",
                 "DPRAUTO_AGENT_MAX_PLAN_FEEDBACK_ROUNDS": "3",
                 "DPRAUTO_VERIFICATION_COMMAND_TIMEOUT_SECONDS": "17",
+                "DPRAUTO_VERIFICATION_JVM_COMMAND_TIMEOUT_SECONDS": "71",
                 "DPRAUTO_VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS": "29",
                 "DPRAUTO_VERIFICATION_WEB_STARTUP_TIMEOUT_SECONDS": "9",
                 "DPRAUTO_VERIFICATION_WEB_PATH": "/healthz",
@@ -147,6 +149,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.agent.max_evidence_characters, 7_000)
         self.assertEqual(config.agent.max_plan_feedback_rounds, 3)
         self.assertEqual(config.verification.command_timeout_seconds, 17)
+        self.assertEqual(config.verification.jvm_command_timeout_seconds, 71)
         self.assertEqual(
             config.verification.dependency_command_timeout_seconds,
             29,

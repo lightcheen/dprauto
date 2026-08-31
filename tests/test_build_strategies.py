@@ -63,7 +63,7 @@ def python_profile(
     )
 
 
-def jvm_profile(*, system="maven", wrapper=True, java="17", commands=()):
+def jvm_profile(*, system="maven", wrapper=True, java="17", commands=(), metadata=None):
     wrapper_file = "mvnw" if system == "maven" else "gradlew"
     root_file = "pom.xml" if system == "maven" else "build.gradle"
     return ProjectProfile(
@@ -76,7 +76,7 @@ def jvm_profile(*, system="maven", wrapper=True, java="17", commands=()):
         dependency_files=(root_file,),
         build_files=((wrapper_file, root_file) if wrapper else (root_file,)),
         commands=commands,
-        metadata={"primary_build_system": system},
+        metadata={"primary_build_system": system, **(metadata or {})},
     )
 
 
@@ -159,6 +159,7 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertEqual(first.metadata["build_command_source"], "deterministic:maven-root-marker")
         self.assertTrue(first.metadata["dependency_state_retained_in_image"])
         self.assertIn("RUN chmod +x ./mvnw", dockerfile)
+        self.assertIn('ENV MAVEN_CONFIG=""', dockerfile)
         self.assertIn("RUN ./mvnw -B -DskipTests package", dockerfile)
         self.assertIn("DPRAUTO_JVM_ARTIFACT_OK", dockerfile)
         self.assertNotIn("pip download", dockerfile)
@@ -172,6 +173,95 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertEqual(plan.metadata["base_image"], "gradle:8.12.1-jdk11")
         self.assertEqual(plan.metadata["build_command"], "gradle --no-daemon assemble")
         self.assertIn("*/build/libs/*.jar", plan.metadata["runtime_probe_command"])
+
+    def test_jvm_maven_uses_repository_evidenced_license_skip(self) -> None:
+        ci_command = ProjectCommand(
+            "ci-test",
+            CommandSpec(
+                ("./mvnw test -B -Dlicense.skip=true",),
+                purpose=CommandPurpose.TEST,
+                shell=True,
+            ),
+            ".github/workflows/ci.yaml",
+            0.95,
+        )
+        plan = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(system="maven", wrapper=True, commands=(ci_command,))
+        )
+
+        self.assertEqual(
+            plan.metadata["build_command"],
+            "./mvnw -B -DskipTests -Dlicense.skip=true package",
+        )
+        self.assertEqual(
+            plan.metadata["maven_license_skip_evidence"],
+            ".github/workflows/ci.yaml",
+        )
+
+    def test_jvm_gradle_wrapper_prefetches_with_bounded_timeout_and_retry(self) -> None:
+        plan = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(system="gradle", wrapper=True, java="17")
+        )
+        dockerfile = plan.generated_files[0].content
+
+        self.assertIn("ENV GRADLE_USER_HOME=/opt/dprauto-gradle", dockerfile)
+        self.assertIn("/usr/local/bin/dprauto-gradle-proxy", dockerfile)
+        self.assertIn("JAVA_TOOL_OPTIONS", dockerfile)
+        self.assertIn("type=cache,id=dprauto-gradle-wrapper", dockerfile)
+        self.assertIn("networkTimeout=120000", dockerfile)
+        self.assertIn("DPRAUTO_GRADLE_PREFETCH_ATTEMPT=$attempt", dockerfile)
+        self.assertIn("./gradlew --no-daemon --version", dockerfile)
+        self.assertLess(
+            dockerfile.index("./gradlew --no-daemon --version"),
+            dockerfile.index("./gradlew --no-daemon assemble"),
+        )
+        self.assertEqual(plan.metadata["wrapper_network_timeout_milliseconds"], 120000)
+        self.assertEqual(plan.metadata["wrapper_prefetch_attempts"], 3)
+        self.assertTrue(plan.metadata["wrapper_distribution_prefetch_command"])
+
+    def test_jvm_gradle_uses_separate_launcher_and_compilation_toolchain(self) -> None:
+        plan = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(
+                system="gradle",
+                wrapper=True,
+                java="11",
+                metadata={
+                    "java_target_version": "8",
+                    "java_target_version_evidence": "build.gradle:toolchain",
+                },
+            )
+        )
+        dockerfile = plan.generated_files[0].content
+
+        self.assertEqual(plan.metadata["base_image"], "gradle:8.12.1-jdk11")
+        self.assertEqual(plan.metadata["java_version"], "11")
+        self.assertEqual(plan.metadata["java_toolchain_version"], "8")
+        self.assertEqual(
+            plan.metadata["java_toolchain_base_image"],
+            "maven:3.9.9-eclipse-temurin-8",
+        )
+        self.assertIn(
+            "FROM maven:3.9.9-eclipse-temurin-8 AS dprauto-jvm-toolchain",
+            dockerfile,
+        )
+        self.assertIn("FROM gradle:8.12.1-jdk11", dockerfile)
+        self.assertIn(
+            "COPY --from=dprauto-jvm-toolchain /opt/java/openjdk "
+            "/opt/dprauto-jdks/temurin-8",
+            dockerfile,
+        )
+        self.assertIn(
+            "printf '\\norg.gradle.java.installations.paths="
+            "/opt/dprauto-jdks/temurin-8\\n' >> gradle.properties",
+            dockerfile,
+        )
+
+    def test_generated_context_excludes_dataset_sentinel(self) -> None:
+        plan = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(system="maven", wrapper=False)
+        )
+
+        self.assertIn(".cnb-benchmark-source-ready", plan.generated_files[1].content)
 
     def test_native_cmake_plan_installs_bounded_toolchain_and_pipeline(self) -> None:
         plan = NativeTemplateStrategy(self.runner, self.config).create_plan(native_profile())

@@ -7,11 +7,15 @@ import re
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile
 
+GRADLE_PROXY_EXECUTABLE = "/usr/local/bin/dprauto-gradle-proxy"
 
-_SMOKE_PATTERN = re.compile(
-    r"(?:^|\s)(?:(?i:--help|-h|--version)|-V)(?:\s|$)|"
-    r"(?i:python\d*\s+-c\s+.*\bimport\b)|"
-    r"(?i:python\d*\s+-m\s+compileall\b)",
+
+_PYTHON_SMOKE_PATTERN = re.compile(
+    r"(?i)^python\d*\s+-c\s+.*\bimport\b|"
+    r"(?i)^python\d*\s+-m\s+compileall\b",
+)
+_HELP_OR_VERSION_ONLY_PATTERN = re.compile(
+    r"(?i)^(?:python\S*\s+-m\s+)?[^\s]+\s+(?:--help|-h|--version|-V)$",
 )
 _WEB_SERVER_PATTERN = re.compile(
     r"\b(?:uvicorn|hypercorn|gunicorn|daphne)\b|"
@@ -27,7 +31,11 @@ _WEB_SERVER_PATTERN = re.compile(
 
 
 def is_smoke_command(command: ProjectCommand) -> bool:
-    return bool(_SMOKE_PATTERN.search(command.command.display))
+    display = command.command.display.strip()
+    return bool(
+        _PYTHON_SMOKE_PATTERN.search(display)
+        or _HELP_OR_VERSION_ONLY_PATTERN.fullmatch(display)
+    )
 
 
 def is_web_server_command(command: str) -> bool:

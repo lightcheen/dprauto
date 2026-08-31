@@ -75,11 +75,20 @@ class MultilangProjectParserTests(unittest.TestCase):
                 "package example; class App {}\n", encoding="utf-8"
             )
             (root / "mvnw").write_text("#!/bin/sh\n", encoding="utf-8")
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".github/workflows/ci.yml").write_text(
+                "run: echo 'OPTIONAL_DB_PROFILE=-Pdatabase' >> $GITHUB_ENV\n",
+                encoding="utf-8",
+            )
             (root / "pom.xml").write_text(
                 """<project>
   <artifactId>demo-parent</artifactId>
   <properties><maven.compiler.release>17</maven.compiler.release></properties>
   <modules><module>core</module><module>services/api</module></modules>
+  <build><plugins><plugin>
+    <artifactId>git-build-hook-maven-plugin</artifactId>
+    <executions><execution><goals><goal>install</goal></goals></execution></executions>
+  </plugin></plugins></build>
 </project>
 """,
                 encoding="utf-8",
@@ -92,6 +101,14 @@ class MultilangProjectParserTests(unittest.TestCase):
             self.assertEqual(profile.runtime_constraints["java"], "17")
             self.assertEqual(profile.metadata["subprojects"], ("core", "services/api"))
             self.assertEqual(profile.metadata["parser_registry_selection"], "jvm-rules-v1")
+            self.assertEqual(
+                profile.metadata["maven_git_hook_install_source"],
+                "pom.xml:git-build-hook-maven-plugin:install",
+            )
+            self.assertEqual(
+                profile.metadata["optional_test_profile_variables"],
+                ("OPTIONAL_DB_PROFILE",),
+            )
             self.assertIn(
                 "./mvnw -B -DskipTests package",
                 self._commands(profile, CommandPurpose.BUILD),
@@ -123,6 +140,71 @@ class MultilangProjectParserTests(unittest.TestCase):
             self.assertEqual(profile.runtime_constraints["java"], "21")
             self.assertEqual(profile.metadata["working_directories"], (".", "core", "services/api"))
             self.assertIn("./gradlew test", self._commands(profile, CommandPurpose.TEST))
+
+    def test_gradle_default_toolchain_beats_ci_launcher_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".github/workflows/ci.yml").write_text(
+                "java-version: '11'\nrun: ./gradlew test\n",
+                encoding="utf-8",
+            )
+            (root / "gradlew").write_text("#!/bin/sh\n", encoding="utf-8")
+            (root / "src/test/java/example").mkdir(parents=True)
+            (root / "src/test/java/example/StableTest.java").write_text(
+                "class StableTest { @Test void works() {} }\n",
+                encoding="utf-8",
+            )
+            (root / "src/test/java/example/AsyncTest.java").write_text(
+                "class AsyncTest { @Test void waits() { Thread.sleep(1); } }\n",
+                encoding="utf-8",
+            )
+            (root / "settings.gradle").write_text(
+                "rootProject.name = 'toolchain-demo'\n",
+                encoding="utf-8",
+            )
+            (root / "build.gradle").write_text(
+                """java {
+  toolchain {
+    if (System.getenv('BUILD_WITH_11') == 'true') {
+      languageVersion = JavaLanguageVersion.of(11)
+    } else {
+      languageVersion = JavaLanguageVersion.of(8)
+    }
+  }
+}
+tasks.withType(Test) {
+  if (System.getenv('CI') == null) { maxParallelForks = 4 }
+}
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://toolchain"), root)
+
+        self.assertEqual(profile.runtime_constraints["java"], "11")
+        self.assertEqual(profile.metadata["java_target_version"], "8")
+        self.assertEqual(
+            profile.metadata["java_version_evidence"],
+            ".github/workflows/ci.yml:java-version",
+        )
+        self.assertEqual(
+            profile.metadata["java_target_version_evidence"],
+            "build.gradle:toolchain",
+        )
+        self.assertEqual(profile.metadata["test_environment_variables"], {"CI": "true"})
+        self.assertEqual(
+            profile.metadata["test_prerequisite_evidence"],
+            ("build.gradle:System.getenv(CI)",),
+        )
+        self.assertEqual(
+            profile.metadata["safe_test_files"],
+            ("src/test/java/example/StableTest.java",),
+        )
+        self.assertEqual(
+            profile.metadata["unstable_test_files"],
+            ("src/test/java/example/AsyncTest.java",),
+        )
 
     def test_cmake_profile_discovers_languages_standard_subprojects_and_ctest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
