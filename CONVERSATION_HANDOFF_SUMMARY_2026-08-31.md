@@ -241,6 +241,27 @@ Dagshub/FastAPI 命令角色错误；大型套件超时；Python 依赖、用户
 M10 四个 JVM 项目 build/strict 为 0/4；M12 同一身份最终为：build 4/4、Installability 4/4、
 Testability 4/4、Runnability 4/4、strict 4/4、Agent/LLM 0/0。四例总耗时 1,288.1 秒。
 
+### 8.4 Python、Java、C++ 项目数与构建成功数
+
+固定 21 项测试语料中，用户要求关注的三类语言共有 Python 8 个、Java 4 个、C++ 5 个。
+下表区分 M10 完整 21 项同一实现身份的正式基线，以及 M11/M12 定向修复后的最新构建证据：
+
+| 语言 | 测试项目数 | M10 同身份构建成功 | 后续定向修复后的最新构建证据 |
+|---|---:|---:|---:|
+| Python | 8 | 8/8 | 8/8；没有 Python 项目在 build 阶段失败 |
+| Java | 4 | 0/4 | M12 同一实现身份为 4/4 |
+| C++ | 5 | 4/5 | M11 修复 ccache 的 build/test 阶段混淆后，已有 5/5 构建成功证据 |
+
+M10 的 Java 失败分别是 Commons CSV 的评测哨兵触发 Apache RAT、MyBatis 的 Maven Wrapper
+继承错误 `MAVEN_CONFIG`，以及 RxJava、Spring Security 的 Gradle Wrapper 下载超时。M12 已对
+四个 Java 项目统一复测并全部构建成功。C++ 在 M10 唯一未构建成功的是 ccache：普通测试
+`check` 被错误放进镜像 build，测试失败被误报为构建失败；M11 分离阶段后其构建成功。
+
+必须注意：Python 8/8、Java M10 0/4、C++ M10 4/5 来自完整 21 项统一身份运行；Java 4/4
+来自 M12 的四项目统一身份运行，C++ 5/5 是 M10 其余四项加 M11 ccache 定向复测得到的最新
+逐项目证据。当前尚未在 `146b8cf` 身份下重新执行全部 21 项，因此不能把后两列拼成新的全量
+统一身份成功率。
+
 ## 9. 最终质量门和 Git 状态
 
 已执行：
