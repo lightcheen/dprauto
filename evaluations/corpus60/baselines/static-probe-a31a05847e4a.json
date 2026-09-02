@@ -1,0 +1,1770 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "dprauto_revision": "a31a05847e4a62cbb58c16913de05dd9a7a98fe7",
+  "scope": "production parser plus deterministic plan generation; no Docker build",
+  "counts": {
+    "cpp": {
+      "planned": 17,
+      "parsed_not_planned": 2,
+      "unsupported": 1
+    },
+    "python": {
+      "planned": 20,
+      "parsed_not_planned": 0,
+      "unsupported": 0
+    },
+    "java": {
+      "planned": 20,
+      "parsed_not_planned": 0,
+      "unsupported": 0
+    }
+  },
+  "records": [
+    {
+      "case_id": "cpp-skypjack--entt",
+      "language": "cpp",
+      "repository": "skypjack/entt",
+      "revision": "85c6bba014049b5de8fad49d25424df2f1f6a8c1",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "conan/test_package/CMakeLists.txt",
+        "docs/CMakeLists.txt",
+        "test/CMakeLists.txt",
+        "testbed/CMakeLists.txt"
+      ],
+      "command_count": 28,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-google--guetzli",
+      "language": "cpp",
+      "repository": "google/guetzli",
+      "revision": "214f2bb42abf5a577c079d00add5d6cc470620d3",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C",
+        "C++"
+      ],
+      "package_managers": [
+        "make"
+      ],
+      "primary_build_system": "make",
+      "build_files": [
+        "Makefile",
+        "third_party/butteraugli/butteraugli/Makefile"
+      ],
+      "command_count": 4,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-sqlitebrowser--sqlitebrowser",
+      "language": "cpp",
+      "repository": "sqlitebrowser/sqlitebrowser",
+      "revision": "da45c7d528c38986a271fa7be887f95f5b68facb",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "libs/json/CMakeLists.txt",
+        "libs/qcustomplot-source/CMakeLists.txt",
+        "libs/qhexedit/CMakeLists.txt",
+        "libs/qscintilla_2.14.1/Qt5Qt6/CMakeLists.txt",
+        "src/tests/CMakeLists.txt"
+      ],
+      "command_count": 26,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-strukturag--libde265",
+      "language": "cpp",
+      "repository": "strukturag/libde265",
+      "revision": "c45b2da8f4b6e2b7bf9df1197e5633fbe6adc928",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C",
+        "C++"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "dec265/CMakeLists.txt",
+        "fuzzing/CMakeLists.txt",
+        "libde265/CMakeLists.txt",
+        "libde265/arm32/CMakeLists.txt",
+        "libde265/x86/CMakeLists.txt",
+        "sherlock265/CMakeLists.txt"
+      ],
+      "command_count": 9,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-treefrogframework--treefrog-framework",
+      "language": "cpp",
+      "repository": "treefrogframework/treefrog-framework",
+      "revision": "f54f60220aa4b10ed69d541a3a3547259fc695c4",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C",
+        "C++"
+      ],
+      "package_managers": [
+        "autotools"
+      ],
+      "primary_build_system": "autotools",
+      "build_files": [
+        "3rdparty/glog-0.7.1/CMakeLists.txt",
+        "3rdparty/lz4-1.10.0/Makefile",
+        "3rdparty/lz4-1.10.0/examples/Makefile",
+        "3rdparty/lz4-1.10.0/lib/Makefile",
+        "3rdparty/lz4-1.10.0/ossfuzz/Makefile",
+        "3rdparty/lz4-1.10.0/programs/Makefile",
+        "3rdparty/lz4-1.10.0/tests/Makefile",
+        "3rdparty/mongo-c-driver-2.3.3/CMakeLists.txt",
+        "3rdparty/mongo-c-driver-2.3.3/src/CMakeLists.txt",
+        "configure",
+        "defaults/CMakeLists.txt",
+        "defaults/controllers/CMakeLists.txt",
+        "defaults/helpers/CMakeLists.txt",
+        "defaults/models/CMakeLists.txt",
+        "defaults/views/CMakeLists.txt"
+      ],
+      "command_count": 21,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-ipkn--crow",
+      "language": "cpp",
+      "repository": "ipkn/crow",
+      "revision": "2b43d3cd6a9a9cdbc99dfef9b86ff3f3027f3d1f",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C",
+        "C++"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "examples/CMakeLists.txt",
+        "tests/CMakeLists.txt",
+        "tests/template/CMakeLists.txt",
+        "tests/template/Makefile"
+      ],
+      "command_count": 9,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-drogonframework--drogon",
+      "language": "cpp",
+      "repository": "drogonframework/drogon",
+      "revision": "acb39fa39d37474142b80c888dc72a0953dc79c1",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "drogon_ctl/CMakeLists.txt",
+        "examples/CMakeLists.txt",
+        "examples/prometheus_example/CMakeLists.txt",
+        "examples/prometheus_example/test/CMakeLists.txt",
+        "examples/redis/CMakeLists.txt",
+        "examples/redis_cache/CMakeLists.txt",
+        "examples/redis_cache/test/CMakeLists.txt",
+        "examples/redis_chat/CMakeLists.txt",
+        "examples/simple_reverse_proxy/CMakeLists.txt",
+        "lib/tests/CMakeLists.txt",
+        "nosql_lib/redis/tests/CMakeLists.txt",
+        "orm_lib/tests/CMakeLists.txt"
+      ],
+      "command_count": 31,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-oatpp--oatpp",
+      "language": "cpp",
+      "repository": "oatpp/oatpp",
+      "revision": "f83d648fd82dc222ef88aabbafb68efbd7d7bf50",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "src/CMakeLists.txt",
+        "test/CMakeLists.txt"
+      ],
+      "command_count": 8,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-wjakob--nanogui",
+      "language": "cpp",
+      "repository": "wjakob/nanogui",
+      "revision": "e9ec8a1a9861cf578d9c6e85a6420080aa715c03",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "docs/Makefile"
+      ],
+      "command_count": 8,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-mikke89--rmlui",
+      "language": "cpp",
+      "repository": "mikke89/RmlUi",
+      "revision": "b7b4a0688262832eacf3b9abb41f8bbe73868af8",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "Backends/CMakeLists.txt",
+        "CMakeLists.txt",
+        "Samples/CMakeLists.txt",
+        "Samples/basic/CMakeLists.txt",
+        "Samples/basic/animation/CMakeLists.txt",
+        "Samples/basic/benchmark/CMakeLists.txt",
+        "Samples/basic/bitmap_font/CMakeLists.txt",
+        "Samples/basic/custom_log/CMakeLists.txt",
+        "Samples/basic/data_binding/CMakeLists.txt",
+        "Samples/basic/demo/CMakeLists.txt",
+        "Samples/basic/drag/CMakeLists.txt",
+        "Samples/basic/effects/CMakeLists.txt",
+        "Samples/basic/harfbuzz/CMakeLists.txt",
+        "Samples/basic/ime/CMakeLists.txt",
+        "Samples/basic/load_document/CMakeLists.txt",
+        "Samples/basic/lottie/CMakeLists.txt",
+        "Samples/basic/svg/CMakeLists.txt",
+        "Samples/basic/transform/CMakeLists.txt",
+        "Samples/basic/tree_view/CMakeLists.txt",
+        "Samples/basic/variables/CMakeLists.txt",
+        "Samples/invaders/CMakeLists.txt",
+        "Samples/lua_invaders/CMakeLists.txt",
+        "Samples/shell/CMakeLists.txt",
+        "Samples/tutorial/CMakeLists.txt",
+        "Samples/tutorial/drag/CMakeLists.txt",
+        "Samples/tutorial/template/CMakeLists.txt",
+        "Source/CMakeLists.txt",
+        "Source/Core/CMakeLists.txt",
+        "Source/Core/Elements/CMakeLists.txt",
+        "Source/Core/FontEngineDefault/CMakeLists.txt",
+        "Source/Core/Layout/CMakeLists.txt",
+        "Source/Debugger/CMakeLists.txt",
+        "Source/Lottie/CMakeLists.txt",
+        "Source/Lua/CMakeLists.txt",
+        "Source/Lua/Elements/CMakeLists.txt",
+        "Source/SVG/CMakeLists.txt",
+        "Tests/CMakeLists.txt",
+        "Tests/Source/Benchmarks/CMakeLists.txt",
+        "Tests/Source/CMakeLists.txt",
+        "Tests/Source/Common/CMakeLists.txt",
+        "Tests/Source/UnitTests/CMakeLists.txt",
+        "Tests/Source/VisualTests/CMakeLists.txt"
+      ],
+      "command_count": 12,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-flameshot-org--flameshot",
+      "language": "cpp",
+      "repository": "flameshot-org/flameshot",
+      "revision": "24ce091c0f95d0fdfe15cb9c085be88be8195b4f",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "docs/dev/Makefile",
+        "src/CMakeLists.txt",
+        "src/cli/CMakeLists.txt",
+        "src/config/CMakeLists.txt",
+        "src/core/CMakeLists.txt",
+        "src/tools/CMakeLists.txt",
+        "src/utils/CMakeLists.txt",
+        "src/widgets/CMakeLists.txt",
+        "src/widgets/capture/CMakeLists.txt",
+        "src/widgets/panel/CMakeLists.txt"
+      ],
+      "command_count": 21,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-polybar--polybar",
+      "language": "cpp",
+      "repository": "polybar/polybar",
+      "revision": "f99e0b1c7a5b094f5a04b14101899d0cb4ece69d",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "contrib/bash/CMakeLists.txt",
+        "contrib/zsh/CMakeLists.txt",
+        "doc/CMakeLists.txt",
+        "include/CMakeLists.txt",
+        "lib/CMakeLists.txt",
+        "src/CMakeLists.txt",
+        "tests/CMakeLists.txt"
+      ],
+      "command_count": 21,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-twitter--vireo",
+      "language": "cpp",
+      "repository": "twitter/vireo",
+      "revision": "7f0bc1ad50f5eaf30a09de209f0172f2def36abd",
+      "status": "unsupported",
+      "error_stage": "parse",
+      "error_type": "ProjectParsingError",
+      "error": "[project_parsing_error] no registered parser supports project workspace /home/master/dprauto/evaluations/corpus60/sources/cpp/twitter__vireo"
+    },
+    {
+      "case_id": "cpp-pistacheio--pistache",
+      "language": "cpp",
+      "repository": "pistacheio/pistache",
+      "revision": "a7b0dc9ec01b96b95bde55331d83e27a9bf800b9",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake",
+        "meson"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "docs/meson.build",
+        "examples/meson.build",
+        "include/pistache/meson.build",
+        "meson.build",
+        "meson_options.txt",
+        "src/CMakeLists.txt",
+        "src/meson.build",
+        "subprojects/cpp-httplib/meson.build",
+        "subprojects/dump2def/meson.build",
+        "subprojects/hinnant-date/meson.build",
+        "tests/CMakeLists.txt",
+        "tests/certs/meson.build",
+        "tests/fuzzers/CMakeLists.txt",
+        "tests/helpers/CMakeLists.txt",
+        "tests/helpers/meson.build",
+        "tests/meson.build"
+      ],
+      "command_count": 33,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-exaloop--seq",
+      "language": "cpp",
+      "repository": "exaloop/seq",
+      "revision": "625acb39fe9365a2d67bfec1642e87f9954fe29f",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt"
+      ],
+      "command_count": 5,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-aseprite--aseprite",
+      "language": "cpp",
+      "repository": "aseprite/aseprite",
+      "revision": "b9d291bff7afb8e78a9fb3d38fcdf57a80951dc4",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "src/CMakeLists.txt",
+        "src/app/CMakeLists.txt",
+        "src/cfg/CMakeLists.txt",
+        "src/desktop/CMakeLists.txt",
+        "src/desktop/linux/CMakeLists.txt",
+        "src/desktop/osx/CMakeLists.txt",
+        "src/desktop/win/CMakeLists.txt",
+        "src/dio/CMakeLists.txt",
+        "src/doc/CMakeLists.txt",
+        "src/filters/CMakeLists.txt",
+        "src/fixmath/CMakeLists.txt",
+        "src/gen/CMakeLists.txt",
+        "src/net/CMakeLists.txt",
+        "src/render/CMakeLists.txt",
+        "src/steam/CMakeLists.txt",
+        "src/ui/CMakeLists.txt",
+        "src/updater/CMakeLists.txt",
+        "src/ver/CMakeLists.txt",
+        "src/view/CMakeLists.txt",
+        "third_party/CMakeLists.txt",
+        "third_party/pixman-cmake/CMakeLists.txt"
+      ],
+      "command_count": 8,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-official-stockfish--stockfish",
+      "language": "cpp",
+      "repository": "official-stockfish/Stockfish",
+      "revision": "3f6f417b87c0e80ee30914b6b539b4ab7d3b2a5b",
+      "status": "parsed_not_planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "src/Makefile"
+      ],
+      "command_count": 77,
+      "error_stage": "plan",
+      "error_type": "ValueError",
+      "error": "unsupported native build system: missing"
+    },
+    {
+      "case_id": "cpp-jacobdufault--cquery",
+      "language": "cpp",
+      "repository": "jacobdufault/cquery",
+      "revision": "9b80917cbf7d26b78ec62b409442ecf96f72daf9",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt"
+      ],
+      "command_count": 8,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-cppit--jucipp",
+      "language": "cpp",
+      "repository": "cppit/jucipp",
+      "revision": "89c9fd742c287ffde5fa23fc14f6590541b63611",
+      "status": "planned",
+      "parser": "native-rules-v1",
+      "detected_languages": [
+        "C++",
+        "C"
+      ],
+      "package_managers": [
+        "cmake"
+      ],
+      "primary_build_system": "cmake",
+      "build_files": [
+        "CMakeLists.txt",
+        "src/CMakeLists.txt",
+        "tests/CMakeLists.txt",
+        "tests/lldb_test_files/CMakeLists.txt",
+        "tests/meson_test_files/a_subdir/meson.build",
+        "tests/meson_test_files/meson.build",
+        "tests/source_clang_test_files/CMakeLists.txt",
+        "tests/usages_clang_test_files/meson.build"
+      ],
+      "command_count": 6,
+      "strategy": "native-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "cpp-openalpr--openalpr",
+      "language": "cpp",
+      "repository": "openalpr/openalpr",
+      "revision": "736ab0e608cf9b20d92f36a873bb1152240daa98",
+      "status": "parsed_not_planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [],
+      "command_count": 8,
+      "error_stage": "plan",
+      "error_type": "ValueError",
+      "error": "unsupported native build system: missing"
+    },
+    {
+      "case_id": "python-eylles--pywal16",
+      "language": "python",
+      "repository": "eylles/pywal16",
+      "revision": "ab1f5c87f1a8b8423d66cab3cb7d0b4df9f47636",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "setup.py"
+      ],
+      "command_count": 7,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-rstcheck--rstcheck",
+      "language": "python",
+      "repository": "rstcheck/rstcheck",
+      "revision": "b8ddb006f1f49a9bdaf40e45f0bc0b070f460513",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 14,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-astropy--extension-helpers",
+      "language": "python",
+      "repository": "astropy/extension-helpers",
+      "revision": "e6996c540c5bf23e89b45f170e89bd8c9f22a86e",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "docs/Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 3,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-cpcloud--protoletariat",
+      "language": "python",
+      "repository": "cpcloud/protoletariat",
+      "revision": "5c85c8d27fb6535108a1f2846f4f0bd820472541",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "poetry"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml"
+      ],
+      "command_count": 13,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-zostera--django-bootstrap4",
+      "language": "python",
+      "repository": "zostera/django-bootstrap4",
+      "revision": "79f4c059f33d3ad11b66c305f295eb42d71f95da",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 20,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-jaraco--inflect",
+      "language": "python",
+      "repository": "jaraco/inflect",
+      "revision": "1f42293f30caacb0637f7eb30a483b44489f4812",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 7,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-asdf-format--asdf-standard",
+      "language": "python",
+      "repository": "asdf-format/asdf-standard",
+      "revision": "c367d14fae4b5155679e2c40b531140586e25daf",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "docs/Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 4,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-rollbar--pyrollbar",
+      "language": "python",
+      "repository": "rollbar/pyrollbar",
+      "revision": "8493ac03c3468c2349c968726adffa5fd5661d0e",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "setup.py"
+      ],
+      "command_count": 12,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-smarr--rebench",
+      "language": "python",
+      "repository": "smarr/rebench",
+      "revision": "1de0e22fb3e9578b3aeb7a994481ead300fa977f",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "setup.py"
+      ],
+      "command_count": 20,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-python--importlib-metadata",
+      "language": "python",
+      "repository": "python/importlib_metadata",
+      "revision": "f3901686abc47853523f3b211873fc2b9e0c5ab5",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 7,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-wolph--python-progressbar",
+      "language": "python",
+      "repository": "wolph/python-progressbar",
+      "revision": "5d53d59a37247dd9e4663dd86ca79b16cbc92d9b",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "docs/Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 8,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-m-o-a-t--moat-mqtt",
+      "language": "python",
+      "repository": "m-o-a-t/moat-mqtt",
+      "revision": "fcd0f9bf07548604d19d159ffb5fc543e78ce597",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "Makefile",
+        "docs/Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 6,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-pypa--twine",
+      "language": "python",
+      "repository": "pypa/twine",
+      "revision": "6fbf880ee60915cf1666348c4bdd78a10415f2ac",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 12,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-mollie--mollie-api-python",
+      "language": "python",
+      "repository": "mollie/mollie-api-python",
+      "revision": "957b44fddb9d4d833508120022c7f291f5ca8d06",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "Makefile",
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "command_count": 19,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-mov-cli--mov-cli",
+      "language": "python",
+      "repository": "mov-cli/mov-cli",
+      "revision": "32f8af4f15804dd6ce88d8f781a12b918119e64c",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "Makefile",
+        "docs/Makefile",
+        "pyproject.toml"
+      ],
+      "command_count": 11,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-piskvorky--smart-open",
+      "language": "python",
+      "repository": "piskvorky/smart_open",
+      "revision": "5a826134eb23c86087d06db3b78b25484e7e2e6d",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "command_count": 31,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-microsoftgraph--msgraph-sdk-python-core",
+      "language": "python",
+      "repository": "microsoftgraph/msgraph-sdk-python-core",
+      "revision": "e36c17424c9d443bdfeafc32f32682529ce25f95",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "docs/Makefile",
+        "pyproject.toml"
+      ],
+      "command_count": 9,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-psf--pyperf",
+      "language": "python",
+      "repository": "psf/pyperf",
+      "revision": "7b9a23adb3ceeb182f58a03e453158dbe081a7e7",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "doc/Makefile",
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "command_count": 17,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-fatal1ty--mashumaro",
+      "language": "python",
+      "repository": "fatal1ty/mashumaro",
+      "revision": "e945ee4319db49da9f7b8ede614e988cc8c8956b",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "command_count": 18,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "python-ubernostrum--django-registration",
+      "language": "python",
+      "repository": "ubernostrum/django-registration",
+      "revision": "dc80d4e3f90d64d12c35a6c494aa1ec9b36a1705",
+      "status": "planned",
+      "parser": "python-rules-v1",
+      "detected_languages": [
+        "Python"
+      ],
+      "package_managers": [
+        "pip"
+      ],
+      "primary_build_system": "",
+      "build_files": [
+        "docs/Makefile",
+        "noxfile.py",
+        "pyproject.toml"
+      ],
+      "command_count": 8,
+      "strategy": "template",
+      "generated_files": [
+        "Dockerfile",
+        "setup.sh"
+      ]
+    },
+    {
+      "case_id": "java-prisma-capacity--cryptoshred",
+      "language": "java",
+      "repository": "prisma-capacity/cryptoshred",
+      "revision": "4a22ea14f5bc38a5b773213ca34cae84a084a6db",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Kotlin"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "cryptoshred-cloud-aws/pom.xml",
+        "cryptoshred-core/pom.xml",
+        "cryptoshred-micrometer/pom.xml",
+        "cryptoshred-spring-boot-autoconfigure/pom.xml",
+        "cryptoshred-spring-cloud-aws/pom.xml",
+        "cryptoshred-spring-micrometer/pom.xml",
+        "pom.xml"
+      ],
+      "command_count": 3,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-liquibase--liquibase-hibernate",
+      "language": "java",
+      "repository": "liquibase/liquibase-hibernate",
+      "revision": "3fd0fbca8f627837cf8d143efa85eddc5a5a7cf9",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Groovy"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "pom.xml"
+      ],
+      "command_count": 11,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-camunda-community-hub--zeebe-test-container",
+      "language": "java",
+      "repository": "camunda-community-hub/zeebe-test-container",
+      "revision": "d228f0c267a8f70b81e4fa1594b9ec4d364c156a",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "core/pom.xml",
+        "engine/pom.xml",
+        "exporter-test/pom.xml",
+        "exporter/pom.xml",
+        "pom.xml"
+      ],
+      "command_count": 15,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-zalando--problem-spring-web",
+      "language": "java",
+      "repository": "zalando/problem-spring-web",
+      "revision": "da31acb922e486cebeff37d9fbd96322d70e4fc8",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "mvnw",
+        "pom.xml",
+        "problem-spring-common/pom.xml",
+        "problem-spring-web-autoconfigure/pom.xml",
+        "problem-spring-web-starter/pom.xml",
+        "problem-spring-web/pom.xml",
+        "problem-spring-webflux/pom.xml",
+        "problem-violations/pom.xml"
+      ],
+      "command_count": 5,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-axoniq--axonserver-connector-java",
+      "language": "java",
+      "repository": "AxonIQ/axonserver-connector-java",
+      "revision": "ac25a6fedcb1fecdb5a8cdb08ab96d0f28c11953",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "mvnw",
+        "pom.xml"
+      ],
+      "command_count": 5,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-dunctebot--skybot-lavalink-plugin",
+      "language": "java",
+      "repository": "dunctebot/skybot-lavalink-plugin",
+      "revision": "197f25fdb8591400b8dd53634d0fae3e32904c63",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Kotlin"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        "build.gradle.kts",
+        "gradlew",
+        "plugin/build.gradle.kts",
+        "settings.gradle.kts",
+        "source-managers/build.gradle.kts"
+      ],
+      "command_count": 6,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-openrewrite--rewrite-maven-plugin",
+      "language": "java",
+      "repository": "openrewrite/rewrite-maven-plugin",
+      "revision": "dd2645af1a6a3617bf13f0bd930eeade89180e94",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "gradlew",
+        "mvnw",
+        "pom.xml"
+      ],
+      "command_count": 14,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-eclipse--microprofile-fault-tolerance",
+      "language": "java",
+      "repository": "eclipse/microprofile-fault-tolerance",
+      "revision": "3543ebcc367a89adcba04351c55ffc9360a0cbaf",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "api/pom.xml",
+        "pom.xml",
+        "spec/pom.xml",
+        "tck/pom.xml"
+      ],
+      "command_count": 5,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-sigstore--sigstore-java",
+      "language": "java",
+      "repository": "sigstore/sigstore-java",
+      "revision": "27a57c87ea6c5cf6be4f64d824cd07f5656c67ac",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Kotlin"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        "build-logic-commons/gradle-plugin/build.gradle.kts",
+        "build-logic-commons/gradle.properties",
+        "build-logic-commons/settings.gradle.kts",
+        "build-logic/basics/build.gradle.kts",
+        "build-logic/gradle.properties",
+        "build-logic/jvm/build.gradle.kts",
+        "build-logic/publishing/build.gradle.kts",
+        "build-logic/root-build/build.gradle.kts",
+        "build-logic/settings.gradle.kts",
+        "build.gradle.kts",
+        "fuzzing/build.gradle.kts",
+        "gradle.properties",
+        "gradlew",
+        "sandbox/gradle-precompiled-plugin/build.gradle.kts",
+        "sandbox/gradle-sign-file/build.gradle.kts",
+        "sandbox/gradle-sign-java-library/build.gradle.kts",
+        "sandbox/gradlew",
+        "sandbox/settings.gradle.kts",
+        "settings.gradle.kts",
+        "sigstore-cli/build.gradle.kts",
+        "sigstore-gradle/sigstore-gradle-sign-base-plugin/build.gradle.kts",
+        "sigstore-gradle/sigstore-gradle-sign-plugin/build.gradle.kts",
+        "sigstore-java/build.gradle.kts",
+        "sigstore-testkit/build.gradle.kts"
+      ],
+      "command_count": 17,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-jenkinsci--plugin-compat-tester",
+      "language": "java",
+      "repository": "jenkinsci/plugin-compat-tester",
+      "revision": "3027df385a49c976f87e2ae974f148afdd663822",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "pom.xml"
+      ],
+      "command_count": 2,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-mrniko--netty-socketio",
+      "language": "java",
+      "repository": "mrniko/netty-socketio",
+      "revision": "82433154956ac60709357e7157affc8dde371af7",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "pom.xml"
+      ],
+      "command_count": 3,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-micronaut-projects--micronaut-platform",
+      "language": "java",
+      "repository": "micronaut-projects/micronaut-platform",
+      "revision": "102825e1037abf00069583f6e388292cbfae7b86",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Kotlin",
+        "Java"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        "build.gradle",
+        "buildSrc/build.gradle.kts",
+        "gradle.properties",
+        "gradlew",
+        "parent/build.gradle.kts",
+        "platform/build.gradle.kts",
+        "settings.gradle"
+      ],
+      "command_count": 14,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-jenkinsci--docker-plugin",
+      "language": "java",
+      "repository": "jenkinsci/docker-plugin",
+      "revision": "16e30a603830d0b685ac34d544154fc7ffb84600",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Groovy"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "pom.xml"
+      ],
+      "command_count": 3,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-avaje--avaje-inject",
+      "language": "java",
+      "repository": "avaje/avaje-inject",
+      "revision": "9ca8d1af5d0059b46c85e6046aa740d288df78c4",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "blackbox-aspect/pom.xml",
+        "blackbox-other/pom.xml",
+        "blackbox-test-inject/pom.xml",
+        "inject-aop/pom.xml",
+        "inject-events/pom.xml",
+        "inject-generator/pom.xml",
+        "inject-gradle-plugin/build.gradle",
+        "inject-gradle-plugin/gradlew",
+        "inject-gradle-plugin/settings.gradle",
+        "inject-maven-plugin/pom.xml",
+        "inject-test/pom.xml",
+        "inject/pom.xml",
+        "pom.xml"
+      ],
+      "command_count": 6,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-grapheneos--camera",
+      "language": "java",
+      "repository": "grapheneos/camera",
+      "revision": "26e9d4120add6a4e1bd551c2f1be996ee756174a",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Kotlin",
+        "Java"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        "app/build.gradle.kts",
+        "build.gradle.kts",
+        "gradle.properties",
+        "gradlew",
+        "settings.gradle.kts"
+      ],
+      "command_count": 3,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-scribejava--scribejava",
+      "language": "java",
+      "repository": "scribejava/scribejava",
+      "revision": "8970e8eeb0aff840d0b223890e9c392ee19218f7",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "pom.xml",
+        "scribejava-apis/pom.xml",
+        "scribejava-core/pom.xml",
+        "scribejava-httpclient-ahc/pom.xml",
+        "scribejava-httpclient-apache/pom.xml",
+        "scribejava-httpclient-armeria/pom.xml",
+        "scribejava-httpclient-ning/pom.xml",
+        "scribejava-httpclient-okhttp/pom.xml",
+        "scribejava-java8/pom.xml"
+      ],
+      "command_count": 2,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-braisdom--objectivesql",
+      "language": "java",
+      "repository": "braisdom/objectivesql",
+      "revision": "f49e6eba6e7b08748c9945fbbaaa7728239b264e",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "benchmark/pom.xml",
+        "core/pom.xml",
+        "examples/mysql/pom.xml",
+        "examples/oracle/pom.xml",
+        "examples/postgres/pom.xml",
+        "examples/springboot-sample/pom.xml",
+        "examples/sqlite/pom.xml",
+        "examples/sqlserver/pom.xml",
+        "javaoo_test/pom.xml",
+        "mangosdk/pom.xml",
+        "pom.xml",
+        "springboot/pom.xml"
+      ],
+      "command_count": 2,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-fortnoxab--reactive-wizard",
+      "language": "java",
+      "repository": "fortnoxab/reactive-wizard",
+      "revision": "1f3a26dd6b4667b26f2e8a6426c094afc65d2fa8",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java"
+      ],
+      "package_managers": [
+        "maven"
+      ],
+      "primary_build_system": "maven",
+      "build_files": [
+        "api/pom.xml",
+        "binding/pom.xml",
+        "bootstrap/pom.xml",
+        "client/pom.xml",
+        "config/pom.xml",
+        "coverage/pom.xml",
+        "dao/pom.xml",
+        "dbmigrate/pom.xml",
+        "examples/hello-world/pom.xml",
+        "examples/pom.xml",
+        "jaxrs-api-test/pom.xml",
+        "jaxrs-api/pom.xml",
+        "jaxrs/pom.xml",
+        "json/pom.xml",
+        "logging-api/pom.xml",
+        "metrics/pom.xml",
+        "pom.xml",
+        "server/pom.xml",
+        "test/pom.xml",
+        "utils/pom.xml",
+        "validation/pom.xml"
+      ],
+      "command_count": 6,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-grapheneos--attestationserver",
+      "language": "java",
+      "repository": "grapheneos/attestationserver",
+      "revision": "e9699f9dcd3b736853f674f6678431d561cb4bb2",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Kotlin"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        "build.gradle.kts",
+        "gradle.properties",
+        "gradlew"
+      ],
+      "command_count": 12,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    },
+    {
+      "case_id": "java-gradle--native-platform",
+      "language": "java",
+      "repository": "gradle/native-platform",
+      "revision": "25830184c8d04bca9c80b26df69c5936431f808c",
+      "status": "planned",
+      "parser": "jvm-rules-v1",
+      "detected_languages": [
+        "Java",
+        "Groovy",
+        "Kotlin"
+      ],
+      "package_managers": [
+        "gradle"
+      ],
+      "primary_build_system": "gradle",
+      "build_files": [
+        ".teamcity/pom.xml",
+        "build.gradle.kts",
+        "buildSrc/build.gradle",
+        "buildSrc/settings.gradle",
+        "file-events/build.gradle",
+        "gradle.properties",
+        "gradlew",
+        "native-platform/build.gradle",
+        "settings.gradle.kts",
+        "test-app/build.gradle"
+      ],
+      "command_count": 8,
+      "strategy": "jvm-template",
+      "generated_files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore"
+      ]
+    }
+  ]
+}

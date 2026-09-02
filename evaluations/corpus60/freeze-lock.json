@@ -1,0 +1,700 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "frozen_on": "2026-09-02",
+  "definition_revision": "c9c629c9040034001816ea9a604774b0b9b0b94c",
+  "baseline_implementation_revision": "a31a05847e4a62cbb58c16913de05dd9a7a98fe7",
+  "manifest": {
+    "path": "manifest.json",
+    "sha256": "2f74a3f95f571005755488df78856c948204c31824f688dc61b1e2cdc1282939"
+  },
+  "exclusions": {
+    "path": "exclusions.json",
+    "sha256": "6da79954a6efad3bb0e5361318c0cb0a957520bc7daf0f614cc5f6fa168ee8f2"
+  },
+  "baseline_probe": {
+    "path": "baselines/static-probe-a31a05847e4a.json",
+    "sha256": "dc2966f90b6cf66ddb5da71056586850c8e6e2d779d056fc8a3cce12f9c67271",
+    "scope": "production parser plus deterministic plan generation; no Docker build",
+    "counts": {
+      "cpp": {
+        "planned": 17,
+        "parsed_not_planned": 2,
+        "unsupported": 1
+      },
+      "python": {
+        "planned": 20,
+        "parsed_not_planned": 0,
+        "unsupported": 0
+      },
+      "java": {
+        "planned": 20,
+        "parsed_not_planned": 0,
+        "unsupported": 0
+      }
+    }
+  },
+  "source_snapshot_policy": "Digest regular-file content and modes, directory modes, and symlink targets; never follow symlinks. Git history is not part of downloaded snapshots.",
+  "cases": [
+    {
+      "case_id": "cpp-skypjack--entt",
+      "repository": "skypjack/entt",
+      "revision": "85c6bba014049b5de8fad49d25424df2f1f6a8c1",
+      "local_path": "sources/cpp/skypjack__entt",
+      "tree_sha256": "deadf3c8c005df3a838a5bbc3ec17b11f601e0b09f5e8c92e0d1e6d6d103dc2d",
+      "file_count": 374,
+      "directory_count": 81,
+      "symlink_count": 0,
+      "total_file_bytes": 6206450
+    },
+    {
+      "case_id": "cpp-google--guetzli",
+      "repository": "google/guetzli",
+      "revision": "214f2bb42abf5a577c079d00add5d6cc470620d3",
+      "local_path": "sources/cpp/google__guetzli",
+      "tree_sha256": "0da7d38ec6a7e08e9bbda202795dc556a6c5f1961e83a780d2367c6763d9487f",
+      "file_count": 86,
+      "directory_count": 7,
+      "symlink_count": 0,
+      "total_file_bytes": 643468
+    },
+    {
+      "case_id": "cpp-sqlitebrowser--sqlitebrowser",
+      "repository": "sqlitebrowser/sqlitebrowser",
+      "revision": "da45c7d528c38986a271fa7be887f95f5b68facb",
+      "local_path": "sources/cpp/sqlitebrowser__sqlitebrowser",
+      "tree_sha256": "6047ba914a7c9f4586770e36a894d83b9c68905e0c309b7c37e2dc8b4a0ce75c",
+      "file_count": 1204,
+      "directory_count": 51,
+      "symlink_count": 0,
+      "total_file_bytes": 23365975
+    },
+    {
+      "case_id": "cpp-strukturag--libde265",
+      "repository": "strukturag/libde265",
+      "revision": "c45b2da8f4b6e2b7bf9df1197e5633fbe6adc928",
+      "local_path": "sources/cpp/strukturag__libde265",
+      "tree_sha256": "065a5d8bd7d48b7bb2113f4c10b5c25b349d4616b94cb835f2a52807e10d6ff7",
+      "file_count": 137,
+      "directory_count": 11,
+      "symlink_count": 0,
+      "total_file_bytes": 1790648
+    },
+    {
+      "case_id": "cpp-treefrogframework--treefrog-framework",
+      "repository": "treefrogframework/treefrog-framework",
+      "revision": "f54f60220aa4b10ed69d541a3a3547259fc695c4",
+      "local_path": "sources/cpp/treefrogframework__treefrog-framework",
+      "tree_sha256": "c563ac3001843a1f4864ffb49653a69fbfec19934b4d2dc50086d460b014090e",
+      "file_count": 4009,
+      "directory_count": 422,
+      "symlink_count": 0,
+      "total_file_bytes": 53024553
+    },
+    {
+      "case_id": "cpp-ipkn--crow",
+      "repository": "ipkn/crow",
+      "revision": "2b43d3cd6a9a9cdbc99dfef9b86ff3f3027f3d1f",
+      "local_path": "sources/cpp/ipkn__crow",
+      "tree_sha256": "411f7a1a2b5002e15e3e13be17baf59aa915f63eeb15ed85c9a0c18779fdbe7f",
+      "file_count": 65,
+      "directory_count": 10,
+      "symlink_count": 0,
+      "total_file_bytes": 473828
+    },
+    {
+      "case_id": "cpp-drogonframework--drogon",
+      "repository": "drogonframework/drogon",
+      "revision": "acb39fa39d37474142b80c888dc72a0953dc79c1",
+      "local_path": "sources/cpp/drogonframework__drogon",
+      "tree_sha256": "c71eb4917a3a470472895c41daab43fd58d34ce19da6d20aa289b4fba2882bdb",
+      "file_count": 560,
+      "directory_count": 77,
+      "symlink_count": 0,
+      "total_file_bytes": 3721164
+    },
+    {
+      "case_id": "cpp-oatpp--oatpp",
+      "repository": "oatpp/oatpp",
+      "revision": "f83d648fd82dc222ef88aabbafb68efbd7d7bf50",
+      "local_path": "sources/cpp/oatpp__oatpp",
+      "tree_sha256": "02cd4f1b98f97d4b4b546b727b88e44ebac271f23f49bb4540f445008ee318d8",
+      "file_count": 467,
+      "directory_count": 86,
+      "symlink_count": 0,
+      "total_file_bytes": 2297674
+    },
+    {
+      "case_id": "cpp-wjakob--nanogui",
+      "repository": "wjakob/nanogui",
+      "revision": "e9ec8a1a9861cf578d9c6e85a6420080aa715c03",
+      "local_path": "sources/cpp/wjakob__nanogui",
+      "tree_sha256": "86ca257367427c3dbb03883ff3ab56dfa35f6423fdbce47c305d4de1ff183b5a",
+      "file_count": 141,
+      "directory_count": 20,
+      "symlink_count": 0,
+      "total_file_bytes": 4437389
+    },
+    {
+      "case_id": "cpp-mikke89--rmlui",
+      "repository": "mikke89/RmlUi",
+      "revision": "b7b4a0688262832eacf3b9abb41f8bbe73868af8",
+      "local_path": "sources/cpp/mikke89__rmlui",
+      "tree_sha256": "ea101e7c1e1e9106ad492d2e845fb464e38d1fce0bf6b1426a2432ae94ea9955",
+      "file_count": 1190,
+      "directory_count": 122,
+      "symlink_count": 0,
+      "total_file_bytes": 22205947
+    },
+    {
+      "case_id": "cpp-flameshot-org--flameshot",
+      "repository": "flameshot-org/flameshot",
+      "revision": "24ce091c0f95d0fdfe15cb9c085be88be8195b4f",
+      "local_path": "sources/cpp/flameshot-org__flameshot",
+      "tree_sha256": "59e0f7abbd52c6e26e3a514906b9297e68066b677c942fef1b7b714feab69b81",
+      "file_count": 505,
+      "directory_count": 78,
+      "symlink_count": 0,
+      "total_file_bytes": 24056730
+    },
+    {
+      "case_id": "cpp-polybar--polybar",
+      "repository": "polybar/polybar",
+      "revision": "f99e0b1c7a5b094f5a04b14101899d0cb4ece69d",
+      "local_path": "sources/cpp/polybar__polybar",
+      "tree_sha256": "4cfeb9c0ffc56dba0325f17e7ce791e7440f3adbc798aebe559e8b83e2372f8b",
+      "file_count": 340,
+      "directory_count": 67,
+      "symlink_count": 0,
+      "total_file_bytes": 1293344
+    },
+    {
+      "case_id": "cpp-twitter--vireo",
+      "repository": "twitter/vireo",
+      "revision": "7f0bc1ad50f5eaf30a09de209f0172f2def36abd",
+      "local_path": "sources/cpp/twitter__vireo",
+      "tree_sha256": "834dafc8e12a2e5126a2a5d5c4ab86d33fb18eba19311772ace5012108deadcf",
+      "file_count": 370,
+      "directory_count": 102,
+      "symlink_count": 0,
+      "total_file_bytes": 6589580
+    },
+    {
+      "case_id": "cpp-pistacheio--pistache",
+      "repository": "pistacheio/pistache",
+      "revision": "a7b0dc9ec01b96b95bde55331d83e27a9bf800b9",
+      "local_path": "sources/cpp/pistacheio__pistache",
+      "tree_sha256": "6a245acf4a3e186b906db20b15ae6bd39d2f844c840ba13684a58d4c72192592",
+      "file_count": 340,
+      "directory_count": 41,
+      "symlink_count": 0,
+      "total_file_bytes": 3167768
+    },
+    {
+      "case_id": "cpp-exaloop--seq",
+      "repository": "exaloop/seq",
+      "revision": "625acb39fe9365a2d67bfec1642e87f9954fe29f",
+      "local_path": "sources/cpp/exaloop__seq",
+      "tree_sha256": "be8cf5915c9d787c1bb3ab648ad1d323bce016dead9ebc9016e34b6f5f57429e",
+      "file_count": 130,
+      "directory_count": 23,
+      "symlink_count": 0,
+      "total_file_bytes": 906816
+    },
+    {
+      "case_id": "cpp-aseprite--aseprite",
+      "repository": "aseprite/aseprite",
+      "revision": "b9d291bff7afb8e78a9fb3d38fcdf57a80951dc4",
+      "local_path": "sources/cpp/aseprite__aseprite",
+      "tree_sha256": "e82d9a2e00ea047f0fb001c9eee0052a2df266893c02f493e2add74f314a06cb",
+      "file_count": 1926,
+      "directory_count": 110,
+      "symlink_count": 0,
+      "total_file_bytes": 8691845
+    },
+    {
+      "case_id": "cpp-official-stockfish--stockfish",
+      "repository": "official-stockfish/Stockfish",
+      "revision": "3f6f417b87c0e80ee30914b6b539b4ab7d3b2a5b",
+      "local_path": "sources/cpp/official-stockfish__stockfish",
+      "tree_sha256": "16deabf751f225336029f2a12ecab0d2186a73edebaf2454c1c9d8c02bddd507",
+      "file_count": 119,
+      "directory_count": 13,
+      "symlink_count": 0,
+      "total_file_bytes": 1171823
+    },
+    {
+      "case_id": "cpp-jacobdufault--cquery",
+      "repository": "jacobdufault/cquery",
+      "revision": "9b80917cbf7d26b78ec62b409442ecf96f72daf9",
+      "local_path": "sources/cpp/jacobdufault__cquery",
+      "tree_sha256": "61a7b1a651fba4d4d8bd8290e7a5dd77046cdcde8044e4a8e2df413860a1d5bb",
+      "file_count": 317,
+      "directory_count": 35,
+      "symlink_count": 0,
+      "total_file_bytes": 1227595
+    },
+    {
+      "case_id": "cpp-cppit--jucipp",
+      "repository": "cppit/jucipp",
+      "revision": "89c9fd742c287ffde5fa23fc14f6590541b63611",
+      "local_path": "sources/cpp/cppit__jucipp",
+      "tree_sha256": "a0e3bea05c8caa8abcba307b17e4f1fd325cadfbe238cc3bd197c3d17e983264",
+      "file_count": 136,
+      "directory_count": 20,
+      "symlink_count": 0,
+      "total_file_bytes": 1968531
+    },
+    {
+      "case_id": "cpp-openalpr--openalpr",
+      "repository": "openalpr/openalpr",
+      "revision": "736ab0e608cf9b20d92f36a873bb1152240daa98",
+      "local_path": "sources/cpp/openalpr__openalpr",
+      "tree_sha256": "227369153d4db602e4136b47f81c050cd85dfed2cb3e01aebf7c5dcfa1dfb862",
+      "file_count": 436,
+      "directory_count": 59,
+      "symlink_count": 0,
+      "total_file_bytes": 6828367
+    },
+    {
+      "case_id": "python-eylles--pywal16",
+      "repository": "eylles/pywal16",
+      "revision": "ab1f5c87f1a8b8423d66cab3cb7d0b4df9f47636",
+      "local_path": "sources/python/eylles__pywal16",
+      "tree_sha256": "d8ba8a29b9ddfb4cb81ffbdfe2cf7ede13c889bc209829e6c87943bb93a148ba",
+      "file_count": 334,
+      "directory_count": 11,
+      "symlink_count": 1,
+      "total_file_bytes": 250992
+    },
+    {
+      "case_id": "python-rstcheck--rstcheck",
+      "repository": "rstcheck/rstcheck",
+      "revision": "b8ddb006f1f49a9bdaf40e45f0bc0b070f460513",
+      "local_path": "sources/python/rstcheck__rstcheck",
+      "tree_sha256": "c775091b241fbaf0af3a6549418a41c733cb3666a3f3bcfffbdd3a8e28f09261",
+      "file_count": 87,
+      "directory_count": 21,
+      "symlink_count": 0,
+      "total_file_bytes": 151784
+    },
+    {
+      "case_id": "python-astropy--extension-helpers",
+      "repository": "astropy/extension-helpers",
+      "revision": "e6996c540c5bf23e89b45f170e89bd8c9f22a86e",
+      "local_path": "sources/python/astropy__extension-helpers",
+      "tree_sha256": "541b04ae498165fb5284d945b631df4b6c7c664d4034895339fc8ea9563bd974",
+      "file_count": 34,
+      "directory_count": 7,
+      "symlink_count": 0,
+      "total_file_bytes": 81989
+    },
+    {
+      "case_id": "python-cpcloud--protoletariat",
+      "repository": "cpcloud/protoletariat",
+      "revision": "5c85c8d27fb6535108a1f2846f4f0bd820472541",
+      "local_path": "sources/python/cpcloud__protoletariat",
+      "tree_sha256": "dd16d90391c6eaf0bbc9493a3b8021b3ad8960a3fb53dc830397a8ec2dc65798",
+      "file_count": 37,
+      "directory_count": 6,
+      "symlink_count": 0,
+      "total_file_bytes": 175442
+    },
+    {
+      "case_id": "python-zostera--django-bootstrap4",
+      "repository": "zostera/django-bootstrap4",
+      "revision": "79f4c059f33d3ad11b66c305f295eb42d71f95da",
+      "local_path": "sources/python/zostera__django-bootstrap4",
+      "tree_sha256": "0df18d41c4e8d71e315092fbda728f146f4cf66f824228ff72ff1c6e676a1eb7",
+      "file_count": 86,
+      "directory_count": 15,
+      "symlink_count": 0,
+      "total_file_bytes": 162632
+    },
+    {
+      "case_id": "python-jaraco--inflect",
+      "repository": "jaraco/inflect",
+      "revision": "1f42293f30caacb0637f7eb30a483b44489f4812",
+      "local_path": "sources/python/jaraco__inflect",
+      "tree_sha256": "d0f5f14e3b3acbfa67d16d92c08f002e8d735d7607d378a22ae084311abd3924",
+      "file_count": 41,
+      "directory_count": 6,
+      "symlink_count": 0,
+      "total_file_bytes": 256686
+    },
+    {
+      "case_id": "python-asdf-format--asdf-standard",
+      "repository": "asdf-format/asdf-standard",
+      "revision": "c367d14fae4b5155679e2c40b531140586e25daf",
+      "local_path": "sources/python/asdf-format__asdf-standard",
+      "tree_sha256": "bf8341726bf1f5d02d2e87d8343d103676703bbc8afd13d52535d5587c822545",
+      "file_count": 263,
+      "directory_count": 36,
+      "symlink_count": 0,
+      "total_file_bytes": 642161
+    },
+    {
+      "case_id": "python-rollbar--pyrollbar",
+      "repository": "rollbar/pyrollbar",
+      "revision": "8493ac03c3468c2349c968726adffa5fd5661d0e",
+      "local_path": "sources/python/rollbar__pyrollbar",
+      "tree_sha256": "185f739ecd5aca39c17ed29f2098313f8b95323ff0185cd045790a3e19e7de82",
+      "file_count": 99,
+      "directory_count": 31,
+      "symlink_count": 0,
+      "total_file_bytes": 429593
+    },
+    {
+      "case_id": "python-smarr--rebench",
+      "repository": "smarr/rebench",
+      "revision": "1de0e22fb3e9578b3aeb7a994481ead300fa977f",
+      "local_path": "sources/python/smarr__rebench",
+      "tree_sha256": "1b4214a9ec87fb3910007238c9f16c4649663055a55ba9b3bea6300cf0a20bc1",
+      "file_count": 167,
+      "directory_count": 12,
+      "symlink_count": 0,
+      "total_file_bytes": 544012
+    },
+    {
+      "case_id": "python-python--importlib-metadata",
+      "repository": "python/importlib_metadata",
+      "revision": "f3901686abc47853523f3b211873fc2b9e0c5ab5",
+      "local_path": "sources/python/python__importlib_metadata",
+      "tree_sha256": "0982dfebd5af960dbec19eff1dc4802eb05975c7f85ec9989577c58f1c0ee18b",
+      "file_count": 59,
+      "directory_count": 13,
+      "symlink_count": 0,
+      "total_file_bytes": 154738
+    },
+    {
+      "case_id": "python-wolph--python-progressbar",
+      "repository": "wolph/python-progressbar",
+      "revision": "5d53d59a37247dd9e4663dd86ca79b16cbc92d9b",
+      "local_path": "sources/python/wolph__python-progressbar",
+      "tree_sha256": "a33a04be6c17e9d7762ea8a13bd13064f88b9a484828611e8c4a3357b4d9d4f2",
+      "file_count": 107,
+      "directory_count": 10,
+      "symlink_count": 0,
+      "total_file_bytes": 377384
+    },
+    {
+      "case_id": "python-m-o-a-t--moat-mqtt",
+      "repository": "m-o-a-t/moat-mqtt",
+      "revision": "fcd0f9bf07548604d19d159ffb5fc543e78ce597",
+      "local_path": "sources/python/m-o-a-t__moat-mqtt",
+      "tree_sha256": "31bf3747bad1d14d2d1374e07d527a251935d90ecbd019e2366fd38437cdc572",
+      "file_count": 110,
+      "directory_count": 16,
+      "symlink_count": 0,
+      "total_file_bytes": 404201
+    },
+    {
+      "case_id": "python-pypa--twine",
+      "repository": "pypa/twine",
+      "revision": "6fbf880ee60915cf1666348c4bdd78a10415f2ac",
+      "local_path": "sources/python/pypa__twine",
+      "tree_sha256": "11a6d11f30d894be53923b1ad56f84bb017c1314a63c84890014a95cf23c8f5d",
+      "file_count": 84,
+      "directory_count": 11,
+      "symlink_count": 0,
+      "total_file_bytes": 450933
+    },
+    {
+      "case_id": "python-mollie--mollie-api-python",
+      "repository": "mollie/mollie-api-python",
+      "revision": "957b44fddb9d4d833508120022c7f291f5ca8d06",
+      "local_path": "sources/python/mollie__mollie-api-python",
+      "tree_sha256": "5ef2e828e2191f011d28f814305d3d6b45c1bb893b7f8979cb1c10bf6de6b285",
+      "file_count": 229,
+      "directory_count": 11,
+      "symlink_count": 0,
+      "total_file_bytes": 579471
+    },
+    {
+      "case_id": "python-mov-cli--mov-cli",
+      "repository": "mov-cli/mov-cli",
+      "revision": "32f8af4f15804dd6ce88d8f781a12b918119e64c",
+      "local_path": "sources/python/mov-cli__mov-cli",
+      "tree_sha256": "0b784e27743f1afb3386bea5291def816774d90719e7de64001637d4735f1f7b",
+      "file_count": 85,
+      "directory_count": 18,
+      "symlink_count": 0,
+      "total_file_bytes": 220121
+    },
+    {
+      "case_id": "python-piskvorky--smart-open",
+      "repository": "piskvorky/smart_open",
+      "revision": "5a826134eb23c86087d06db3b78b25484e7e2e6d",
+      "local_path": "sources/python/piskvorky__smart_open",
+      "tree_sha256": "a148767135e7524aaef65bb9ccd8fc60e2408972a5d37fccf9aac5453758fd28",
+      "file_count": 101,
+      "directory_count": 11,
+      "symlink_count": 0,
+      "total_file_bytes": 552894
+    },
+    {
+      "case_id": "python-microsoftgraph--msgraph-sdk-python-core",
+      "repository": "microsoftgraph/msgraph-sdk-python-core",
+      "revision": "e36c17424c9d443bdfeafc32f32682529ce25f95",
+      "local_path": "sources/python/microsoftgraph__msgraph-sdk-python-core",
+      "tree_sha256": "e991b5419a188c9e88069b719d2d679f2b9da4e808263bf7da0d161214796d1b",
+      "file_count": 71,
+      "directory_count": 20,
+      "symlink_count": 0,
+      "total_file_bytes": 144959
+    },
+    {
+      "case_id": "python-psf--pyperf",
+      "repository": "psf/pyperf",
+      "revision": "7b9a23adb3ceeb182f58a03e453158dbe081a7e7",
+      "local_path": "sources/python/psf__pyperf",
+      "tree_sha256": "57e047f1e994244d7ca213e8f934f92b2eef8a9d881e6dac5c7024a6383d8d4f",
+      "file_count": 80,
+      "directory_count": 6,
+      "symlink_count": 0,
+      "total_file_bytes": 858492
+    },
+    {
+      "case_id": "python-fatal1ty--mashumaro",
+      "repository": "fatal1ty/mashumaro",
+      "revision": "e945ee4319db49da9f7b8ede614e988cc8c8956b",
+      "local_path": "sources/python/fatal1ty__mashumaro",
+      "tree_sha256": "4568019133c77ecb92f8ec23ccbaa25caa798d4d30b0e7078e111364d9979600",
+      "file_count": 165,
+      "directory_count": 31,
+      "symlink_count": 0,
+      "total_file_bytes": 938181
+    },
+    {
+      "case_id": "python-ubernostrum--django-registration",
+      "repository": "ubernostrum/django-registration",
+      "revision": "dc80d4e3f90d64d12c35a6c494aa1ec9b36a1705",
+      "local_path": "sources/python/ubernostrum__django-registration",
+      "tree_sha256": "08edd4e1115d517aba4b4ffd5f15676e39f5f026be08e0e393f0203f01d37bae",
+      "file_count": 133,
+      "directory_count": 77,
+      "symlink_count": 0,
+      "total_file_bytes": 344666
+    },
+    {
+      "case_id": "java-prisma-capacity--cryptoshred",
+      "repository": "prisma-capacity/cryptoshred",
+      "revision": "4a22ea14f5bc38a5b773213ca34cae84a084a6db",
+      "local_path": "sources/java/prisma-capacity__cryptoshred",
+      "tree_sha256": "4f68e9b406c075b51699a18003ed05d9d09dd9843528a87927cc5074731e397c",
+      "file_count": 73,
+      "directory_count": 91,
+      "symlink_count": 0,
+      "total_file_bytes": 157126
+    },
+    {
+      "case_id": "java-liquibase--liquibase-hibernate",
+      "repository": "liquibase/liquibase-hibernate",
+      "revision": "3fd0fbca8f627837cf8d143efa85eddc5a5a7cf9",
+      "local_path": "sources/java/liquibase__liquibase-hibernate",
+      "tree_sha256": "47080b3840dcf489ead15a2718302fa2f2138698005f5c685dfba63fdff66fa0",
+      "file_count": 93,
+      "directory_count": 46,
+      "symlink_count": 0,
+      "total_file_bytes": 261721
+    },
+    {
+      "case_id": "java-camunda-community-hub--zeebe-test-container",
+      "repository": "camunda-community-hub/zeebe-test-container",
+      "revision": "d228f0c267a8f70b81e4fa1594b9ec4d364c156a",
+      "local_path": "sources/java/camunda-community-hub__zeebe-test-container",
+      "tree_sha256": "9cfa14d7555eedbd332fb10b016c0bfff318eab5d52138aa6fe3b9eabe5770f7",
+      "file_count": 111,
+      "directory_count": 66,
+      "symlink_count": 0,
+      "total_file_bytes": 515217
+    },
+    {
+      "case_id": "java-zalando--problem-spring-web",
+      "repository": "zalando/problem-spring-web",
+      "revision": "da31acb922e486cebeff37d9fbd96322d70e4fc8",
+      "local_path": "sources/java/zalando__problem-spring-web",
+      "tree_sha256": "b2f97ccc820499dbc6b723b3f0ab09d8ed14c14205ed083199e7ec34f2ca3658",
+      "file_count": 221,
+      "directory_count": 130,
+      "symlink_count": 0,
+      "total_file_bytes": 430428
+    },
+    {
+      "case_id": "java-axoniq--axonserver-connector-java",
+      "repository": "AxonIQ/axonserver-connector-java",
+      "revision": "ac25a6fedcb1fecdb5a8cdb08ab96d0f28c11953",
+      "local_path": "sources/java/axoniq__axonserver-connector-java",
+      "tree_sha256": "24f5654be1b4b91c467286bf5a2202954fac255e172f7cbd970b3abb5aae374a",
+      "file_count": 152,
+      "directory_count": 49,
+      "symlink_count": 0,
+      "total_file_bytes": 986950
+    },
+    {
+      "case_id": "java-dunctebot--skybot-lavalink-plugin",
+      "repository": "dunctebot/skybot-lavalink-plugin",
+      "revision": "197f25fdb8591400b8dd53634d0fae3e32904c63",
+      "local_path": "sources/java/dunctebot__skybot-lavalink-plugin",
+      "tree_sha256": "29c3dc5953124a44dc26f2fce58ba976bcd1c11b208f6deb35e0f699b8086721",
+      "file_count": 62,
+      "directory_count": 31,
+      "symlink_count": 0,
+      "total_file_bytes": 236064
+    },
+    {
+      "case_id": "java-openrewrite--rewrite-maven-plugin",
+      "repository": "openrewrite/rewrite-maven-plugin",
+      "revision": "dd2645af1a6a3617bf13f0bd930eeade89180e94",
+      "local_path": "sources/java/openrewrite__rewrite-maven-plugin",
+      "tree_sha256": "efd843b6c8e3ba88475c7a7cd172e829085145f7485affb6d54306a5eb8a85a0",
+      "file_count": 130,
+      "directory_count": 152,
+      "symlink_count": 0,
+      "total_file_bytes": 377775
+    },
+    {
+      "case_id": "java-eclipse--microprofile-fault-tolerance",
+      "repository": "eclipse/microprofile-fault-tolerance",
+      "revision": "3543ebcc367a89adcba04351c55ffc9360a0cbaf",
+      "local_path": "sources/java/eclipse__microprofile-fault-tolerance",
+      "tree_sha256": "ca347f3c6e7616ff789b1cf14423b7802a46b09f7c7ed33823f46dad2ff0640e",
+      "file_count": 457,
+      "directory_count": 96,
+      "symlink_count": 0,
+      "total_file_bytes": 1563335
+    },
+    {
+      "case_id": "java-sigstore--sigstore-java",
+      "repository": "sigstore/sigstore-java",
+      "revision": "27a57c87ea6c5cf6be4f64d824cd07f5656c67ac",
+      "local_path": "sources/java/sigstore__sigstore-java",
+      "tree_sha256": "edd5142d32262dd126f33ef2c523e61c9fbd0ae63c0716da16a039e4f23f8c41",
+      "file_count": 511,
+      "directory_count": 207,
+      "symlink_count": 0,
+      "total_file_bytes": 1421781
+    },
+    {
+      "case_id": "java-jenkinsci--plugin-compat-tester",
+      "repository": "jenkinsci/plugin-compat-tester",
+      "revision": "3027df385a49c976f87e2ae974f148afdd663822",
+      "local_path": "sources/java/jenkinsci__plugin-compat-tester",
+      "tree_sha256": "79b9536ee31581e808306968b8b49151263e4ce546e81c6b7f8371bc2facef5b",
+      "file_count": 82,
+      "directory_count": 50,
+      "symlink_count": 0,
+      "total_file_bytes": 202990
+    },
+    {
+      "case_id": "java-mrniko--netty-socketio",
+      "repository": "mrniko/netty-socketio",
+      "revision": "82433154956ac60709357e7157affc8dde371af7",
+      "local_path": "sources/java/mrniko__netty-socketio",
+      "tree_sha256": "ee5dc49f63b3e8dbee7d617c9fd3c226e39c21221980ceaf3dd203fe5aa2d49e",
+      "file_count": 135,
+      "directory_count": 28,
+      "symlink_count": 0,
+      "total_file_bytes": 437543
+    },
+    {
+      "case_id": "java-micronaut-projects--micronaut-platform",
+      "repository": "micronaut-projects/micronaut-platform",
+      "revision": "102825e1037abf00069583f6e388292cbfae7b86",
+      "local_path": "sources/java/micronaut-projects__micronaut-platform",
+      "tree_sha256": "58f4d0e3f8d9c67bc36efb47eeb5ff94ed3503df9fab2bf77220c7da67bfe85b",
+      "file_count": 45,
+      "directory_count": 27,
+      "symlink_count": 0,
+      "total_file_bytes": 175668
+    },
+    {
+      "case_id": "java-jenkinsci--docker-plugin",
+      "repository": "jenkinsci/docker-plugin",
+      "revision": "16e30a603830d0b685ac34d544154fc7ffb84600",
+      "local_path": "sources/java/jenkinsci__docker-plugin",
+      "tree_sha256": "245c7af1f8a9e26f1eb4b3f78e8cbdd03f87acdac88b49a033dacd6d347a0c23",
+      "file_count": 237,
+      "directory_count": 104,
+      "symlink_count": 0,
+      "total_file_bytes": 832081
+    },
+    {
+      "case_id": "java-avaje--avaje-inject",
+      "repository": "avaje/avaje-inject",
+      "revision": "9ca8d1af5d0059b46c85e6046aa740d288df78c4",
+      "local_path": "sources/java/avaje__avaje-inject",
+      "tree_sha256": "ce4bdf50fba996fb764d383968444c9afa7c8dd2dbd87a44f32069c56209a6fb",
+      "file_count": 748,
+      "directory_count": 233,
+      "symlink_count": 0,
+      "total_file_bytes": 958297
+    },
+    {
+      "case_id": "java-grapheneos--camera",
+      "repository": "grapheneos/camera",
+      "revision": "26e9d4120add6a4e1bd551c2f1be996ee756174a",
+      "local_path": "sources/java/grapheneos__camera",
+      "tree_sha256": "e79c782870913a166831b2c907295caadff969134df3dd708cb9dbe9844432d4",
+      "file_count": 196,
+      "directory_count": 41,
+      "symlink_count": 0,
+      "total_file_bytes": 1244086
+    },
+    {
+      "case_id": "java-scribejava--scribejava",
+      "repository": "scribejava/scribejava",
+      "revision": "8970e8eeb0aff840d0b223890e9c392ee19218f7",
+      "local_path": "sources/java/scribejava__scribejava",
+      "tree_sha256": "b6b32d7b9b9712732b157517bcb0c6b89aa0f56ba0afc4eea865663721d5660e",
+      "file_count": 340,
+      "directory_count": 182,
+      "symlink_count": 0,
+      "total_file_bytes": 890285
+    },
+    {
+      "case_id": "java-braisdom--objectivesql",
+      "repository": "braisdom/objectivesql",
+      "revision": "f49e6eba6e7b08748c9945fbbaaa7728239b264e",
+      "local_path": "sources/java/braisdom__objectivesql",
+      "tree_sha256": "0a2baf17ec4d3fb64c8e3b19ef5bde88c339af70a44483ba439a278b843d3d06",
+      "file_count": 331,
+      "directory_count": 160,
+      "symlink_count": 0,
+      "total_file_bytes": 1217414
+    },
+    {
+      "case_id": "java-fortnoxab--reactive-wizard",
+      "repository": "fortnoxab/reactive-wizard",
+      "revision": "1f3a26dd6b4667b26f2e8a6426c094afc65d2fa8",
+      "local_path": "sources/java/fortnoxab__reactive-wizard",
+      "tree_sha256": "5fd8914502c675535f61d6bf33b473c6dc03450bb8500f763c7cec36a2c4277d",
+      "file_count": 418,
+      "directory_count": 292,
+      "symlink_count": 0,
+      "total_file_bytes": 1260431
+    },
+    {
+      "case_id": "java-grapheneos--attestationserver",
+      "repository": "grapheneos/attestationserver",
+      "revision": "e9699f9dcd3b736853f674f6678431d561cb4bb2",
+      "local_path": "sources/java/grapheneos__attestationserver",
+      "tree_sha256": "920d9cbba5420b3af4733dc8e93fdcef80e614fe5c3159799c2a84e107c1a841",
+      "file_count": 102,
+      "directory_count": 27,
+      "symlink_count": 0,
+      "total_file_bytes": 766849
+    },
+    {
+      "case_id": "java-gradle--native-platform",
+      "repository": "gradle/native-platform",
+      "revision": "25830184c8d04bca9c80b26df69c5936431f808c",
+      "local_path": "sources/java/gradle__native-platform",
+      "tree_sha256": "2f576e42e838d9c2131a8a2bae44d27e11873e9c1d5cc4a70dfdadfad4bf8800",
+      "file_count": 232,
+      "directory_count": 77,
+      "symlink_count": 0,
+      "total_file_bytes": 846370
+    }
+  ]
+}

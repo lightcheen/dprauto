@@ -15,6 +15,8 @@ benchmarks is the requested provenance.
 - Historical exclusion evidence: `exclusions.json`
 - Local source snapshots: `sources/` (60 directories, about 253 MiB; intentionally git-ignored)
 - DPRAuto static probe: `probe-results.json` (generated and git-ignored)
+- Immutable corpus identity: `freeze-lock.json`
+- Preserved pre-refactor probe: `baselines/static-probe-a31a05847e4a.json`
 - DPRAuto revision: `a31a05847e4a62cbb58c16913de05dd9a7a98fe7`
 
 Python and Java use the exact revisions supplied by the benchmark catalogs. CXXCrafter's Top100
@@ -53,6 +55,8 @@ python3 evaluations/corpus60/build_manifest.py
 python3 evaluations/corpus60/validate_corpus.py
 python3 evaluations/corpus60/fetch_sources.py --workers 6
 python3 evaluations/corpus60/validate_corpus.py --require-sources
+python3 evaluations/corpus60/validate_corpus.py --require-sources --require-freeze
+python3 evaluations/corpus60/freeze_corpus.py --check --require-sources
 PYTHONPATH=src python3 evaluations/corpus60/probe_dprauto.py
 ```
 

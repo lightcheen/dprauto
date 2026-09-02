@@ -45,6 +45,7 @@ def revision_members(path: Path) -> dict[str, str]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--require-sources", action="store_true")
+    parser.add_argument("--require-freeze", action="store_true")
     args = parser.parse_args()
 
     manifest = json.loads((HERE / "manifest.json").read_text(encoding="utf-8"))
@@ -104,6 +105,11 @@ def main() -> None:
                 if root.is_dir() and not (root / marker).exists():
                     errors.append(f"missing build marker {marker}: {repo}")
 
+    if args.require_freeze:
+        from freeze_corpus import validate_freeze
+
+        errors.extend(validate_freeze(HERE, require_sources=args.require_sources))
+
     if errors:
         print("corpus validation failed:")
         for error in errors:
@@ -119,4 +125,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
