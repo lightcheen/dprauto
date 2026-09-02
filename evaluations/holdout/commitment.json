@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-sealed-holdout-12-20260902",
+  "created_on": "2026-09-02",
+  "state": "sealed_not_run",
+  "private_manifest_sha256": "f99cf467ba54d735ea1f431915706127a256bff50f921449e668b7e3c7ae1e10",
+  "case_count": 12,
+  "ecosystem_counts": {
+    "cpp": 2,
+    "go": 2,
+    "jvm": 2,
+    "node": 2,
+    "python": 2,
+    "rust": 2
+  },
+  "policy": {
+    "development_suite": "evaluations/corpus60",
+    "regression_suite": "evaluations/multilang",
+    "identity_visibility": "evaluator_only",
+    "ground_truth_visibility": "evaluator_only",
+    "development_runs_allowed": false
+  }
+}
