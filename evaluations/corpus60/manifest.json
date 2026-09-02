@@ -1,0 +1,962 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "created_on": "2026-09-02",
+  "dprauto_revision": "a31a05847e4a62cbb58c16913de05dd9a7a98fe7",
+  "purpose": "New small-project corpus for measuring DPRAuto environment construction.",
+  "counts": {
+    "total": 60,
+    "cpp": 20,
+    "python": 20,
+    "java": 20
+  },
+  "selection_policy": {
+    "history_definition": "Exclude every repository named in the frozen DPRAuto evaluation JSON listed in exclusions.json. Source-benchmark membership is intentionally not excluded.",
+    "python_java_bounds": {
+      "main_language_must_match": true,
+      "source_repository_kib_max": 20000,
+      "source_code_lines_min": 500,
+      "source_code_lines_max": 30000,
+      "archived_or_disabled": false
+    },
+    "cpp_bounds": {
+      "snapshot_archive_kib_max": 20000,
+      "cpp_translation_units_min": 1
+    },
+    "revision_policy": "Use benchmark revisions for Python/JVM. CXXCrafter Top100 has no revisions, so pin the reachable HEAD observed on 2026-09-02."
+  },
+  "catalogs": {
+    "cxxcrafter_top100": {
+      "project": "CXXCrafter Community Edition",
+      "path": "/home/master/auto-build/CXXCrafter/CXXCrafter-Community-Edition/data/top100_dataset.csv",
+      "sha256": "39b0a41198ae7d92713b2f2c75cf691bb75aba5da56068edee18606272384bf9",
+      "upstream": "https://github.com/seclab-fudan/CXXCrafter-Community-Edition"
+    },
+    "heragent_envbench_python": {
+      "project": "HerAgent",
+      "path": "/home/master/auto-build/HerAgent-main/projects/envbench-python.txt",
+      "sha256": "ceebdec4208ae720a8342ef5899309f42d118c66a9cd3ca6589021a629dcd637",
+      "benchmark": "EnvBench-Python",
+      "upstream_metadata": "https://huggingface.co/datasets/JetBrains-Research/EnvBench"
+    },
+    "envbench_jvm": {
+      "project": "EnvBench",
+      "path": "/home/master/auto-build/HerAgent-main/projects/envbench/envbench-jvm.txt",
+      "sha256": "b4446e4c3f4e424bf1108b006763c857685129b4c258cefb8e4004e9e0099aa5",
+      "upstream": "https://huggingface.co/datasets/JetBrains-Research/EnvBench"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "cpp-skypjack--entt",
+      "language": "cpp",
+      "repository": "skypjack/entt",
+      "url": "https://github.com/skypjack/entt.git",
+      "revision": "85c6bba014049b5de8fad49d25424df2f1f6a8c1",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 932,
+      "cpp_translation_units": 136,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/skypjack__entt"
+    },
+    {
+      "case_id": "cpp-google--guetzli",
+      "language": "cpp",
+      "repository": "google/guetzli",
+      "url": "https://github.com/google/guetzli.git",
+      "revision": "214f2bb42abf5a577c079d00add5d6cc470620d3",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 287,
+      "cpp_translation_units": 23,
+      "build_markers": [
+        "Makefile",
+        "premake5.lua"
+      ],
+      "local_path": "sources/cpp/google__guetzli"
+    },
+    {
+      "case_id": "cpp-sqlitebrowser--sqlitebrowser",
+      "language": "cpp",
+      "repository": "sqlitebrowser/sqlitebrowser",
+      "url": "https://github.com/sqlitebrowser/sqlitebrowser.git",
+      "revision": "da45c7d528c38986a271fa7be887f95f5b68facb",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 4916,
+      "cpp_translation_units": 277,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/sqlitebrowser__sqlitebrowser"
+    },
+    {
+      "case_id": "cpp-strukturag--libde265",
+      "language": "cpp",
+      "repository": "strukturag/libde265",
+      "url": "https://github.com/strukturag/libde265.git",
+      "revision": "c45b2da8f4b6e2b7bf9df1197e5633fbe6adc928",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 310,
+      "cpp_translation_units": 51,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/strukturag__libde265"
+    },
+    {
+      "case_id": "cpp-treefrogframework--treefrog-framework",
+      "language": "cpp",
+      "repository": "treefrogframework/treefrog-framework",
+      "url": "https://github.com/treefrogframework/treefrog-framework.git",
+      "revision": "f54f60220aa4b10ed69d541a3a3547259fc695c4",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 10634,
+      "cpp_translation_units": 317,
+      "build_markers": [
+        "configure"
+      ],
+      "local_path": "sources/cpp/treefrogframework__treefrog-framework"
+    },
+    {
+      "case_id": "cpp-ipkn--crow",
+      "language": "cpp",
+      "repository": "ipkn/crow",
+      "url": "https://github.com/ipkn/crow.git",
+      "revision": "2b43d3cd6a9a9cdbc99dfef9b86ff3f3027f3d1f",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 86,
+      "cpp_translation_units": 9,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/ipkn__crow"
+    },
+    {
+      "case_id": "cpp-drogonframework--drogon",
+      "language": "cpp",
+      "repository": "drogonframework/drogon",
+      "url": "https://github.com/drogonframework/drogon.git",
+      "revision": "acb39fa39d37474142b80c888dc72a0953dc79c1",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 666,
+      "cpp_translation_units": 237,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/drogonframework__drogon"
+    },
+    {
+      "case_id": "cpp-oatpp--oatpp",
+      "language": "cpp",
+      "repository": "oatpp/oatpp",
+      "url": "https://github.com/oatpp/oatpp.git",
+      "revision": "f83d648fd82dc222ef88aabbafb68efbd7d7bf50",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 315,
+      "cpp_translation_units": 197,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/oatpp__oatpp"
+    },
+    {
+      "case_id": "cpp-wjakob--nanogui",
+      "language": "cpp",
+      "repository": "wjakob/nanogui",
+      "url": "https://github.com/wjakob/nanogui.git",
+      "revision": "e9ec8a1a9861cf578d9c6e85a6420080aa715c03",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 2705,
+      "cpp_translation_units": 49,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/wjakob__nanogui"
+    },
+    {
+      "case_id": "cpp-mikke89--rmlui",
+      "language": "cpp",
+      "repository": "mikke89/RmlUi",
+      "url": "https://github.com/mikke89/RmlUi.git",
+      "revision": "b7b4a0688262832eacf3b9abb41f8bbe73868af8",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 3932,
+      "cpp_translation_units": 414,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/mikke89__rmlui"
+    },
+    {
+      "case_id": "cpp-flameshot-org--flameshot",
+      "language": "cpp",
+      "repository": "flameshot-org/flameshot",
+      "url": "https://github.com/flameshot-org/flameshot.git",
+      "revision": "24ce091c0f95d0fdfe15cb9c085be88be8195b4f",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 16044,
+      "cpp_translation_units": 113,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/flameshot-org__flameshot"
+    },
+    {
+      "case_id": "cpp-polybar--polybar",
+      "language": "cpp",
+      "repository": "polybar/polybar",
+      "url": "https://github.com/polybar/polybar.git",
+      "revision": "f99e0b1c7a5b094f5a04b14101899d0cb4ece69d",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 359,
+      "cpp_translation_units": 121,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/polybar__polybar"
+    },
+    {
+      "case_id": "cpp-twitter--vireo",
+      "language": "cpp",
+      "repository": "twitter/vireo",
+      "url": "https://github.com/twitter/vireo.git",
+      "revision": "7f0bc1ad50f5eaf30a09de209f0172f2def36abd",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 1961,
+      "cpp_translation_units": 112,
+      "build_markers": [
+        "imagecore/configure"
+      ],
+      "local_path": "sources/cpp/twitter__vireo"
+    },
+    {
+      "case_id": "cpp-pistacheio--pistache",
+      "language": "cpp",
+      "repository": "pistacheio/pistache",
+      "url": "https://github.com/pistacheio/pistache.git",
+      "revision": "a7b0dc9ec01b96b95bde55331d83e27a9bf800b9",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 822,
+      "cpp_translation_units": 79,
+      "build_markers": [
+        "CMakeLists.txt",
+        "meson.build"
+      ],
+      "local_path": "sources/cpp/pistacheio__pistache"
+    },
+    {
+      "case_id": "cpp-exaloop--seq",
+      "language": "cpp",
+      "repository": "exaloop/seq",
+      "url": "https://github.com/exaloop/seq.git",
+      "revision": "625acb39fe9365a2d67bfec1642e87f9954fe29f",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 344,
+      "cpp_translation_units": 10,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/exaloop__seq"
+    },
+    {
+      "case_id": "cpp-aseprite--aseprite",
+      "language": "cpp",
+      "repository": "aseprite/aseprite",
+      "url": "https://github.com/aseprite/aseprite.git",
+      "revision": "b9d291bff7afb8e78a9fb3d38fcdf57a80951dc4",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 1851,
+      "cpp_translation_units": 800,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/aseprite__aseprite"
+    },
+    {
+      "case_id": "cpp-official-stockfish--stockfish",
+      "language": "cpp",
+      "repository": "official-stockfish/Stockfish",
+      "url": "https://github.com/official-stockfish/Stockfish.git",
+      "revision": "3f6f417b87c0e80ee30914b6b539b4ab7d3b2a5b",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 284,
+      "cpp_translation_units": 30,
+      "build_markers": [
+        "src/Makefile"
+      ],
+      "local_path": "sources/cpp/official-stockfish__stockfish"
+    },
+    {
+      "case_id": "cpp-jacobdufault--cquery",
+      "language": "cpp",
+      "repository": "jacobdufault/cquery",
+      "url": "https://github.com/jacobdufault/cquery.git",
+      "revision": "9b80917cbf7d26b78ec62b409442ecf96f72daf9",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 251,
+      "cpp_translation_units": 215,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/jacobdufault__cquery"
+    },
+    {
+      "case_id": "cpp-cppit--jucipp",
+      "language": "cpp",
+      "repository": "cppit/jucipp",
+      "url": "https://github.com/cppit/jucipp.git",
+      "revision": "89c9fd742c287ffde5fa23fc14f6590541b63611",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 557,
+      "cpp_translation_units": 59,
+      "build_markers": [
+        "CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/cppit__jucipp"
+    },
+    {
+      "case_id": "cpp-openalpr--openalpr",
+      "language": "cpp",
+      "repository": "openalpr/openalpr",
+      "url": "https://github.com/openalpr/openalpr.git",
+      "revision": "736ab0e608cf9b20d92f36a873bb1152240daa98",
+      "dataset": "cxxcrafter_top100",
+      "snapshot_archive_kib": 1767,
+      "cpp_translation_units": 99,
+      "build_markers": [
+        "src/CMakeLists.txt"
+      ],
+      "local_path": "sources/cpp/openalpr__openalpr"
+    },
+    {
+      "case_id": "python-eylles--pywal16",
+      "language": "python",
+      "repository": "eylles/pywal16",
+      "url": "https://github.com/eylles/pywal16.git",
+      "revision": "ab1f5c87f1a8b8423d66cab3cb7d0b4df9f47636",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 833,
+      "source_code_lines": 2948,
+      "snapshot_archive_kib": 73,
+      "build_markers": [
+        "setup.py"
+      ],
+      "local_path": "sources/python/eylles__pywal16"
+    },
+    {
+      "case_id": "python-rstcheck--rstcheck",
+      "language": "python",
+      "repository": "rstcheck/rstcheck",
+      "url": "https://github.com/rstcheck/rstcheck.git",
+      "revision": "b8ddb006f1f49a9bdaf40e45f0bc0b070f460513",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 924,
+      "source_code_lines": 3091,
+      "snapshot_archive_kib": 39,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/rstcheck__rstcheck"
+    },
+    {
+      "case_id": "python-astropy--extension-helpers",
+      "language": "python",
+      "repository": "astropy/extension-helpers",
+      "url": "https://github.com/astropy/extension-helpers.git",
+      "revision": "e6996c540c5bf23e89b45f170e89bd8c9f22a86e",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 980,
+      "source_code_lines": 1437,
+      "snapshot_archive_kib": 25,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/astropy__extension-helpers"
+    },
+    {
+      "case_id": "python-cpcloud--protoletariat",
+      "language": "python",
+      "repository": "cpcloud/protoletariat",
+      "url": "https://github.com/cpcloud/protoletariat.git",
+      "revision": "5c85c8d27fb6535108a1f2846f4f0bd820472541",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1052,
+      "source_code_lines": 2770,
+      "snapshot_archive_kib": 46,
+      "build_markers": [
+        "poetry.lock",
+        "pyproject.toml"
+      ],
+      "local_path": "sources/python/cpcloud__protoletariat"
+    },
+    {
+      "case_id": "python-zostera--django-bootstrap4",
+      "language": "python",
+      "repository": "zostera/django-bootstrap4",
+      "url": "https://github.com/zostera/django-bootstrap4.git",
+      "revision": "79f4c059f33d3ad11b66c305f295eb42d71f95da",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1126,
+      "source_code_lines": 3067,
+      "snapshot_archive_kib": 42,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/zostera__django-bootstrap4"
+    },
+    {
+      "case_id": "python-jaraco--inflect",
+      "language": "python",
+      "repository": "jaraco/inflect",
+      "url": "https://github.com/jaraco/inflect.git",
+      "revision": "1f42293f30caacb0637f7eb30a483b44489f4812",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1184,
+      "source_code_lines": 6410,
+      "snapshot_archive_kib": 61,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/jaraco__inflect"
+    },
+    {
+      "case_id": "python-asdf-format--asdf-standard",
+      "language": "python",
+      "repository": "asdf-format/asdf-standard",
+      "url": "https://github.com/asdf-format/asdf-standard.git",
+      "revision": "c367d14fae4b5155679e2c40b531140586e25daf",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1188,
+      "source_code_lines": 10247,
+      "snapshot_archive_kib": 128,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/asdf-format__asdf-standard"
+    },
+    {
+      "case_id": "python-rollbar--pyrollbar",
+      "language": "python",
+      "repository": "rollbar/pyrollbar",
+      "url": "https://github.com/rollbar/pyrollbar.git",
+      "revision": "8493ac03c3468c2349c968726adffa5fd5661d0e",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1347,
+      "source_code_lines": 8854,
+      "snapshot_archive_kib": 81,
+      "build_markers": [
+        "setup.py"
+      ],
+      "local_path": "sources/python/rollbar__pyrollbar"
+    },
+    {
+      "case_id": "python-smarr--rebench",
+      "language": "python",
+      "repository": "smarr/rebench",
+      "url": "https://github.com/smarr/rebench.git",
+      "revision": "1de0e22fb3e9578b3aeb7a994481ead300fa977f",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1358,
+      "source_code_lines": 8702,
+      "snapshot_archive_kib": 111,
+      "build_markers": [
+        "setup.py"
+      ],
+      "local_path": "sources/python/smarr__rebench"
+    },
+    {
+      "case_id": "python-python--importlib-metadata",
+      "language": "python",
+      "repository": "python/importlib_metadata",
+      "url": "https://github.com/python/importlib_metadata.git",
+      "revision": "f3901686abc47853523f3b211873fc2b9e0c5ab5",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1382,
+      "source_code_lines": 2815,
+      "snapshot_archive_kib": 46,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/python__importlib_metadata"
+    },
+    {
+      "case_id": "python-wolph--python-progressbar",
+      "language": "python",
+      "repository": "wolph/python-progressbar",
+      "url": "https://github.com/wolph/python-progressbar.git",
+      "revision": "5d53d59a37247dd9e4663dd86ca79b16cbc92d9b",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1414,
+      "source_code_lines": 9107,
+      "snapshot_archive_kib": 89,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/wolph__python-progressbar"
+    },
+    {
+      "case_id": "python-m-o-a-t--moat-mqtt",
+      "language": "python",
+      "repository": "m-o-a-t/moat-mqtt",
+      "url": "https://github.com/m-o-a-t/moat-mqtt.git",
+      "revision": "fcd0f9bf07548604d19d159ffb5fc543e78ce597",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1467,
+      "source_code_lines": 7766,
+      "snapshot_archive_kib": 80,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/m-o-a-t__moat-mqtt"
+    },
+    {
+      "case_id": "python-pypa--twine",
+      "language": "python",
+      "repository": "pypa/twine",
+      "url": "https://github.com/pypa/twine.git",
+      "revision": "6fbf880ee60915cf1666348c4bdd78a10415f2ac",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1485,
+      "source_code_lines": 5439,
+      "snapshot_archive_kib": 216,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/pypa__twine"
+    },
+    {
+      "case_id": "python-mollie--mollie-api-python",
+      "language": "python",
+      "repository": "mollie/mollie-api-python",
+      "url": "https://github.com/mollie/mollie-api-python.git",
+      "revision": "957b44fddb9d4d833508120022c7f291f5ca8d06",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1508,
+      "source_code_lines": 12224,
+      "snapshot_archive_kib": 87,
+      "build_markers": [
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "local_path": "sources/python/mollie__mollie-api-python"
+    },
+    {
+      "case_id": "python-mov-cli--mov-cli",
+      "language": "python",
+      "repository": "mov-cli/mov-cli",
+      "url": "https://github.com/mov-cli/mov-cli.git",
+      "revision": "32f8af4f15804dd6ce88d8f781a12b918119e64c",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1555,
+      "source_code_lines": 3706,
+      "snapshot_archive_kib": 75,
+      "build_markers": [
+        "pyproject.toml"
+      ],
+      "local_path": "sources/python/mov-cli__mov-cli"
+    },
+    {
+      "case_id": "python-piskvorky--smart-open",
+      "language": "python",
+      "repository": "piskvorky/smart_open",
+      "url": "https://github.com/piskvorky/smart_open.git",
+      "revision": "5a826134eb23c86087d06db3b78b25484e7e2e6d",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1616,
+      "source_code_lines": 9323,
+      "snapshot_archive_kib": 136,
+      "build_markers": [
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "local_path": "sources/python/piskvorky__smart_open"
+    },
+    {
+      "case_id": "python-microsoftgraph--msgraph-sdk-python-core",
+      "language": "python",
+      "repository": "microsoftgraph/msgraph-sdk-python-core",
+      "url": "https://github.com/microsoftgraph/msgraph-sdk-python-core.git",
+      "revision": "e36c17424c9d443bdfeafc32f32682529ce25f95",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1696,
+      "source_code_lines": 2323,
+      "snapshot_archive_kib": 39,
+      "build_markers": [
+        "pyproject.toml"
+      ],
+      "local_path": "sources/python/microsoftgraph__msgraph-sdk-python-core"
+    },
+    {
+      "case_id": "python-psf--pyperf",
+      "language": "python",
+      "repository": "psf/pyperf",
+      "url": "https://github.com/psf/pyperf.git",
+      "revision": "7b9a23adb3ceeb182f58a03e453158dbe081a7e7",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1783,
+      "source_code_lines": 14675,
+      "snapshot_archive_kib": 217,
+      "build_markers": [
+        "pyproject.toml",
+        "tox.ini"
+      ],
+      "local_path": "sources/python/psf__pyperf"
+    },
+    {
+      "case_id": "python-fatal1ty--mashumaro",
+      "language": "python",
+      "repository": "fatal1ty/mashumaro",
+      "url": "https://github.com/fatal1ty/mashumaro.git",
+      "revision": "e945ee4319db49da9f7b8ede614e988cc8c8956b",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1893,
+      "source_code_lines": 23405,
+      "snapshot_archive_kib": 151,
+      "build_markers": [
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "local_path": "sources/python/fatal1ty__mashumaro"
+    },
+    {
+      "case_id": "python-ubernostrum--django-registration",
+      "language": "python",
+      "repository": "ubernostrum/django-registration",
+      "url": "https://github.com/ubernostrum/django-registration.git",
+      "revision": "dc80d4e3f90d64d12c35a6c494aa1ec9b36a1705",
+      "dataset": "heragent_envbench_python",
+      "source_repository_kib": 1918,
+      "source_code_lines": 4893,
+      "snapshot_archive_kib": 80,
+      "build_markers": [
+        "pyproject.toml"
+      ],
+      "local_path": "sources/python/ubernostrum__django-registration"
+    },
+    {
+      "case_id": "java-prisma-capacity--cryptoshred",
+      "language": "java",
+      "repository": "prisma-capacity/cryptoshred",
+      "url": "https://github.com/prisma-capacity/cryptoshred.git",
+      "revision": "4a22ea14f5bc38a5b773213ca34cae84a084a6db",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1144,
+      "source_code_lines": 2680,
+      "snapshot_archive_kib": 35,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/prisma-capacity__cryptoshred"
+    },
+    {
+      "case_id": "java-liquibase--liquibase-hibernate",
+      "language": "java",
+      "repository": "liquibase/liquibase-hibernate",
+      "url": "https://github.com/liquibase/liquibase-hibernate.git",
+      "revision": "3fd0fbca8f627837cf8d143efa85eddc5a5a7cf9",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1304,
+      "source_code_lines": 5160,
+      "snapshot_archive_kib": 46,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/liquibase__liquibase-hibernate"
+    },
+    {
+      "case_id": "java-camunda-community-hub--zeebe-test-container",
+      "language": "java",
+      "repository": "camunda-community-hub/zeebe-test-container",
+      "url": "https://github.com/camunda-community-hub/zeebe-test-container.git",
+      "revision": "d228f0c267a8f70b81e4fa1594b9ec4d364c156a",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1418,
+      "source_code_lines": 8729,
+      "snapshot_archive_kib": 99,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/camunda-community-hub__zeebe-test-container"
+    },
+    {
+      "case_id": "java-zalando--problem-spring-web",
+      "language": "java",
+      "repository": "zalando/problem-spring-web",
+      "url": "https://github.com/zalando/problem-spring-web.git",
+      "revision": "da31acb922e486cebeff37d9fbd96322d70e4fc8",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1547,
+      "source_code_lines": 8461,
+      "snapshot_archive_kib": 73,
+      "build_markers": [
+        "mvnw",
+        "pom.xml"
+      ],
+      "local_path": "sources/java/zalando__problem-spring-web"
+    },
+    {
+      "case_id": "java-axoniq--axonserver-connector-java",
+      "language": "java",
+      "repository": "AxonIQ/axonserver-connector-java",
+      "url": "https://github.com/AxonIQ/axonserver-connector-java.git",
+      "revision": "ac25a6fedcb1fecdb5a8cdb08ab96d0f28c11953",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1585,
+      "source_code_lines": 13815,
+      "snapshot_archive_kib": 186,
+      "build_markers": [
+        "mvnw",
+        "pom.xml"
+      ],
+      "local_path": "sources/java/axoniq__axonserver-connector-java"
+    },
+    {
+      "case_id": "java-dunctebot--skybot-lavalink-plugin",
+      "language": "java",
+      "repository": "dunctebot/skybot-lavalink-plugin",
+      "url": "https://github.com/dunctebot/skybot-lavalink-plugin.git",
+      "revision": "197f25fdb8591400b8dd53634d0fae3e32904c63",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1620,
+      "source_code_lines": 3293,
+      "snapshot_archive_kib": 89,
+      "build_markers": [
+        "build.gradle.kts",
+        "gradlew",
+        "settings.gradle.kts"
+      ],
+      "local_path": "sources/java/dunctebot__skybot-lavalink-plugin"
+    },
+    {
+      "case_id": "java-openrewrite--rewrite-maven-plugin",
+      "language": "java",
+      "repository": "openrewrite/rewrite-maven-plugin",
+      "url": "https://github.com/openrewrite/rewrite-maven-plugin.git",
+      "revision": "dd2645af1a6a3617bf13f0bd930eeade89180e94",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1753,
+      "source_code_lines": 5902,
+      "snapshot_archive_kib": 103,
+      "build_markers": [
+        "gradlew",
+        "mvnw",
+        "pom.xml"
+      ],
+      "local_path": "sources/java/openrewrite__rewrite-maven-plugin"
+    },
+    {
+      "case_id": "java-eclipse--microprofile-fault-tolerance",
+      "language": "java",
+      "repository": "eclipse/microprofile-fault-tolerance",
+      "url": "https://github.com/eclipse/microprofile-fault-tolerance.git",
+      "revision": "3543ebcc367a89adcba04351c55ffc9360a0cbaf",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 1842,
+      "source_code_lines": 18401,
+      "snapshot_archive_kib": 176,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/eclipse__microprofile-fault-tolerance"
+    },
+    {
+      "case_id": "java-sigstore--sigstore-java",
+      "language": "java",
+      "repository": "sigstore/sigstore-java",
+      "url": "https://github.com/sigstore/sigstore-java.git",
+      "revision": "27a57c87ea6c5cf6be4f64d824cd07f5656c67ac",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2181,
+      "source_code_lines": 18158,
+      "snapshot_archive_kib": 361,
+      "build_markers": [
+        "build.gradle.kts",
+        "gradlew",
+        "settings.gradle.kts"
+      ],
+      "local_path": "sources/java/sigstore__sigstore-java"
+    },
+    {
+      "case_id": "java-jenkinsci--plugin-compat-tester",
+      "language": "java",
+      "repository": "jenkinsci/plugin-compat-tester",
+      "url": "https://github.com/jenkinsci/plugin-compat-tester.git",
+      "revision": "3027df385a49c976f87e2ae974f148afdd663822",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2283,
+      "source_code_lines": 3928,
+      "snapshot_archive_kib": 42,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/jenkinsci__plugin-compat-tester"
+    },
+    {
+      "case_id": "java-mrniko--netty-socketio",
+      "language": "java",
+      "repository": "mrniko/netty-socketio",
+      "url": "https://github.com/mrniko/netty-socketio.git",
+      "revision": "82433154956ac60709357e7157affc8dde371af7",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2285,
+      "source_code_lines": 7931,
+      "snapshot_archive_kib": 73,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/mrniko__netty-socketio"
+    },
+    {
+      "case_id": "java-micronaut-projects--micronaut-platform",
+      "language": "java",
+      "repository": "micronaut-projects/micronaut-platform",
+      "url": "https://github.com/micronaut-projects/micronaut-platform.git",
+      "revision": "102825e1037abf00069583f6e388292cbfae7b86",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2517,
+      "source_code_lines": 2087,
+      "snapshot_archive_kib": 74,
+      "build_markers": [
+        "build.gradle",
+        "gradlew",
+        "settings.gradle"
+      ],
+      "local_path": "sources/java/micronaut-projects__micronaut-platform"
+    },
+    {
+      "case_id": "java-jenkinsci--docker-plugin",
+      "language": "java",
+      "repository": "jenkinsci/docker-plugin",
+      "url": "https://github.com/jenkinsci/docker-plugin.git",
+      "revision": "16e30a603830d0b685ac34d544154fc7ffb84600",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2565,
+      "source_code_lines": 16086,
+      "snapshot_archive_kib": 190,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/jenkinsci__docker-plugin"
+    },
+    {
+      "case_id": "java-avaje--avaje-inject",
+      "language": "java",
+      "repository": "avaje/avaje-inject",
+      "url": "https://github.com/avaje/avaje-inject.git",
+      "revision": "9ca8d1af5d0059b46c85e6046aa740d288df78c4",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2567,
+      "source_code_lines": 22525,
+      "snapshot_archive_kib": 251,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/avaje__avaje-inject"
+    },
+    {
+      "case_id": "java-grapheneos--camera",
+      "language": "java",
+      "repository": "grapheneos/camera",
+      "url": "https://github.com/grapheneos/camera.git",
+      "revision": "26e9d4120add6a4e1bd551c2f1be996ee756174a",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2581,
+      "source_code_lines": 18744,
+      "snapshot_archive_kib": 331,
+      "build_markers": [
+        "build.gradle.kts",
+        "gradlew",
+        "settings.gradle.kts"
+      ],
+      "local_path": "sources/java/grapheneos__camera"
+    },
+    {
+      "case_id": "java-scribejava--scribejava",
+      "language": "java",
+      "repository": "scribejava/scribejava",
+      "url": "https://github.com/scribejava/scribejava.git",
+      "revision": "8970e8eeb0aff840d0b223890e9c392ee19218f7",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2594,
+      "source_code_lines": 16891,
+      "snapshot_archive_kib": 128,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/scribejava__scribejava"
+    },
+    {
+      "case_id": "java-braisdom--objectivesql",
+      "language": "java",
+      "repository": "braisdom/objectivesql",
+      "url": "https://github.com/braisdom/objectivesql.git",
+      "revision": "f49e6eba6e7b08748c9945fbbaaa7728239b264e",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2600,
+      "source_code_lines": 21286,
+      "snapshot_archive_kib": 190,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/braisdom__objectivesql"
+    },
+    {
+      "case_id": "java-fortnoxab--reactive-wizard",
+      "language": "java",
+      "repository": "fortnoxab/reactive-wizard",
+      "url": "https://github.com/fortnoxab/reactive-wizard.git",
+      "revision": "1f3a26dd6b4667b26f2e8a6426c094afc65d2fa8",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2857,
+      "source_code_lines": 26936,
+      "snapshot_archive_kib": 225,
+      "build_markers": [
+        "pom.xml"
+      ],
+      "local_path": "sources/java/fortnoxab__reactive-wizard"
+    },
+    {
+      "case_id": "java-grapheneos--attestationserver",
+      "language": "java",
+      "repository": "grapheneos/attestationserver",
+      "url": "https://github.com/grapheneos/attestationserver.git",
+      "revision": "e9699f9dcd3b736853f674f6678431d561cb4bb2",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 2917,
+      "source_code_lines": 10439,
+      "snapshot_archive_kib": 293,
+      "build_markers": [
+        "build.gradle.kts",
+        "gradlew"
+      ],
+      "local_path": "sources/java/grapheneos__attestationserver"
+    },
+    {
+      "case_id": "java-gradle--native-platform",
+      "language": "java",
+      "repository": "gradle/native-platform",
+      "url": "https://github.com/gradle/native-platform.git",
+      "revision": "25830184c8d04bca9c80b26df69c5936431f808c",
+      "dataset": "envbench_jvm",
+      "source_repository_kib": 3046,
+      "source_code_lines": 15063,
+      "snapshot_archive_kib": 211,
+      "build_markers": [
+        "build.gradle.kts",
+        "gradlew",
+        "settings.gradle.kts"
+      ],
+      "local_path": "sources/java/gradle__native-platform"
+    }
+  ]
+}

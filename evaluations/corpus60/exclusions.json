@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-09-02",
+  "meaning": "Repositories found in frozen DPRAuto evaluation JSON before corpus60.",
+  "history_inputs": [
+    "evaluations/baselines/python-21-20260818.json",
+    "evaluations/baselines/python-21-m9-20260824.json",
+    "evaluations/multilang/ground-truth/cases.json",
+    "evaluations/multilang/manifest.json",
+    "evaluations/prompt12/manifest.json",
+    "evaluations/prompt13/audited-summary.json",
+    "evaluations/prompt13/comparison.json"
+  ],
+  "repositories": [
+    {
+      "repository": "alexmolas/microsearch",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "andreidrang/python-rucaptcha",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "apache/commons-csv",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "artesiawater/hydropandas",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "asdf-format/asdf",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "boto/boto3",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "ccache/ccache",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "compserv/hknweb",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "cookiecutter/cookiecutter",
+      "evidence_files": [
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "dagshub/client",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "distcc/distcc",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "django/django",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "encode/starlette",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "gamesdonequick/donation-tracker",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "google/leveldb",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "hips/autograd",
+      "evidence_files": [
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "json-c/json-c",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "karpathy/minbpe",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "libevent/libevent",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "mandarons/icloud-drive-docker",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "mybatis/mybatis-3",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "nlohmann/json",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "piccolo-orm/piccolo",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "psf/black",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "python-markdown/markdown",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "ranaroussi/yfinance",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "reactivex/rxjava",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "robotframework/robotframework",
+      "evidence_files": [
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "rui314/8cc",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "rui314/mold",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "simdjson/simdjson",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "simplistix/testfixtures",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "soimort/you-get",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "spring-projects/spring-security",
+      "evidence_files": [
+        "evaluations/multilang/manifest.json"
+      ]
+    },
+    {
+      "repository": "textualize/rich",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "tiangolo/fastapi",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "tmux-python/tmuxp",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    },
+    {
+      "repository": "yubico/yubikey-manager",
+      "evidence_files": [
+        "evaluations/baselines/python-21-20260818.json",
+        "evaluations/baselines/python-21-m9-20260824.json",
+        "evaluations/multilang/manifest.json",
+        "evaluations/prompt12/manifest.json"
+      ]
+    }
+  ]
+}
