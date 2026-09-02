@@ -5,20 +5,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from dprauto.adapters.multilang.parser import MultiLanguageProjectParser
+from dprauto.adapters.storage import LocalArtifactStorage
+from dprauto.application import create_deterministic_builder
 from dprauto.domain.models import SourceReference
-from dprauto.strategies.multilang import JVMTemplateStrategy, NativeTemplateStrategy
-from dprauto.strategies.template import TemplateStrategy
+from dprauto.ports.build import BuildPlanner
 
 
 HERE = Path(__file__).resolve().parent
 
 
-def probe(case: dict[str, Any], parser: MultiLanguageProjectParser) -> dict[str, Any]:
+def probe(
+    case: dict[str, Any],
+    parser: MultiLanguageProjectParser,
+    planner: BuildPlanner,
+) -> dict[str, Any]:
     root = HERE / case["local_path"]
     record: dict[str, Any] = {
         "case_id": case["case_id"],
@@ -51,17 +57,14 @@ def probe(case: dict[str, Any], parser: MultiLanguageProjectParser) -> dict[str,
         return record
 
     try:
-        strategy = {
-            "python": TemplateStrategy,
-            "java": JVMTemplateStrategy,
-            "cpp": NativeTemplateStrategy,
-        }[case["language"]](None)
-        plan = strategy.create_plan(profile)
+        plans = planner.plan(profile)
+        selected = plans[0]
         record.update(
             {
                 "status": "planned",
-                "strategy": plan.strategy,
-                "generated_files": [item.path for item in plan.generated_files],
+                "strategy": selected.strategy,
+                "strategy_candidates": [plan.strategy for plan in plans],
+                "generated_files": [item.path for item in selected.generated_files],
             }
         )
     except Exception as exc:
@@ -82,13 +85,16 @@ def main() -> None:
     args = argument_parser.parse_args()
     manifest = json.loads((HERE / "manifest.json").read_text(encoding="utf-8"))
     parser = MultiLanguageProjectParser()
-    records = [probe(case, parser) for case in manifest["cases"]]
+    with tempfile.TemporaryDirectory(prefix="dprauto-corpus60-probe-") as directory:
+        storage = LocalArtifactStorage(Path(directory) / "artifacts")
+        planner = create_deterministic_builder(storage)
+        records = [probe(case, parser, planner) for case in manifest["cases"]]
     counts = Counter((record["language"], record["status"]) for record in records)
     output = {
-        "schema_version": 1,
+        "schema_version": 2,
         "suite_id": manifest["suite_id"],
         "dprauto_revision": manifest["dprauto_revision"],
-        "scope": "production parser plus deterministic plan generation; no Docker build",
+        "scope": "production parser and production planning service; no Docker build",
         "counts": {
             language: {
                 "planned": counts[(language, "planned")],

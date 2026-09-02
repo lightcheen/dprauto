@@ -18,6 +18,7 @@ from dprauto.domain.models import (
     FailureInfo,
     ProjectProfile,
 )
+from dprauto.ports.build import BuildStrategy
 from dprauto.ports.failure import FailureClassifier
 from dprauto.ports.storage import Storage
 from dprauto.serialization import to_json_bytes
@@ -66,6 +67,30 @@ class DeterministicBuildService:
         self.config = config or BuildConfig()
         self.storage = storage
 
+    def plan(self, profile: ProjectProfile) -> tuple[BuildPlan, ...]:
+        """Create the bounded production strategy portfolio without executing it.
+
+        Callers that need build plans must use this application entry point instead
+        of selecting language strategies themselves. This keeps registry priority,
+        optional-tool availability, portfolio policy, and attempt bounds identical
+        to an actual build.
+        """
+
+        return tuple(
+            strategy.create_plan(profile)
+            for strategy in self._candidate_strategies(profile)
+        )
+
+    def _candidate_strategies(
+        self, profile: ProjectProfile
+    ) -> tuple[BuildStrategy, ...]:
+        strategies = (
+            self.registry.candidates(profile)
+            if self.config.strategy_portfolio_enabled
+            else (self.registry.select(profile),)
+        )
+        return strategies[: self.config.max_strategy_attempts]
+
     def build(
         self,
         profile: ProjectProfile,
@@ -73,12 +98,7 @@ class DeterministicBuildService:
         *,
         deadline_at: datetime | None = None,
     ) -> BuildExecution:
-        strategies = (
-            self.registry.candidates(profile)
-            if self.config.strategy_portfolio_enabled
-            else (self.registry.select(profile),)
-        )
-        strategies = strategies[: self.config.max_strategy_attempts]
+        strategies = self._candidate_strategies(profile)
         attempts: list[BuildStrategyAttempt] = []
         selection_reason = "all compatible strategies failed"
         terminal_attempt: BuildStrategyAttempt | None = None

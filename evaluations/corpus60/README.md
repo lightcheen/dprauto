@@ -62,6 +62,10 @@ python3 evaluations/corpus60/validate_workspace_ground_truth.py
 PYTHONPATH=src python3 evaluations/corpus60/probe_dprauto.py
 ```
 
-The probe performs production parsing and deterministic Docker plan generation, but deliberately
-does not run 60 Docker builds. Full build/test/run execution is the next baseline stage and should
-write immutable run records rather than overwrite `probe-results.json`.
+The probe calls the same application planning service used by a production build, but deliberately
+does not run 60 Docker builds. The manifest's language label is output metadata only; it is never
+used to select a parser or strategy. A `planned` record means only that static plan creation
+succeeded. It does not establish correct workspace selection, installability, testability,
+runnability, or a successful Docker build. Those are scored and verified separately. Full
+build/test/run execution is the next baseline stage and should write immutable run records rather
+than overwrite `probe-results.json`.

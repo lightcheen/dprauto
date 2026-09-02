@@ -8,6 +8,13 @@ from dprauto.domain.models import BuildPlan, BuildResult, ProjectProfile
 
 
 @runtime_checkable
+class BuildPlanner(Protocol):
+    def plan(self, profile: ProjectProfile) -> tuple[BuildPlan, ...]:
+        """Create the ordered, bounded production plan portfolio without execution."""
+        ...
+
+
+@runtime_checkable
 class BuildStrategy(Protocol):
     def supports(self, profile: ProjectProfile) -> bool:
         """Return whether this strategy can handle the project."""

@@ -15,6 +15,7 @@ from dprauto.domain.models import (
     VerificationResult,
 )
 from dprauto.ports import (
+    BuildPlanner,
     BuildStrategy,
     CommandExecutor,
     EnvironmentDiffer,
@@ -57,6 +58,11 @@ class DummyBuildStrategy:
 
     def build(self, plan: BuildPlan, workspace: Path, *, deadline_at=None) -> BuildResult:
         return RESULT
+
+
+class DummyBuildPlanner:
+    def plan(self, profile: ProjectProfile) -> tuple[BuildPlan, ...]:
+        return (PLAN,)
 
 
 class DummyExecutor:
@@ -118,6 +124,7 @@ class PortContractTests(unittest.TestCase):
     def test_structural_implementations_satisfy_runtime_protocols(self) -> None:
         implementations = (
             (DummyParser(), ProjectParser),
+            (DummyBuildPlanner(), BuildPlanner),
             (DummyBuildStrategy(), BuildStrategy),
             (DummyExecutor(), CommandExecutor),
             (DummyEnvironmentDiffer(), EnvironmentDiffer),

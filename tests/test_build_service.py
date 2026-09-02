@@ -106,6 +106,22 @@ def infrastructure_failure():
 
 
 class DeterministicBuildServiceTests(unittest.TestCase):
+    def test_plan_returns_bounded_portfolio_without_execution(self) -> None:
+        strategies = tuple(
+            ScriptedStrategy(name, BuildStatus.SUCCEEDED)
+            for name in ("one", "two", "three")
+        )
+        builder = DeterministicBuildService(
+            StrategyRegistry(strategies),
+            ScriptedClassifier(),
+            config=BuildConfig(max_strategy_attempts=2),
+        )
+
+        plans = builder.plan(ProjectProfile("planning", SourceReference("fixture")))
+
+        self.assertEqual(tuple(plan.strategy for plan in plans), ("one", "two"))
+        self.assertEqual(tuple(strategy.build_calls for strategy in strategies), (0, 0, 0))
+
     def test_portfolio_falls_back_after_project_failure_and_records_selection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
