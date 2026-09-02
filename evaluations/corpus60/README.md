@@ -17,6 +17,7 @@ benchmarks is the requested provenance.
 - DPRAuto static probe: `probe-results.json` (generated and git-ignored)
 - Immutable corpus identity: `freeze-lock.json`
 - Preserved pre-refactor probe: `baselines/static-probe-a31a05847e4a.json`
+- Honest post-P0 static score: `baselines/p0-static-quality-20260902.json`
 - Evaluator-only component oracle: `hidden-oracles/workspaces.json`
 - DPRAuto revision: `a31a05847e4a62cbb58c16913de05dd9a7a98fe7`
 
@@ -60,6 +61,8 @@ python3 evaluations/corpus60/validate_corpus.py --require-sources --require-free
 python3 evaluations/corpus60/freeze_corpus.py --check --require-sources
 python3 evaluations/corpus60/validate_workspace_ground_truth.py
 PYTHONPATH=src python3 evaluations/corpus60/probe_dprauto.py
+python3 evaluations/corpus60/score_probe.py
+PYTHONPATH=src python3 evaluations/corpus60/quality_gate.py
 ```
 
 The probe calls the same application planning service used by a production build, but deliberately
@@ -69,3 +72,8 @@ succeeded. It does not establish correct workspace selection, installability, te
 runnability, or a successful Docker build. Those are scored and verified separately. Full
 build/test/run execution is the next baseline stage and should write immutable run records rather
 than overwrite `probe-results.json`.
+
+`quality_gate.py` enforces non-regression against the honest post-P0 static baseline. Thresholds
+are floors, not success targets: capability work must raise them. In particular, a static plan for
+the wrong component or build system is counted as a false-success plan, and execution metrics stay
+explicitly `not_run`.

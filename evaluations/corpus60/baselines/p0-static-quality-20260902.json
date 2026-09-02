@@ -1,0 +1,587 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "scope": "static discovery/parser/production-planning quality; no Docker execution",
+  "identity": {
+    "probe_sha256": "a9b87e869b6deac38667cdbe0f9784e7bd9f049e7f476f7eefdf96702ed4dd4f",
+    "workspace_oracle_sha256": "395806d1f7a2a9891ccc4fc8b846aceb7f0cf25ed20ebe5652c66f9bc5308e81"
+  },
+  "metrics": {
+    "component_discovery_recall_at_k": {
+      "passed": 57,
+      "total": 60,
+      "rate": 0.95
+    },
+    "primary_selection_accuracy_at_1": {
+      "passed": 57,
+      "total": 60,
+      "rate": 0.95
+    },
+    "build_system_accuracy": {
+      "passed": 56,
+      "total": 60,
+      "rate": 0.933333
+    },
+    "production_plan_success": {
+      "passed": 59,
+      "total": 60,
+      "rate": 0.983333
+    },
+    "false_positive_candidate_count": 2,
+    "false_success_plan_count": 3,
+    "scan_truncated_count": 0,
+    "status_counts": {
+      "planned": 59,
+      "unsupported": 1
+    }
+  },
+  "execution_metrics": {
+    "status": "not_run",
+    "installability": null,
+    "testability": null,
+    "runnability": null,
+    "strict_success": null
+  },
+  "records": [
+    {
+      "case_id": "cpp-aseprite--aseprite",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-cppit--jucipp",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-drogonframework--drogon",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-exaloop--seq",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-flameshot-org--flameshot",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-google--guetzli",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-ipkn--crow",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-jacobdufault--cquery",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-mikke89--rmlui",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-oatpp--oatpp",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-official-stockfish--stockfish",
+      "component_discovered": false,
+      "primary_selected": false,
+      "build_system_correct": false,
+      "production_plan_created": true,
+      "false_positive_candidates": 1,
+      "false_success_plan": true
+    },
+    {
+      "case_id": "cpp-openalpr--openalpr",
+      "component_discovered": false,
+      "primary_selected": false,
+      "build_system_correct": false,
+      "production_plan_created": true,
+      "false_positive_candidates": 1,
+      "false_success_plan": true
+    },
+    {
+      "case_id": "cpp-pistacheio--pistache",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": false,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": true
+    },
+    {
+      "case_id": "cpp-polybar--polybar",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-skypjack--entt",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-sqlitebrowser--sqlitebrowser",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-strukturag--libde265",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-treefrogframework--treefrog-framework",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-twitter--vireo",
+      "component_discovered": false,
+      "primary_selected": false,
+      "build_system_correct": false,
+      "production_plan_created": false,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "cpp-wjakob--nanogui",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-avaje--avaje-inject",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-axoniq--axonserver-connector-java",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-braisdom--objectivesql",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-camunda-community-hub--zeebe-test-container",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-dunctebot--skybot-lavalink-plugin",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-eclipse--microprofile-fault-tolerance",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-fortnoxab--reactive-wizard",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-gradle--native-platform",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-grapheneos--attestationserver",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-grapheneos--camera",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-jenkinsci--docker-plugin",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-jenkinsci--plugin-compat-tester",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-liquibase--liquibase-hibernate",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-micronaut-projects--micronaut-platform",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-mrniko--netty-socketio",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-openrewrite--rewrite-maven-plugin",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-prisma-capacity--cryptoshred",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-scribejava--scribejava",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-sigstore--sigstore-java",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "java-zalando--problem-spring-web",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-asdf-format--asdf-standard",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-astropy--extension-helpers",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-cpcloud--protoletariat",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-eylles--pywal16",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-fatal1ty--mashumaro",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-jaraco--inflect",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-m-o-a-t--moat-mqtt",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-microsoftgraph--msgraph-sdk-python-core",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-mollie--mollie-api-python",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-mov-cli--mov-cli",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-piskvorky--smart-open",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-psf--pyperf",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-pypa--twine",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-python--importlib-metadata",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-rollbar--pyrollbar",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-rstcheck--rstcheck",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-smarr--rebench",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-ubernostrum--django-registration",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-wolph--python-progressbar",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    },
+    {
+      "case_id": "python-zostera--django-bootstrap4",
+      "component_discovered": true,
+      "primary_selected": true,
+      "build_system_correct": true,
+      "production_plan_created": true,
+      "false_positive_candidates": 0,
+      "false_success_plan": false
+    }
+  ]
+}

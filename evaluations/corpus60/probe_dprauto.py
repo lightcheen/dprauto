@@ -31,6 +31,8 @@ def probe(
         "language": case["language"],
         "repository": case["repository"],
         "revision": case["revision"],
+        "component_candidates": [],
+        "selected_component_root": "",
     }
     try:
         profile = parser.parse(SourceReference(case["url"], case["revision"]), root)
@@ -43,6 +45,17 @@ def probe(
                 "primary_build_system": profile.metadata.get("primary_build_system", ""),
                 "build_files": list(profile.build_files),
                 "command_count": len(profile.commands),
+                "scan_truncated": bool(profile.metadata.get("scan_truncated", False)),
+                "component_candidates": [
+                    {
+                        "root": ".",
+                        "parser": profile.metadata.get("parser_registry_selection", ""),
+                        "primary_build_system": profile.metadata.get(
+                            "primary_build_system", ""
+                        ),
+                    }
+                ],
+                "selected_component_root": ".",
             }
         )
     except Exception as exc:

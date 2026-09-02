@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "meaning": "Non-regression floors for the post-P0 static baseline; raise after capability work.",
+  "minimum_passed": {
+    "component_discovery_recall_at_k": 57,
+    "primary_selection_accuracy_at_1": 57,
+    "build_system_accuracy": 56,
+    "production_plan_success": 59
+  },
+  "maximum_counts": {
+    "false_positive_candidate_count": 2,
+    "false_success_plan_count": 3,
+    "scan_truncated_count": 0,
+    "status:parsed_not_planned": 0,
+    "status:unsupported": 1
+  }
+}
