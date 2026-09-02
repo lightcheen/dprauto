@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dprauto.local/schemas/corpus60-workspaces-v1.json",
+  "title": "DPRAuto corpus workspace ground truth",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_id",
+    "visibility",
+    "reviewed_on",
+    "review_policy",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "suite_id": {"type": "string", "minLength": 1},
+    "visibility": {"const": "evaluator_only"},
+    "reviewed_on": {"type": "string", "format": "date"},
+    "review_policy": {"type": "string", "minLength": 1},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {"pattern": "(^/|(^|/)\\.\\.(/|$))"}
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "kind": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1}
+      }
+    },
+    "buildEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "build_system", "role"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "build_system": {"type": "string", "minLength": 1},
+        "role": {"enum": ["primary", "alternative", "supporting"]}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_id",
+        "root",
+        "role",
+        "languages",
+        "build_entries",
+        "evidence"
+      ],
+      "properties": {
+        "component_id": {"type": "string", "minLength": 1},
+        "root": {
+          "oneOf": [
+            {"const": "."},
+            {"$ref": "#/$defs/relativePath"}
+          ]
+        },
+        "role": {
+          "enum": ["primary", "dependency", "binding", "tool", "test", "example"]
+        },
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "build_entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/buildEntry"}
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "repository",
+        "revision",
+        "review_status",
+        "primary_component_ids",
+        "components"
+      ],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "review_status": {"enum": ["agent_reviewed", "human_approved"]},
+        "primary_component_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/component"}
+        }
+      }
+    }
+  }
+}

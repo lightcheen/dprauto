@@ -1,0 +1,2275 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-crosslang-60-20260902",
+  "visibility": "evaluator_only",
+  "reviewed_on": "2026-09-02",
+  "review_policy": "Every expected path is checked against the frozen source. Source-audited overrides include documentation or CI evidence. Records are agent-reviewed and must not be represented as human-approved until a person signs them off.",
+  "cases": [
+    {
+      "case_id": "cpp-skypjack--entt",
+      "repository": "skypjack/entt",
+      "revision": "85c6bba014049b5de8fad49d25424df2f1f6a8c1",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-google--guetzli",
+      "repository": "google/guetzli",
+      "revision": "214f2bb42abf5a577c079d00add5d6cc470620d3",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "Makefile",
+              "build_system": "make",
+              "role": "primary"
+            },
+            {
+              "path": "premake5.lua",
+              "build_system": "premake",
+              "role": "alternative"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "Makefile",
+              "kind": "build_file"
+            },
+            {
+              "path": "premake5.lua",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-sqlitebrowser--sqlitebrowser",
+      "repository": "sqlitebrowser/sqlitebrowser",
+      "revision": "da45c7d528c38986a271fa7be887f95f5b68facb",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-strukturag--libde265",
+      "repository": "strukturag/libde265",
+      "revision": "c45b2da8f4b6e2b7bf9df1197e5633fbe6adc928",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-treefrogframework--treefrog-framework",
+      "repository": "treefrogframework/treefrog-framework",
+      "revision": "f54f60220aa4b10ed69d541a3a3547259fc695c4",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "configure",
+              "build_system": "autotools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "configure",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-ipkn--crow",
+      "repository": "ipkn/crow",
+      "revision": "2b43d3cd6a9a9cdbc99dfef9b86ff3f3027f3d1f",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-drogonframework--drogon",
+      "repository": "drogonframework/drogon",
+      "revision": "acb39fa39d37474142b80c888dc72a0953dc79c1",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-oatpp--oatpp",
+      "repository": "oatpp/oatpp",
+      "revision": "f83d648fd82dc222ef88aabbafb68efbd7d7bf50",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-wjakob--nanogui",
+      "repository": "wjakob/nanogui",
+      "revision": "e9ec8a1a9861cf578d9c6e85a6420080aa715c03",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-mikke89--rmlui",
+      "repository": "mikke89/RmlUi",
+      "revision": "b7b4a0688262832eacf3b9abb41f8bbe73868af8",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-flameshot-org--flameshot",
+      "repository": "flameshot-org/flameshot",
+      "revision": "24ce091c0f95d0fdfe15cb9c085be88be8195b4f",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-polybar--polybar",
+      "repository": "polybar/polybar",
+      "revision": "f99e0b1c7a5b094f5a04b14101899d0cb4ece69d",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-twitter--vireo",
+      "repository": "twitter/vireo",
+      "revision": "7f0bc1ad50f5eaf30a09de209f0172f2def36abd",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "vireo-library"
+      ],
+      "components": [
+        {
+          "component_id": "vireo-library",
+          "root": "vireo",
+          "role": "primary",
+          "languages": [
+            "C++",
+            "C"
+          ],
+          "build_entries": [
+            {
+              "path": "vireo/configure",
+              "build_system": "autotools",
+              "role": "primary"
+            },
+            {
+              "path": "vireo/configure.ac",
+              "build_system": "autotools",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "vireo/configure",
+              "kind": "build_file"
+            },
+            {
+              "path": "README.md",
+              "kind": "documentation",
+              "locator": "How to Build Vireo and Tools: cd vireo; ./configure; make"
+            },
+            {
+              "path": "vireo/configure.ac",
+              "kind": "dependency_declaration",
+              "locator": "AC_CONFIG_SUBDIRS([../imagecore])"
+            }
+          ],
+          "depends_on": [
+            "imagecore-library"
+          ]
+        },
+        {
+          "component_id": "imagecore-library",
+          "root": "imagecore",
+          "role": "dependency",
+          "languages": [
+            "C++",
+            "C"
+          ],
+          "build_entries": [
+            {
+              "path": "imagecore/configure",
+              "build_system": "autotools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "imagecore/configure.ac",
+              "kind": "build_file"
+            }
+          ]
+        },
+        {
+          "component_id": "imagetool-cli",
+          "root": "imagetool",
+          "role": "tool",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "imagetool/configure",
+              "build_system": "autotools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "imagetool/configure.ac",
+              "kind": "build_file"
+            }
+          ],
+          "depends_on": [
+            "imagecore-library"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-pistacheio--pistache",
+      "repository": "pistacheio/pistache",
+      "revision": "a7b0dc9ec01b96b95bde55331d83e27a9bf800b9",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "meson.build",
+              "build_system": "meson",
+              "role": "primary"
+            },
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "alternative"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "meson.build",
+              "kind": "build_file"
+            },
+            {
+              "path": "README.md",
+              "kind": "documentation",
+              "locator": "Building from source: meson setup build"
+            },
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-exaloop--seq",
+      "repository": "exaloop/seq",
+      "revision": "625acb39fe9365a2d67bfec1642e87f9954fe29f",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-aseprite--aseprite",
+      "repository": "aseprite/aseprite",
+      "revision": "b9d291bff7afb8e78a9fb3d38fcdf57a80951dc4",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-official-stockfish--stockfish",
+      "repository": "official-stockfish/Stockfish",
+      "revision": "3f6f417b87c0e80ee30914b6b539b4ab7d3b2a5b",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "stockfish-engine"
+      ],
+      "components": [
+        {
+          "component_id": "stockfish-engine",
+          "root": "src",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "src/Makefile",
+              "build_system": "make",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "src/Makefile",
+              "kind": "build_file"
+            },
+            {
+              "path": "README.md",
+              "kind": "documentation",
+              "locator": "Compiling Stockfish: cd src; make -j profile-build"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-jacobdufault--cquery",
+      "repository": "jacobdufault/cquery",
+      "revision": "9b80917cbf7d26b78ec62b409442ecf96f72daf9",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-cppit--jucipp",
+      "repository": "cppit/jucipp",
+      "revision": "89c9fd742c287ffde5fa23fc14f6590541b63611",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "cpp-openalpr--openalpr",
+      "repository": "openalpr/openalpr",
+      "revision": "736ab0e608cf9b20d92f36a873bb1152240daa98",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "openalpr-native"
+      ],
+      "components": [
+        {
+          "component_id": "openalpr-native",
+          "root": "src",
+          "role": "primary",
+          "languages": [
+            "C++",
+            "C"
+          ],
+          "build_entries": [
+            {
+              "path": "src/CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "src/CMakeLists.txt",
+              "kind": "build_file"
+            },
+            {
+              "path": ".travis.yml",
+              "kind": "ci",
+              "locator": "mkdir ./src/build; cd ./src/build; cmake ..; make"
+            },
+            {
+              "path": "Dockerfile",
+              "kind": "container_recipe",
+              "locator": "WORKDIR /srv/openalpr/src/build; cmake .."
+            }
+          ]
+        },
+        {
+          "component_id": "python-binding",
+          "root": "src/bindings/python",
+          "role": "binding",
+          "languages": [
+            "Python",
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "src/bindings/python/setup.py",
+              "build_system": "setuptools",
+              "role": "primary"
+            },
+            {
+              "path": "src/bindings/python/CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "src/bindings/python/setup.py",
+              "kind": "build_file"
+            }
+          ],
+          "depends_on": [
+            "openalpr-native"
+          ]
+        },
+        {
+          "component_id": "java-binding",
+          "root": "src/bindings/java",
+          "role": "binding",
+          "languages": [
+            "Java",
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "src/bindings/java/CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "src/bindings/java/CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ],
+          "depends_on": [
+            "openalpr-native"
+          ]
+        },
+        {
+          "component_id": "go-binding",
+          "root": "src/bindings/go",
+          "role": "binding",
+          "languages": [
+            "Go",
+            "C++"
+          ],
+          "build_entries": [
+            {
+              "path": "src/bindings/go/CMakeLists.txt",
+              "build_system": "cmake",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "src/bindings/go/CMakeLists.txt",
+              "kind": "build_file"
+            }
+          ],
+          "depends_on": [
+            "openalpr-native"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-eylles--pywal16",
+      "repository": "eylles/pywal16",
+      "revision": "ab1f5c87f1a8b8423d66cab3cb7d0b4df9f47636",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-rstcheck--rstcheck",
+      "repository": "rstcheck/rstcheck",
+      "revision": "b8ddb006f1f49a9bdaf40e45f0bc0b070f460513",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-astropy--extension-helpers",
+      "repository": "astropy/extension-helpers",
+      "revision": "e6996c540c5bf23e89b45f170e89bd8c9f22a86e",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-cpcloud--protoletariat",
+      "repository": "cpcloud/protoletariat",
+      "revision": "5c85c8d27fb6535108a1f2846f4f0bd820472541",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "poetry",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-zostera--django-bootstrap4",
+      "repository": "zostera/django-bootstrap4",
+      "revision": "79f4c059f33d3ad11b66c305f295eb42d71f95da",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-jaraco--inflect",
+      "repository": "jaraco/inflect",
+      "revision": "1f42293f30caacb0637f7eb30a483b44489f4812",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-asdf-format--asdf-standard",
+      "repository": "asdf-format/asdf-standard",
+      "revision": "c367d14fae4b5155679e2c40b531140586e25daf",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-rollbar--pyrollbar",
+      "repository": "rollbar/pyrollbar",
+      "revision": "8493ac03c3468c2349c968726adffa5fd5661d0e",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-smarr--rebench",
+      "repository": "smarr/rebench",
+      "revision": "1de0e22fb3e9578b3aeb7a994481ead300fa977f",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-python--importlib-metadata",
+      "repository": "python/importlib_metadata",
+      "revision": "f3901686abc47853523f3b211873fc2b9e0c5ab5",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-wolph--python-progressbar",
+      "repository": "wolph/python-progressbar",
+      "revision": "5d53d59a37247dd9e4663dd86ca79b16cbc92d9b",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-m-o-a-t--moat-mqtt",
+      "repository": "m-o-a-t/moat-mqtt",
+      "revision": "fcd0f9bf07548604d19d159ffb5fc543e78ce597",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-pypa--twine",
+      "repository": "pypa/twine",
+      "revision": "6fbf880ee60915cf1666348c4bdd78a10415f2ac",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-mollie--mollie-api-python",
+      "repository": "mollie/mollie-api-python",
+      "revision": "957b44fddb9d4d833508120022c7f291f5ca8d06",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            },
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "alternative"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            },
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-mov-cli--mov-cli",
+      "repository": "mov-cli/mov-cli",
+      "revision": "32f8af4f15804dd6ce88d8f781a12b918119e64c",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-piskvorky--smart-open",
+      "repository": "piskvorky/smart_open",
+      "revision": "5a826134eb23c86087d06db3b78b25484e7e2e6d",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            },
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "alternative"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            },
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-microsoftgraph--msgraph-sdk-python-core",
+      "repository": "microsoftgraph/msgraph-sdk-python-core",
+      "revision": "e36c17424c9d443bdfeafc32f32682529ce25f95",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-psf--pyperf",
+      "repository": "psf/pyperf",
+      "revision": "7b9a23adb3ceeb182f58a03e453158dbe081a7e7",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-fatal1ty--mashumaro",
+      "repository": "fatal1ty/mashumaro",
+      "revision": "e945ee4319db49da9f7b8ede614e988cc8c8956b",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            },
+            {
+              "path": "setup.py",
+              "build_system": "setuptools",
+              "role": "alternative"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            },
+            {
+              "path": "setup.py",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "python-ubernostrum--django-registration",
+      "repository": "ubernostrum/django-registration",
+      "revision": "dc80d4e3f90d64d12c35a6c494aa1ec9b36a1705",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Python"
+          ],
+          "build_entries": [
+            {
+              "path": "pyproject.toml",
+              "build_system": "python-packaging",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-prisma-capacity--cryptoshred",
+      "repository": "prisma-capacity/cryptoshred",
+      "revision": "4a22ea14f5bc38a5b773213ca34cae84a084a6db",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-liquibase--liquibase-hibernate",
+      "repository": "liquibase/liquibase-hibernate",
+      "revision": "3fd0fbca8f627837cf8d143efa85eddc5a5a7cf9",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-camunda-community-hub--zeebe-test-container",
+      "repository": "camunda-community-hub/zeebe-test-container",
+      "revision": "d228f0c267a8f70b81e4fa1594b9ec4d364c156a",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-zalando--problem-spring-web",
+      "repository": "zalando/problem-spring-web",
+      "revision": "da31acb922e486cebeff37d9fbd96322d70e4fc8",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "mvnw",
+              "build_system": "maven",
+              "role": "supporting"
+            },
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "mvnw",
+              "kind": "build_file"
+            },
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-axoniq--axonserver-connector-java",
+      "repository": "AxonIQ/axonserver-connector-java",
+      "revision": "ac25a6fedcb1fecdb5a8cdb08ab96d0f28c11953",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "mvnw",
+              "build_system": "maven",
+              "role": "supporting"
+            },
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "mvnw",
+              "kind": "build_file"
+            },
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-dunctebot--skybot-lavalink-plugin",
+      "repository": "dunctebot/skybot-lavalink-plugin",
+      "revision": "197f25fdb8591400b8dd53634d0fae3e32904c63",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle.kts",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle.kts",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-openrewrite--rewrite-maven-plugin",
+      "repository": "openrewrite/rewrite-maven-plugin",
+      "revision": "dd2645af1a6a3617bf13f0bd930eeade89180e94",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "mvnw",
+              "build_system": "maven",
+              "role": "supporting"
+            },
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "mvnw",
+              "kind": "build_file"
+            },
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-eclipse--microprofile-fault-tolerance",
+      "repository": "eclipse/microprofile-fault-tolerance",
+      "revision": "3543ebcc367a89adcba04351c55ffc9360a0cbaf",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-sigstore--sigstore-java",
+      "repository": "sigstore/sigstore-java",
+      "revision": "27a57c87ea6c5cf6be4f64d824cd07f5656c67ac",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle.kts",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle.kts",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-jenkinsci--plugin-compat-tester",
+      "repository": "jenkinsci/plugin-compat-tester",
+      "revision": "3027df385a49c976f87e2ae974f148afdd663822",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-mrniko--netty-socketio",
+      "repository": "mrniko/netty-socketio",
+      "revision": "82433154956ac60709357e7157affc8dde371af7",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-micronaut-projects--micronaut-platform",
+      "repository": "micronaut-projects/micronaut-platform",
+      "revision": "102825e1037abf00069583f6e388292cbfae7b86",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "settings.gradle",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "settings.gradle",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-jenkinsci--docker-plugin",
+      "repository": "jenkinsci/docker-plugin",
+      "revision": "16e30a603830d0b685ac34d544154fc7ffb84600",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-avaje--avaje-inject",
+      "repository": "avaje/avaje-inject",
+      "revision": "9ca8d1af5d0059b46c85e6046aa740d288df78c4",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-grapheneos--camera",
+      "repository": "grapheneos/camera",
+      "revision": "26e9d4120add6a4e1bd551c2f1be996ee756174a",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle.kts",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle.kts",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-scribejava--scribejava",
+      "repository": "scribejava/scribejava",
+      "revision": "8970e8eeb0aff840d0b223890e9c392ee19218f7",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-braisdom--objectivesql",
+      "repository": "braisdom/objectivesql",
+      "revision": "f49e6eba6e7b08748c9945fbbaaa7728239b264e",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-fortnoxab--reactive-wizard",
+      "repository": "fortnoxab/reactive-wizard",
+      "revision": "1f3a26dd6b4667b26f2e8a6426c094afc65d2fa8",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "pom.xml",
+              "build_system": "maven",
+              "role": "primary"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "pom.xml",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-grapheneos--attestationserver",
+      "repository": "grapheneos/attestationserver",
+      "revision": "e9699f9dcd3b736853f674f6678431d561cb4bb2",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle.kts",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle.kts",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "java-gradle--native-platform",
+      "repository": "gradle/native-platform",
+      "revision": "25830184c8d04bca9c80b26df69c5936431f808c",
+      "review_status": "agent_reviewed",
+      "primary_component_ids": [
+        "primary"
+      ],
+      "components": [
+        {
+          "component_id": "primary",
+          "root": ".",
+          "role": "primary",
+          "languages": [
+            "Java"
+          ],
+          "build_entries": [
+            {
+              "path": "build.gradle.kts",
+              "build_system": "gradle",
+              "role": "primary"
+            },
+            {
+              "path": "gradlew",
+              "build_system": "gradle",
+              "role": "supporting"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "build_system": "gradle",
+              "role": "supporting"
+            }
+          ],
+          "evidence": [
+            {
+              "path": "build.gradle.kts",
+              "kind": "build_file"
+            },
+            {
+              "path": "gradlew",
+              "kind": "build_file"
+            },
+            {
+              "path": "settings.gradle.kts",
+              "kind": "build_file"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
