@@ -1,6 +1,7 @@
 """Language-neutral repository scanning and command extraction."""
 
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
-from dprauto.inspection.scanner import FileScanner, ScannedProject
+from dprauto.domain.workspace import RepositoryScan
+from dprauto.inspection.scanner import FileScanner
 
-__all__ = ["CommandExtractor", "ExtractedCommand", "FileScanner", "ScannedProject"]
+__all__ = ["CommandExtractor", "ExtractedCommand", "FileScanner", "RepositoryScan"]

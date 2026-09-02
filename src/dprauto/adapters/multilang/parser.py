@@ -10,24 +10,25 @@ from dprauto.adapters.multilang.jvm import JVMProjectParser
 from dprauto.adapters.multilang.native import NativeProjectParser
 from dprauto.adapters.python import PythonProjectParser
 from dprauto.domain.models import ProjectProfile, SourceReference
+from dprauto.domain.workspace import RepositoryScan
 from dprauto.errors import ProjectParsingError
-from dprauto.inspection.scanner import FileScanner, ScannedProject
+from dprauto.inspection.scanner import FileScanner
 
 
-class ScannedProjectParser(Protocol):
+class RepositoryScanParser(Protocol):
     name: str
     priority: int
 
-    def supports(self, scanned: ScannedProject) -> bool: ...
+    def supports(self, scanned: RepositoryScan) -> bool: ...
 
     def parse_scanned(
         self,
         source: SourceReference,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> ProjectProfile: ...
 
 
-class PythonScannedProjectParser:
+class PythonRepositoryScanParser:
     """Adapt the mature Python parser to the shared registry contract."""
 
     name = "python-rules-v1"
@@ -44,7 +45,7 @@ class PythonScannedProjectParser:
     def __init__(self, parser: PythonProjectParser | None = None) -> None:
         self.parser = parser or PythonProjectParser()
 
-    def supports(self, scanned: ScannedProject) -> bool:
+    def supports(self, scanned: RepositoryScan) -> bool:
         has_root_marker = any(
             len(PurePosixPath(path).parts) == 1
             and (
@@ -58,7 +59,7 @@ class PythonScannedProjectParser:
     def parse_scanned(
         self,
         source: SourceReference,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> ProjectProfile:
         return self.parser.parse(source, scanned.root)
 
@@ -67,13 +68,13 @@ class PythonScannedProjectParser:
 class ParserRegistration:
     name: str
     priority: int
-    parser: ScannedProjectParser
+    parser: RepositoryScanParser
 
 
 class ProjectParserRegistry:
     """Choose one root build ecosystem using explicit, auditable priority."""
 
-    def __init__(self, parsers: tuple[ScannedProjectParser, ...]) -> None:
+    def __init__(self, parsers: tuple[RepositoryScanParser, ...]) -> None:
         if not parsers:
             raise ValueError("at least one project parser is required")
         names = [parser.name for parser in parsers]
@@ -84,7 +85,7 @@ class ProjectParserRegistry:
             for parser in sorted(parsers, key=lambda item: (-item.priority, item.name))
         )
 
-    def select(self, scanned: ScannedProject) -> ScannedProjectParser:
+    def select(self, scanned: RepositoryScan) -> RepositoryScanParser:
         for registration in self.registrations:
             if registration.parser.supports(scanned):
                 return registration.parser
@@ -106,7 +107,7 @@ class MultiLanguageProjectParser:
             (
                 JVMProjectParser(),
                 NativeProjectParser(),
-                PythonScannedProjectParser(),
+                PythonRepositoryScanParser(),
             )
         )
 

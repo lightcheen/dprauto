@@ -7,7 +7,7 @@ from dprauto.adapters.multilang.parser import (
     MultiLanguageProjectParser,
     ParserRegistration,
     ProjectParserRegistry,
-    PythonScannedProjectParser,
+    PythonRepositoryScanParser,
 )
 
 __all__ = [
@@ -16,6 +16,6 @@ __all__ = [
     "NativeProjectParser",
     "ParserRegistration",
     "ProjectParserRegistry",
-    "PythonScannedProjectParser",
+    "PythonRepositoryScanParser",
     "RepositoryLanguageDetector",
 ]

@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import PurePosixPath
 from typing import Mapping
 
-from dprauto.inspection.scanner import ScannedProject
+from dprauto.domain.workspace import RepositoryScan
 
 
 # Keep this mapping aligned with the language family inherited from HerAgent's
@@ -65,7 +65,7 @@ LANGUAGE_ORDER = (
 class RepositoryLanguageDetector:
     """Count recognized source/config files without reading file contents."""
 
-    def counts(self, scanned: ScannedProject) -> dict[str, int]:
+    def counts(self, scanned: RepositoryScan) -> dict[str, int]:
         counts: Counter[str] = Counter()
         for relative_path in scanned.files:
             path = PurePosixPath(relative_path)
@@ -80,7 +80,7 @@ class RepositoryLanguageDetector:
             if counts[language]
         }
 
-    def languages(self, scanned: ScannedProject) -> tuple[str, ...]:
+    def languages(self, scanned: RepositoryScan) -> tuple[str, ...]:
         counts = self.counts(scanned)
         return tuple(
             sorted(

@@ -9,7 +9,7 @@ from typing import Iterable
 from dprauto.domain.enums import CommandPurpose
 from dprauto.domain.models import CommandSpec, ProjectCommand
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
-from dprauto.inspection.scanner import ScannedProject
+from dprauto.domain.workspace import RepositoryScan
 
 
 CI_ROOT_FILES = {
@@ -25,7 +25,7 @@ def depth(path: str) -> int:
     return len(PurePosixPath(path).parts)
 
 
-def readme_files(scanned: ScannedProject) -> tuple[str, ...]:
+def readme_files(scanned: RepositoryScan) -> tuple[str, ...]:
     return tuple(
         path
         for path in scanned.files
@@ -37,7 +37,7 @@ def readme_files(scanned: ScannedProject) -> tuple[str, ...]:
     )
 
 
-def ci_files(scanned: ScannedProject) -> tuple[str, ...]:
+def ci_files(scanned: RepositoryScan) -> tuple[str, ...]:
     selected = []
     for path in scanned.files:
         normalized = PurePosixPath(path)
@@ -52,7 +52,7 @@ def ci_files(scanned: ScannedProject) -> tuple[str, ...]:
     return tuple(selected)
 
 
-def dockerfiles(scanned: ScannedProject) -> tuple[str, ...]:
+def dockerfiles(scanned: RepositoryScan) -> tuple[str, ...]:
     return tuple(
         path
         for path in scanned.files
@@ -65,7 +65,7 @@ def dockerfiles(scanned: ScannedProject) -> tuple[str, ...]:
 
 
 def extracted_commands(
-    scanned: ScannedProject,
+    scanned: RepositoryScan,
     readmes: tuple[str, ...],
     workflows: tuple[str, ...],
     extractor: CommandExtractor,

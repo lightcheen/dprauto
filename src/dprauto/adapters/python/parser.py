@@ -15,9 +15,10 @@ from dprauto.adapters.python.test_matrix import (
 )
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile, SourceReference
+from dprauto.domain.workspace import RepositoryScan
 from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
-from dprauto.inspection.scanner import FileScanner, ScannedProject
+from dprauto.inspection.scanner import FileScanner
 
 
 _PYTHON_MANIFEST_NAMES = {
@@ -236,7 +237,7 @@ class PythonProjectParser:
     def _depth(path: str) -> int:
         return len(PurePosixPath(path).parts)
 
-    def _is_python_project(self, scanned: ScannedProject) -> bool:
+    def _is_python_project(self, scanned: RepositoryScan) -> bool:
         return any(
             path.endswith(".py")
             or PurePosixPath(path).name.lower() in _PYTHON_MANIFEST_NAMES
@@ -244,7 +245,7 @@ class PythonProjectParser:
             for path in scanned.files
         )
 
-    def _dependency_files(self, scanned: ScannedProject) -> tuple[str, ...]:
+    def _dependency_files(self, scanned: RepositoryScan) -> tuple[str, ...]:
         selected = []
         for path in scanned.files:
             name = PurePosixPath(path).name.lower()
@@ -256,7 +257,7 @@ class PythonProjectParser:
                 selected.append(path)
         return tuple(selected)
 
-    def _build_files(self, scanned: ScannedProject) -> tuple[str, ...]:
+    def _build_files(self, scanned: RepositoryScan) -> tuple[str, ...]:
         return tuple(
             path
             for path in scanned.files
@@ -264,7 +265,7 @@ class PythonProjectParser:
         )
 
     @staticmethod
-    def _dockerfiles(scanned: ScannedProject) -> tuple[str, ...]:
+    def _dockerfiles(scanned: RepositoryScan) -> tuple[str, ...]:
         excluded_roots = {
             ".circleci",
             ".github",
@@ -286,7 +287,7 @@ class PythonProjectParser:
         )
 
     def _test_dependency_groups(
-        self, scanned: ScannedProject
+        self, scanned: RepositoryScan
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """Discover test extras and manager-only dependency groups separately."""
 
@@ -358,7 +359,7 @@ class PythonProjectParser:
         return tuple(names)
 
     @staticmethod
-    def _test_file_metadata(scanned: ScannedProject) -> dict[str, object]:
+    def _test_file_metadata(scanned: RepositoryScan) -> dict[str, object]:
         """Return bounded local-test, external-test, and required-secret evidence."""
 
         test_files: list[str] = []
@@ -437,7 +438,7 @@ class PythonProjectParser:
 
     @staticmethod
     def _pytest_capture_incompatible_files(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> tuple[tuple[str, ...], bool]:
         """Find bounded, high-confidence module-scope stdio rewrapping."""
 
@@ -497,7 +498,7 @@ class PythonProjectParser:
 
     @staticmethod
     def _system_dependency_hints(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependency_files: tuple[str, ...],
         dependency_names: set[str],
     ) -> tuple[str, ...]:
@@ -525,7 +526,7 @@ class PythonProjectParser:
 
     @staticmethod
     def _framework_contract(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> tuple[tuple[ProjectCommand, ...], dict[str, object]]:
         """Prefer repository-owned Django bootstraps over a generic pytest guess."""
 
@@ -631,7 +632,7 @@ class PythonProjectParser:
 
     @staticmethod
     def _ci_service_metadata(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         ci_files: tuple[str, ...],
     ) -> dict[str, object]:
         """Record service choices without applying them to unrelated test commands."""
@@ -694,7 +695,7 @@ class PythonProjectParser:
         )
         return match.group(1) if match else ""
 
-    def _readme_files(self, scanned: ScannedProject) -> tuple[str, ...]:
+    def _readme_files(self, scanned: RepositoryScan) -> tuple[str, ...]:
         return tuple(
             path
             for path in scanned.files
@@ -704,7 +705,7 @@ class PythonProjectParser:
         )
 
     @staticmethod
-    def _ci_files(scanned: ScannedProject) -> tuple[str, ...]:
+    def _ci_files(scanned: RepositoryScan) -> tuple[str, ...]:
         selected = []
         for path in scanned.files:
             lower = path.lower()
@@ -717,7 +718,7 @@ class PythonProjectParser:
 
     def _package_managers(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependency_files: tuple[str, ...],
     ) -> tuple[str, ...]:
         names = {PurePosixPath(path).name.lower() for path in dependency_files}
@@ -743,7 +744,7 @@ class PythonProjectParser:
 
     def _python_version(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         ci_files: tuple[str, ...],
     ) -> tuple[str, tuple[dict[str, str], ...]]:
         evidence: list[dict[str, str]] = []
@@ -821,7 +822,7 @@ class PythonProjectParser:
         )
         return match.group(1) if match else ""
 
-    def _entry_points(self, scanned: ScannedProject) -> tuple[str, ...]:
+    def _entry_points(self, scanned: RepositoryScan) -> tuple[str, ...]:
         entries: list[str] = []
         pyproject = scanned.read_text("pyproject.toml")
         for section_name in ("project.scripts", "tool.poetry.scripts"):
@@ -846,7 +847,7 @@ class PythonProjectParser:
 
     def _optional_entry_points(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         entry_points: tuple[str, ...],
     ) -> tuple[str, ...]:
         """Detect console scripts whose implementation explicitly requires an extra."""
@@ -884,7 +885,7 @@ class PythonProjectParser:
 
     def _dependencies(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependency_files: tuple[str, ...],
     ) -> set[str]:
         dependencies: set[str] = set()
@@ -918,7 +919,7 @@ class PythonProjectParser:
 
     def _runtime_dependencies(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependency_files: tuple[str, ...],
     ) -> set[str]:
         """Return dependencies installed by the normal project build, excluding dev files."""
@@ -1013,7 +1014,7 @@ class PythonProjectParser:
 
     def _extract_commands(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         readme_files: tuple[str, ...],
         ci_files: tuple[str, ...],
     ) -> tuple[ExtractedCommand, ...]:
@@ -1029,7 +1030,7 @@ class PythonProjectParser:
 
     def _infer_commands(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependency_files: tuple[str, ...],
         build_files: tuple[str, ...],
         package_managers: tuple[str, ...],
@@ -1152,7 +1153,7 @@ class PythonProjectParser:
         return tuple(inferred)
 
     @staticmethod
-    def _has_pytest_evidence(scanned: ScannedProject) -> bool:
+    def _has_pytest_evidence(scanned: RepositoryScan) -> bool:
         if scanned.by_name(("pytest.ini",)):
             return True
         pyproject = scanned.read_text("pyproject.toml")
@@ -1164,7 +1165,7 @@ class PythonProjectParser:
         )
 
     @staticmethod
-    def _has_unittest_evidence(scanned: ScannedProject) -> bool:
+    def _has_unittest_evidence(scanned: RepositoryScan) -> bool:
         for path in scanned.files:
             if path.endswith(".py") and any(
                 part.casefold() in {"test", "tests"} for part in PurePosixPath(path).parts
@@ -1174,18 +1175,18 @@ class PythonProjectParser:
         return False
 
     @staticmethod
-    def _default_tox_env(scanned: ScannedProject) -> str:
+    def _default_tox_env(scanned: RepositoryScan) -> str:
         environments = tox_environment_metadata(scanned.read_text("tox.ini"))
         return preferred_matrix_name(environments)
 
     @staticmethod
-    def _default_nox_session(scanned: ScannedProject) -> str:
+    def _default_nox_session(scanned: RepositoryScan) -> str:
         sessions = nox_session_metadata(scanned.read_text("noxfile.py"))
         return preferred_matrix_name(sessions)
 
     @staticmethod
     def _ci_uses_tox_factor(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         ci_files: tuple[str, ...],
         factor: str,
     ) -> bool:
@@ -1204,7 +1205,7 @@ class PythonProjectParser:
         return False
 
     @classmethod
-    def _module_entry(cls, scanned: ScannedProject) -> str:
+    def _module_entry(cls, scanned: RepositoryScan) -> str:
         candidates = [path for path in scanned.files if path.endswith("/__main__.py")]
         if not candidates:
             return ""
@@ -1228,7 +1229,7 @@ class PythonProjectParser:
         return ".".join(parts)
 
     @staticmethod
-    def _script_entry(scanned: ScannedProject) -> str:
+    def _script_entry(scanned: RepositoryScan) -> str:
         preferred_names = ("main.py", "app.py", "server.py", "run.py")
         for name in preferred_names:
             candidates = [
@@ -1256,7 +1257,7 @@ class PythonProjectParser:
 
     def _project_type(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         dependencies: set[str],
         entry_points: tuple[str, ...],
         commands: tuple[ProjectCommand, ...],
@@ -1299,7 +1300,7 @@ class PythonProjectParser:
         return ProjectType.UNKNOWN, ()
 
     @staticmethod
-    def _web_entry_source(scanned: ScannedProject) -> bool:
+    def _web_entry_source(scanned: RepositoryScan) -> bool:
         for path in scanned.files:
             parsed = PurePosixPath(path)
             name = parsed.name.lower()
@@ -1331,14 +1332,14 @@ class PythonProjectParser:
         return False
 
     @staticmethod
-    def _package_directories(scanned: ScannedProject) -> bool:
+    def _package_directories(scanned: RepositoryScan) -> bool:
         return any(
             path.endswith("/__init__.py") and "tests" not in PurePosixPath(path).parts
             for path in scanned.files
         )
 
     @staticmethod
-    def _import_modules(scanned: ScannedProject) -> tuple[str, ...]:
+    def _import_modules(scanned: RepositoryScan) -> tuple[str, ...]:
         modules: list[str] = []
         for path in scanned.files:
             parts = list(PurePosixPath(path).parts)
@@ -1351,7 +1352,7 @@ class PythonProjectParser:
                 modules.append(".".join(package_parts))
         return tuple(dict.fromkeys(sorted(modules, key=lambda item: (item.count("."), item))))
 
-    def _project_name(self, scanned: ScannedProject) -> str:
+    def _project_name(self, scanned: RepositoryScan) -> str:
         pyproject = scanned.read_text("pyproject.toml")
         for section_name in ("project", "tool.poetry"):
             section = self._toml_section(pyproject, section_name)
@@ -1362,7 +1363,7 @@ class PythonProjectParser:
         match = re.search(r"(?m)^\s*name\s*=\s*[\"']([^\"']+)", setup_py)
         return match.group(1) if match else ""
 
-    def _scm_versioning(self, scanned: ScannedProject) -> dict[str, str]:
+    def _scm_versioning(self, scanned: RepositoryScan) -> dict[str, str]:
         """Return explicit setuptools-scm configuration evidence, if present."""
 
         pyproject = scanned.read_text("pyproject.toml")
@@ -1398,7 +1399,7 @@ class PythonProjectParser:
 
     def _scm_source_version(
         self,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         pyproject: str,
     ) -> dict[str, str]:
         scm_section = self._toml_section(pyproject, "tool.setuptools_scm")

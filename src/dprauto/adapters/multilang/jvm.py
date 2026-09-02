@@ -17,9 +17,9 @@ from dprauto.adapters.multilang.common import (
 from dprauto.adapters.multilang.detector import RepositoryLanguageDetector
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import ProjectProfile, SourceReference
+from dprauto.domain.workspace import RepositoryScan
 from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
-from dprauto.inspection.scanner import ScannedProject
 
 JVM_ROOT_MARKERS = {
     "build.gradle",
@@ -46,7 +46,7 @@ class JVMProjectParser:
         self.command_extractor = command_extractor or CommandExtractor()
         self.language_detector = language_detector or RepositoryLanguageDetector()
 
-    def supports(self, scanned: ScannedProject) -> bool:
+    def supports(self, scanned: RepositoryScan) -> bool:
         return any(
             depth(path) == 1 and PurePosixPath(path).name.casefold() in JVM_ROOT_MARKERS
             for path in scanned.files
@@ -55,7 +55,7 @@ class JVMProjectParser:
     def parse_scanned(
         self,
         source: SourceReference,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> ProjectProfile:
         if not self.supports(scanned):
             raise ProjectParsingError(f"no root Maven or Gradle indicators found in {scanned.root}")
@@ -147,7 +147,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _gradle_projects_by_directory(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> dict[str, str]:
         if "gradle" not in systems:
@@ -171,7 +171,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _test_files(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
         tests: list[str] = []
         safe: list[str] = []
@@ -206,7 +206,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _ci_test_environment(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         workflows: tuple[str, ...],
         systems: tuple[str, ...],
     ) -> tuple[dict[str, str], tuple[str, ...]]:
@@ -222,7 +222,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _maven_git_hook_install_source(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> str:
         if "maven" not in systems:
@@ -240,7 +240,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _optional_test_profile_variables(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         workflows: tuple[str, ...],
     ) -> tuple[str, ...]:
         selected: list[str] = []
@@ -254,7 +254,7 @@ class JVMProjectParser:
         return tuple(dict.fromkeys(selected))
 
     @staticmethod
-    def _build_systems(scanned: ScannedProject) -> tuple[str, ...]:
+    def _build_systems(scanned: RepositoryScan) -> tuple[str, ...]:
         root_names = {
             PurePosixPath(path).name.casefold()
             for path in scanned.files
@@ -273,7 +273,7 @@ class JVMProjectParser:
         return tuple(systems)
 
     @staticmethod
-    def _build_files(scanned: ScannedProject) -> tuple[str, ...]:
+    def _build_files(scanned: RepositoryScan) -> tuple[str, ...]:
         names = {
             "build.gradle",
             "build.gradle.kts",
@@ -291,7 +291,7 @@ class JVMProjectParser:
         )
 
     @staticmethod
-    def _dependency_files(scanned: ScannedProject) -> tuple[str, ...]:
+    def _dependency_files(scanned: RepositoryScan) -> tuple[str, ...]:
         names = {
             "build.gradle",
             "build.gradle.kts",
@@ -308,7 +308,7 @@ class JVMProjectParser:
         )
 
     @staticmethod
-    def _project_name(scanned: ScannedProject, systems: tuple[str, ...]) -> str:
+    def _project_name(scanned: RepositoryScan, systems: tuple[str, ...]) -> str:
         if "gradle" in systems:
             settings = scanned.read_text("settings.gradle") or scanned.read_text(
                 "settings.gradle.kts"
@@ -329,7 +329,7 @@ class JVMProjectParser:
         return ""
 
     @staticmethod
-    def _subprojects(scanned: ScannedProject, systems: tuple[str, ...]) -> tuple[str, ...]:
+    def _subprojects(scanned: RepositoryScan, systems: tuple[str, ...]) -> tuple[str, ...]:
         selected: list[str] = []
         if "maven" in systems:
             for value in re.findall(
@@ -368,7 +368,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _java_version(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> tuple[str, str, str, str]:
         target = ""
@@ -440,7 +440,7 @@ class JVMProjectParser:
 
     @staticmethod
     def _inferred_commands(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> tuple[ExtractedCommand, ...]:
         commands: list[ExtractedCommand] = []

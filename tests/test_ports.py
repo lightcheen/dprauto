@@ -18,6 +18,7 @@ from dprauto.ports import (
     BuildPlanner,
     BuildStrategy,
     CommandExecutor,
+    ComponentDiscoverer,
     EnvironmentDiffer,
     FailureClassifier,
     FailureFallbackClassifier,
@@ -63,6 +64,13 @@ class DummyBuildStrategy:
 class DummyBuildPlanner:
     def plan(self, profile: ProjectProfile) -> tuple[BuildPlan, ...]:
         return (PLAN,)
+
+
+class DummyComponentDiscoverer:
+    def discover(self, scan):
+        from dprauto.domain.workspace import ComponentGraph
+
+        return ComponentGraph(())
 
 
 class DummyExecutor:
@@ -126,6 +134,7 @@ class PortContractTests(unittest.TestCase):
             (DummyParser(), ProjectParser),
             (DummyBuildPlanner(), BuildPlanner),
             (DummyBuildStrategy(), BuildStrategy),
+            (DummyComponentDiscoverer(), ComponentDiscoverer),
             (DummyExecutor(), CommandExecutor),
             (DummyEnvironmentDiffer(), EnvironmentDiffer),
             (DummyClassifier(), FailureClassifier),

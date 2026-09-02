@@ -17,9 +17,9 @@ from dprauto.adapters.multilang.common import (
 from dprauto.adapters.multilang.detector import RepositoryLanguageDetector
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import ProjectProfile, SourceReference
+from dprauto.domain.workspace import RepositoryScan
 from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
-from dprauto.inspection.scanner import ScannedProject
 
 NATIVE_ROOT_MARKERS = {
     "CMakeLists.txt",
@@ -45,7 +45,7 @@ class NativeProjectParser:
         self.command_extractor = command_extractor or CommandExtractor()
         self.language_detector = language_detector or RepositoryLanguageDetector()
 
-    def supports(self, scanned: ScannedProject) -> bool:
+    def supports(self, scanned: RepositoryScan) -> bool:
         has_build_root = any(
             depth(path) == 1 and PurePosixPath(path).name in NATIVE_ROOT_MARKERS
             for path in scanned.files
@@ -56,7 +56,7 @@ class NativeProjectParser:
     def parse_scanned(
         self,
         source: SourceReference,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> ProjectProfile:
         if not self.supports(scanned):
             raise ProjectParsingError(f"no root native build indicators found in {scanned.root}")
@@ -151,7 +151,7 @@ class NativeProjectParser:
         )
 
     @staticmethod
-    def _root_names(scanned: ScannedProject) -> set[str]:
+    def _root_names(scanned: RepositoryScan) -> set[str]:
         return {
             PurePosixPath(path).name
             for path in scanned.files
@@ -159,7 +159,7 @@ class NativeProjectParser:
         }
 
     @classmethod
-    def _build_systems(cls, scanned: ScannedProject) -> tuple[str, ...]:
+    def _build_systems(cls, scanned: RepositoryScan) -> tuple[str, ...]:
         root_names = cls._root_names(scanned)
         systems = []
         if "CMakeLists.txt" in root_names:
@@ -173,7 +173,7 @@ class NativeProjectParser:
         return tuple(systems)
 
     @staticmethod
-    def _build_files(scanned: ScannedProject) -> tuple[str, ...]:
+    def _build_files(scanned: RepositoryScan) -> tuple[str, ...]:
         names = {
             "CMakeLists.txt",
             "Makefile",
@@ -192,7 +192,7 @@ class NativeProjectParser:
         )
 
     @staticmethod
-    def _dependency_files(scanned: ScannedProject) -> tuple[str, ...]:
+    def _dependency_files(scanned: RepositoryScan) -> tuple[str, ...]:
         names = {
             "CMakePresets.json",
             "conanfile.py",
@@ -211,7 +211,7 @@ class NativeProjectParser:
         )
 
     @staticmethod
-    def _project_name(scanned: ScannedProject, systems: tuple[str, ...]) -> str:
+    def _project_name(scanned: RepositoryScan, systems: tuple[str, ...]) -> str:
         if "cmake" in systems:
             match = re.search(
                 r"(?im)^\s*project\s*\(\s*['\"]?([A-Za-z0-9_.+-]+)",
@@ -235,7 +235,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _project_type(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
         project_name: str,
     ) -> ProjectType:
@@ -285,7 +285,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _runtime_command(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
         project_name: str,
     ) -> str:
@@ -308,7 +308,7 @@ class NativeProjectParser:
         return ""
 
     @staticmethod
-    def _language_standards(scanned: ScannedProject) -> dict[str, str]:
+    def _language_standards(scanned: RepositoryScan) -> dict[str, str]:
         cmake = scanned.read_text("CMakeLists.txt")
         constraints: dict[str, str] = {}
         c_standard = re.search(
@@ -325,7 +325,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _cmake_configuration_arguments(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> tuple[str, ...]:
         if "cmake" not in systems:
@@ -362,7 +362,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _system_dependency_packages(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> tuple[str, ...]:
         selected: list[str] = []
@@ -393,7 +393,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _cmake_test_build_target(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> str:
         if "cmake" not in systems:
@@ -409,7 +409,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _test_required_executables(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         test_driver_text = "\n".join(
             scanned.read_text(path)
@@ -446,7 +446,7 @@ class NativeProjectParser:
 
     @staticmethod
     def _subprojects(
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
     ) -> tuple[str, ...]:
         selected: list[str] = []
@@ -469,7 +469,7 @@ class NativeProjectParser:
         return tuple(dict.fromkeys(selected))
 
     @staticmethod
-    def _has_tests(scanned: ScannedProject) -> bool:
+    def _has_tests(scanned: RepositoryScan) -> bool:
         if any(
             part.casefold() in {"test", "tests", "unittest", "unittests"}
             for path in scanned.files
@@ -482,7 +482,7 @@ class NativeProjectParser:
     @classmethod
     def _inferred_commands(
         cls,
-        scanned: ScannedProject,
+        scanned: RepositoryScan,
         systems: tuple[str, ...],
         *,
         project_type: ProjectType,

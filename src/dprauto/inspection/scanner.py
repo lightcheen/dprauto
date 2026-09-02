@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
-from typing import Callable, Iterable
+from pathlib import Path
 
+from dprauto.domain.workspace import RepositoryScan
 from dprauto.errors import ProjectParsingError
 
 
@@ -32,49 +31,6 @@ DEFAULT_IGNORED_DIRECTORIES = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class ScannedProject:
-    root: Path
-    files: tuple[str, ...]
-    skipped_files: int = 0
-    truncated: bool = False
-    max_text_bytes: int = 512 * 1024
-
-    def has(self, relative_path: str) -> bool:
-        return PurePosixPath(relative_path).as_posix() in self.files
-
-    def select(self, predicate: Callable[[str], bool]) -> tuple[str, ...]:
-        return tuple(path for path in self.files if predicate(path))
-
-    def by_name(self, names: Iterable[str], *, case_sensitive: bool = False) -> tuple[str, ...]:
-        expected = set(names if case_sensitive else (name.lower() for name in names))
-        return self.select(
-            lambda path: (
-                PurePosixPath(path).name
-                if case_sensitive
-                else PurePosixPath(path).name.lower()
-            )
-            in expected
-        )
-
-    def read_text(self, relative_path: str) -> str:
-        """Read a known project file without allowing path traversal or oversized input."""
-
-        normalized = PurePosixPath(relative_path).as_posix()
-        if normalized not in self.files:
-            return ""
-        target = (self.root / normalized).resolve()
-        root = self.root.resolve()
-        if target != root and root not in target.parents:
-            return ""
-        try:
-            if target.stat().st_size > self.max_text_bytes:
-                return ""
-            return target.read_text(encoding="utf-8", errors="replace")
-        except (OSError, UnicodeError):
-            return ""
-
-
 class FileScanner:
     """Scan repository paths without interpreting any programming language."""
 
@@ -93,7 +49,7 @@ class FileScanner:
         self.max_depth = max_depth
         self.max_text_bytes = max_text_bytes
 
-    def scan(self, root: Path) -> ScannedProject:
+    def scan(self, root: Path) -> RepositoryScan:
         root = root.expanduser().resolve()
         if not root.is_dir():
             raise ProjectParsingError(f"project workspace is not a directory: {root}")
@@ -134,7 +90,7 @@ class FileScanner:
             if truncated:
                 break
 
-        return ScannedProject(
+        return RepositoryScan(
             root=root,
             files=tuple(sorted(discovered)),
             skipped_files=skipped,

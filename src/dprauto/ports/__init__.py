@@ -1,6 +1,7 @@
 """Ports implemented by infrastructure adapters."""
 
 from dprauto.ports.build import BuildPlanner, BuildStrategy
+from dprauto.ports.discovery import ComponentDiscoverer
 from dprauto.ports.execution import CommandExecutor
 from dprauto.ports.environment import EnvironmentDiffer
 from dprauto.ports.failure import FailureClassifier, FailureFallbackClassifier
@@ -24,6 +25,7 @@ __all__ = [
     "BuildStrategy",
     "BuildPlanner",
     "CommandExecutor",
+    "ComponentDiscoverer",
     "EnvironmentDiffer",
     "FailureClassifier",
     "FailureFallbackClassifier",
