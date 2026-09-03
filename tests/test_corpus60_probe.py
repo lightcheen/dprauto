@@ -19,7 +19,18 @@ class StaticParser:
             "fixture",
             source,
             languages=("Python",),
-            metadata={"parser_registry_selection": "fixture"},
+            metadata={
+                "parser_registry_selection": "fixture",
+                "component_root": ".",
+                "component_candidates": (
+                    {
+                        "component_id": "fixture",
+                        "root": ".",
+                        "primary_eligible": True,
+                        "selected": True,
+                    },
+                ),
+            },
         )
 
 

@@ -117,17 +117,23 @@ class EvidenceRankedComponentDiscoverer:
 
     def discover(self, scan: RepositoryScan) -> ComponentGraph:
         index = self.indexer.index(scan)
+        documents = self._evidence_documents(scan)
         grouped: dict[str, list[BuildMarker]] = defaultdict(list)
         for marker in index.markers:
             grouped[marker.component_root].append(marker)
 
-        component_roots = {
+        discovered_roots = {
             root
             for root, markers in grouped.items()
             if any(self._is_component_entry(scan, marker) for marker in markers)
         }
+        component_roots = {
+            root
+            for root in discovered_roots
+            if self._is_standalone_component(root, discovered_roots, documents)
+        }
         candidates = tuple(
-            self._candidate(scan, root, tuple(markers))
+            self._candidate(scan, root, tuple(markers), documents)
             for root, markers in sorted(grouped.items())
             if root in component_roots
         )
@@ -167,11 +173,34 @@ class EvidenceRankedComponentDiscoverer:
             return bool(re.search(r"(?im)^\s*project\s*\(", content))
         return True
 
+    @classmethod
+    def _is_standalone_component(
+        cls,
+        root: str,
+        discovered_roots: set[str],
+        documents: tuple[tuple[str, str], ...],
+    ) -> bool:
+        if root == ".":
+            return True
+        ancestors = tuple(PurePosixPath(root).parents)
+        has_build_ancestor = any(
+            (ancestor.as_posix() if ancestor.as_posix() != "." else ".")
+            in discovered_roots
+            for ancestor in ancestors
+        )
+        if not has_build_ancestor:
+            return True
+        role, _, _ = cls._role(root)
+        if role != "candidate":
+            return True
+        return bool(cls._documentation_evidence(documents, root))
+
     def _candidate(
         self,
         scan: RepositoryScan,
         root: str,
         markers: tuple[BuildMarker, ...],
+        documents: tuple[tuple[str, str], ...],
     ) -> ComponentCandidate:
         build_markers = tuple(marker for marker in markers if marker.kind == "build")
         poetry_project = any(marker.build_system == "poetry" for marker in markers)
@@ -197,10 +226,10 @@ class EvidenceRankedComponentDiscoverer:
         subtree = scan.subtree(root)
         language_counts = self.language_detector.counts(subtree)
         score += min(sum(language_counts.values()), 30)
-        documentation = self._documentation_evidence(scan, root)
+        documentation = self._documentation_evidence(documents, root)
         evidence.extend(documentation)
         score += sum(item.weight for item in documentation)
-        ordered_systems = self._order_systems(scan, systems)
+        ordered_systems = self._order_systems(documents, systems)
         ordered_entries = tuple(
             marker.path
             for system in ordered_systems
@@ -257,9 +286,13 @@ class EvidenceRankedComponentDiscoverer:
         return tuple(result)
 
     @classmethod
+    def _evidence_documents(cls, scan: RepositoryScan) -> tuple[tuple[str, str], ...]:
+        return tuple((path, scan.read_text(path)) for path in cls._evidence_files(scan))
+
+    @classmethod
     def _documentation_evidence(
         cls,
-        scan: RepositoryScan,
+        documents: tuple[tuple[str, str], ...],
         root: str,
     ) -> tuple[ComponentEvidence, ...]:
         if root == ".":
@@ -269,8 +302,8 @@ class EvidenceRankedComponentDiscoverer:
             rf"(?im)(?:^|[;&|]\s*|\$\s*)(?:cd|pushd)\s+(?:\./)?{escaped}(?:/[^\s;&|]+)?"
         )
         evidence = []
-        for path in cls._evidence_files(scan):
-            if pattern.search(scan.read_text(path)):
+        for path, content in documents:
+            if pattern.search(content):
                 kind = "ci_working_directory" if ".yml" in path or ".yaml" in path else "docs"
                 weight = 90 if kind == "ci_working_directory" else 80
                 evidence.append(ComponentEvidence(kind, path, f"enters {root}", weight))
@@ -279,7 +312,7 @@ class EvidenceRankedComponentDiscoverer:
     @classmethod
     def _order_systems(
         cls,
-        scan: RepositoryScan,
+        documents: tuple[tuple[str, str], ...],
         systems: tuple[str, ...],
     ) -> tuple[str, ...]:
         patterns = {
@@ -293,11 +326,13 @@ class EvidenceRankedComponentDiscoverer:
             "python-packaging": re.compile(r"(?im)(?:^|[$;]\s*)(?:python\s+-m\s+)?pip\s+install\s"),
             "setuptools": re.compile(r"(?im)(?:^|[$;]\s*)python\s+setup\.py\s"),
         }
-        text = "\n".join(scan.read_text(path) for path in cls._evidence_files(scan))
+        text = "\n".join(content for _, content in documents)
         scores = {
             system: len(patterns.get(system, re.compile(r"(?!x)x")).findall(text))
             for system in systems
         }
+        if "make" in systems and len(systems) > 1:
+            scores["make"] = -1
         return tuple(sorted(systems, key=lambda system: (-scores[system], systems.index(system))))
 
     @classmethod

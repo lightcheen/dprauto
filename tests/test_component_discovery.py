@@ -142,6 +142,17 @@ class ComponentDiscoveryTests(unittest.TestCase):
         second = self.discover(files)
         self.assertEqual(first, second)
 
+    def test_root_build_consolidates_ordinary_nested_modules(self) -> None:
+        graph = self.discover(
+            {
+                "pom.xml": "<project />\n",
+                "module/pom.xml": "<project />\n",
+                "module/src/main/java/App.java": "class App {}\n",
+            }
+        )
+
+        self.assertEqual(tuple(item.root for item in graph.candidates), (".",))
+
 
 if __name__ == "__main__":
     unittest.main()

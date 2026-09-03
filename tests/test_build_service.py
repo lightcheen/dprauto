@@ -24,6 +24,7 @@ from dprauto.domain.models import (
     ProjectProfile,
     SourceReference,
 )
+from dprauto.errors import BuildPlanningError
 from dprauto.strategies import StrategyRegistry
 
 
@@ -34,6 +35,7 @@ class ScriptedStrategy:
         self.failure = failure
         self.repair_surface = repair_surface
         self.build_calls = 0
+        self.last_workspace = None
 
     def supports(self, profile):
         return True
@@ -58,6 +60,7 @@ class ScriptedStrategy:
 
     def build(self, plan, workspace, *, deadline_at=None):
         self.build_calls += 1
+        self.last_workspace = workspace
         now = datetime.now(timezone.utc)
         return BuildResult(
             f"{self.name}-attempt",
@@ -106,6 +109,42 @@ def infrastructure_failure():
 
 
 class DeterministicBuildServiceTests(unittest.TestCase):
+    def test_build_executes_in_selected_component_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            component = root / "native"
+            component.mkdir()
+            strategy = ScriptedStrategy("native", BuildStatus.SUCCEEDED)
+            builder = DeterministicBuildService(
+                StrategyRegistry((strategy,)),
+                ScriptedClassifier(),
+            )
+            profile = ProjectProfile(
+                "component",
+                SourceReference("fixture"),
+                metadata={"component_root": "native"},
+            )
+
+            execution = builder.build(profile, root)
+
+            self.assertEqual(strategy.last_workspace, component.resolve())
+            self.assertEqual(execution.plan.metadata["component_root"], "native")
+
+    def test_build_rejects_unsafe_component_workspace(self) -> None:
+        strategy = ScriptedStrategy("native", BuildStatus.SUCCEEDED)
+        builder = DeterministicBuildService(
+            StrategyRegistry((strategy,)),
+            ScriptedClassifier(),
+        )
+        profile = ProjectProfile(
+            "component",
+            SourceReference("fixture"),
+            metadata={"component_root": "../outside"},
+        )
+
+        with self.assertRaises(BuildPlanningError):
+            builder.build(profile, Path.cwd())
+
     def test_plan_returns_bounded_portfolio_without_execution(self) -> None:
         strategies = tuple(
             ScriptedStrategy(name, BuildStatus.SUCCEEDED)

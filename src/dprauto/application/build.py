@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from dprauto.adapters.execution import SubprocessCommandExecutor
@@ -18,6 +18,7 @@ from dprauto.domain.models import (
     FailureInfo,
     ProjectProfile,
 )
+from dprauto.errors import BuildPlanningError
 from dprauto.ports.build import BuildStrategy
 from dprauto.ports.failure import FailureClassifier
 from dprauto.ports.storage import Storage
@@ -77,9 +78,41 @@ class DeterministicBuildService:
         """
 
         return tuple(
-            strategy.create_plan(profile)
+            self._create_plan(strategy, profile)
             for strategy in self._candidate_strategies(profile)
         )
+
+    @staticmethod
+    def _component_root(profile: ProjectProfile) -> PurePosixPath:
+        component_root = str(profile.metadata.get("component_root", "."))
+        path = PurePosixPath(component_root)
+        if path.is_absolute() or ".." in path.parts or component_root in {"", "/"}:
+            raise BuildPlanningError("project component_root must be a safe relative path")
+        return path
+
+    @classmethod
+    def _create_plan(cls, strategy: BuildStrategy, profile: ProjectProfile) -> BuildPlan:
+        plan = strategy.create_plan(profile)
+        component_root = cls._component_root(profile).as_posix()
+        return replace(
+            plan,
+            metadata={**plan.metadata, "component_root": component_root},
+        )
+
+    @classmethod
+    def _build_workspace(cls, profile: ProjectProfile, repository_workspace: Path) -> Path:
+        repository_workspace = repository_workspace.expanduser().resolve()
+        path = cls._component_root(profile)
+        selected = (
+            repository_workspace
+            if path.as_posix() == "."
+            else (repository_workspace / path.as_posix()).resolve()
+        )
+        if selected != repository_workspace and repository_workspace not in selected.parents:
+            raise BuildPlanningError("project component_root escapes the repository workspace")
+        if not selected.is_dir():
+            raise BuildPlanningError(f"project component workspace is not a directory: {selected}")
+        return selected
 
     def _candidate_strategies(
         self, profile: ProjectProfile
@@ -99,6 +132,7 @@ class DeterministicBuildService:
         deadline_at: datetime | None = None,
     ) -> BuildExecution:
         strategies = self._candidate_strategies(profile)
+        build_workspace = self._build_workspace(profile, workspace)
         attempts: list[BuildStrategyAttempt] = []
         selection_reason = "all compatible strategies failed"
         terminal_attempt: BuildStrategyAttempt | None = None
@@ -107,8 +141,8 @@ class DeterministicBuildService:
             if index and time_budget_exhausted(deadline_at):
                 selection_reason = "shared build deadline exhausted before fallback"
                 break
-            plan = strategy.create_plan(profile)
-            result = strategy.build(plan, workspace, deadline_at=deadline_at)
+            plan = self._create_plan(strategy, profile)
+            result = strategy.build(plan, build_workspace, deadline_at=deadline_at)
             failure = self.failure_classifier.classify(profile, plan, result)
             attempts.append(BuildStrategyAttempt(plan, result, failure))
 

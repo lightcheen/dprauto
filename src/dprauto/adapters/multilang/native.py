@@ -17,7 +17,7 @@ from dprauto.adapters.multilang.common import (
 from dprauto.adapters.multilang.detector import RepositoryLanguageDetector
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import ProjectProfile, SourceReference
-from dprauto.domain.workspace import RepositoryScan
+from dprauto.domain.workspace import ComponentCandidate, RepositoryScan
 from dprauto.errors import ProjectParsingError
 from dprauto.inspection.commands import CommandExtractor, ExtractedCommand
 
@@ -57,11 +57,20 @@ class NativeProjectParser:
         self,
         source: SourceReference,
         scanned: RepositoryScan,
+        component: ComponentCandidate,
     ) -> ProjectProfile:
         if not self.supports(scanned):
             raise ProjectParsingError(f"no root native build indicators found in {scanned.root}")
 
-        build_systems = self._build_systems(scanned)
+        detected_systems = self._build_systems(scanned)
+        build_systems = tuple(
+            dict.fromkeys(
+                (
+                    *(system for system in component.build_systems if system in detected_systems),
+                    *detected_systems,
+                )
+            )
+        )
         build_files = self._build_files(scanned)
         dependencies = self._dependency_files(scanned)
         readmes = readme_files(scanned)

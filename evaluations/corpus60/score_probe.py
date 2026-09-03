@@ -36,7 +36,7 @@ def predicted_build_system(record: dict[str, Any]) -> str:
     return ""
 
 
-def expected_primary(case: dict[str, Any]) -> tuple[set[str], set[str]]:
+def expected_primary(case: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
     primary_ids = set(case["primary_component_ids"])
     components = [
         component
@@ -50,7 +50,8 @@ def expected_primary(case: dict[str, Any]) -> tuple[set[str], set[str]]:
         for entry in component["build_entries"]
         if entry["role"] == "primary"
     }
-    return roots, systems
+    all_roots = {component["root"] for component in case["components"]}
+    return roots, systems, all_roots
 
 
 def metric(passed: int, total: int) -> dict[str, int | float]:
@@ -75,10 +76,13 @@ def score(probe: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
 
     for case_id in sorted(oracle_cases):
         observed = probe_cases[case_id]
-        expected_roots, expected_systems = expected_primary(oracle_cases[case_id])
+        expected_roots, expected_systems, allowed_roots = expected_primary(
+            oracle_cases[case_id]
+        )
         candidate_roots = {
             str(candidate.get("root", ""))
             for candidate in observed.get("component_candidates", [])
+            if candidate.get("primary_eligible", True)
         }
         selected_root = str(observed.get("selected_component_root", ""))
         selected_system = predicted_build_system(observed)
@@ -86,7 +90,7 @@ def score(probe: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
         selected = selected_root in expected_roots
         system_correct = selected_system in expected_systems
         planned = observed.get("status") == "planned"
-        false_candidates = len(candidate_roots - expected_roots)
+        false_candidates = len(candidate_roots - allowed_roots)
         false_success = planned and not (selected and system_correct)
 
         discovery_passed += int(discovered)

@@ -10,9 +10,11 @@ from dprauto.adapters.multilang.jvm import JVMProjectParser
 from dprauto.adapters.multilang.native import NativeProjectParser
 from dprauto.adapters.python import PythonProjectParser
 from dprauto.domain.models import ProjectProfile, SourceReference
-from dprauto.domain.workspace import RepositoryScan
+from dprauto.domain.workspace import ComponentCandidate, ComponentGraph, RepositoryScan
 from dprauto.errors import ProjectParsingError
+from dprauto.inspection.components import EvidenceRankedComponentDiscoverer
 from dprauto.inspection.scanner import FileScanner
+from dprauto.ports.discovery import ComponentDiscoverer
 
 
 class RepositoryScanParser(Protocol):
@@ -25,6 +27,7 @@ class RepositoryScanParser(Protocol):
         self,
         source: SourceReference,
         scanned: RepositoryScan,
+        component: ComponentCandidate,
     ) -> ProjectProfile: ...
 
 
@@ -60,6 +63,7 @@ class PythonRepositoryScanParser:
         self,
         source: SourceReference,
         scanned: RepositoryScan,
+        component: ComponentCandidate,
     ) -> ProjectProfile:
         return self.parser.parse(source, scanned.root)
 
@@ -100,9 +104,11 @@ class MultiLanguageProjectParser:
     def __init__(
         self,
         scanner: FileScanner | None = None,
+        discoverer: ComponentDiscoverer | None = None,
         registry: ProjectParserRegistry | None = None,
     ) -> None:
         self.scanner = scanner or FileScanner()
+        self.discoverer = discoverer or EvidenceRankedComponentDiscoverer()
         self.registry = registry or ProjectParserRegistry(
             (
                 JVMProjectParser(),
@@ -113,10 +119,57 @@ class MultiLanguageProjectParser:
 
     def parse(self, source: SourceReference, workspace: Path) -> ProjectProfile:
         scanned = self.scanner.scan(workspace)
-        parser = self.registry.select(scanned)
-        profile = parser.parse_scanned(source, scanned)
+        graph = self.discoverer.discover(scanned)
+        component = graph.primary
+        if component is None:
+            raise ProjectParsingError(
+                f"no buildable component discovered in repository workspace {scanned.root}"
+            )
+        component_scan = scanned.subtree(component.root)
+        parser = self.registry.select(component_scan)
+        profile = parser.parse_scanned(source, component_scan, component)
         # Preserve the chosen root parser separately from language counts so
         # mixed repositories and future Tree-sitter indexing stay auditable.
         metadata = dict(profile.metadata)
         metadata["parser_registry_selection"] = parser.name
-        return replace(profile, metadata=metadata)
+        metadata["component_id"] = component.component_id
+        metadata["component_root"] = component.root
+        metadata["component_role"] = component.role
+        metadata["primary_build_system"] = component.build_systems[0]
+        metadata["component_candidates"] = self._component_records(graph)
+        metadata["component_relations"] = self._relation_records(graph)
+        metadata["repository_scan_file_count"] = len(scanned.files)
+        metadata["repository_scan_skipped_files"] = scanned.skipped_files
+        metadata["repository_scan_truncated"] = scanned.truncated
+        package_managers = tuple(
+            dict.fromkeys((*component.build_systems, *profile.package_managers))
+        )
+        return replace(profile, package_managers=package_managers, metadata=metadata)
+
+    @staticmethod
+    def _component_records(graph: ComponentGraph) -> tuple[dict[str, object], ...]:
+        return tuple(
+            {
+                "component_id": item.component_id,
+                "root": item.root,
+                "build_systems": item.build_systems,
+                "build_entries": item.build_entries,
+                "languages": item.languages,
+                "role": item.role,
+                "score": item.score,
+                "primary_eligible": item.primary_eligible,
+                "selected": item.component_id == graph.primary_component_id,
+            }
+            for item in graph.ranked()
+        )
+
+    @staticmethod
+    def _relation_records(graph: ComponentGraph) -> tuple[dict[str, object], ...]:
+        return tuple(
+            {
+                "source_id": item.source_id,
+                "target_id": item.target_id,
+                "relation_type": item.relation_type,
+            }
+            for item in graph.relations
+        )
