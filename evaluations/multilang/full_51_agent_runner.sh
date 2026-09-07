@@ -115,9 +115,17 @@ start_background() {
     show_status
     return 0
   fi
-  nohup env DPRAUTO_RUN_ID="$RUN_ID" bash "$0" _worker \
-    >>"$LOG_FILE" 2>&1 </dev/null &
-  echo "后台 51 项 Agent/LLM 评测已启动，PID=$!"
+  rm -f "$PID_FILE"
+  setsid -f env DPRAUTO_RUN_ID="$RUN_ID" bash "$0" _worker \
+    >>"$LOG_FILE" 2>&1 </dev/null
+  sleep 1
+  local running
+  running="$(runner_pids | paste -sd, -)"
+  if [[ -z "$running" ]]; then
+    echo "后台执行器未能保持运行，请查看 $LOG_FILE" >&2
+    return 1
+  fi
+  echo "后台 51 项 Agent/LLM 评测已启动，PID=$running"
   echo "查看状态: DPRAUTO_RUN_ID=$RUN_ID $0 status"
   echo "查看日志: DPRAUTO_RUN_ID=$RUN_ID $0 log"
 }
