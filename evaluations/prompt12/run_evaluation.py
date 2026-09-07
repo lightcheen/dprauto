@@ -43,6 +43,11 @@ EVALUATION_IDENTITY_SCHEMA = 1
 SUMMARY_SCHEMA_VERSION = 4
 WORKSPACE_IGNORED_NAMES = (
     ".git",
+    ".agents",
+    ".claude",
+    ".codex",
+    ".kiro",
+    ".openclaw",
     ".venv",
     "venv",
     "node_modules",
@@ -309,12 +314,25 @@ def copy_workspace(source: Path, target: Path) -> None:
     if target.exists():
         return
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
-        source,
-        target,
-        symlinks=False,
-        ignore=shutil.ignore_patterns(*WORKSPACE_IGNORED_NAMES),
-    )
+    temporary = target.with_name(f".{target.name}.copying-{time.time_ns()}")
+    try:
+        # Preserve repository symlinks instead of dereferencing them. Following a
+        # cyclic or out-of-tree link can recurse forever, copy unrelated host
+        # files, or fail after leaving a partial workspace behind.
+        shutil.copytree(
+            source,
+            temporary,
+            symlinks=True,
+            ignore=shutil.ignore_patterns(*WORKSPACE_IGNORED_NAMES),
+        )
+        try:
+            temporary.replace(target)
+        except FileExistsError:
+            # A concurrent evaluator completed the same immutable workspace.
+            pass
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
 
 
 @lru_cache(maxsize=1)

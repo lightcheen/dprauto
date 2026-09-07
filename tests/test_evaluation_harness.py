@@ -10,6 +10,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from evaluations.prompt12.run_evaluation import (
+    copy_workspace,
     ensure_docker_networks,
     ensure_poetry_tool_images,
     evaluation_identity,
@@ -41,6 +42,30 @@ BASELINE = (
 
 
 class EvaluationHarnessTests(unittest.TestCase):
+    def test_copy_workspace_preserves_symlinks_without_following_cycles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            target = root / "target"
+            source.mkdir()
+            (source / "project.txt").write_text("project\n", encoding="utf-8")
+            cyclic = source / "cyclic"
+            cyclic.mkdir()
+            (cyclic / "self").symlink_to(".", target_is_directory=True)
+            (source / ".openclaw").mkdir()
+            (source / ".openclaw" / "self").symlink_to(
+                ".", target_is_directory=True
+            )
+
+            copy_workspace(source, target)
+
+            self.assertEqual(
+                (target / "project.txt").read_text(encoding="utf-8"), "project\n"
+            )
+            self.assertTrue((target / "cyclic" / "self").is_symlink())
+            self.assertFalse((target / ".openclaw").exists())
+            self.assertFalse(any(root.glob(".target.copying-*")))
+
     def test_required_poetry_versions_follow_selected_project_constraint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source"
