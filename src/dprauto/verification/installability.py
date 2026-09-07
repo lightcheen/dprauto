@@ -5,11 +5,17 @@ from __future__ import annotations
 import re
 from pathlib import PurePosixPath
 
-from dprauto.domain.enums import BuildStatus, VerificationLevel, VerificationStatus
-from dprauto.domain.models import VerificationCheck, VerificationResult
+from dprauto.config import VerificationConfig
+from dprauto.domain.enums import (
+    BuildStatus,
+    CommandPurpose,
+    VerificationLevel,
+    VerificationStatus,
+)
+from dprauto.domain.models import CommandSpec, VerificationCheck, VerificationResult
 from dprauto.ports.runtime import ContainerRuntime
 from dprauto.ports.verification import VerificationContext
-from dprauto.time_budget import time_budget_exhausted
+from dprauto.time_budget import clamped_timeout_seconds, time_budget_exhausted
 from dprauto.verification.common import aggregate_status, verification_id
 
 _INSTALL_PATTERN = re.compile(
@@ -29,13 +35,19 @@ _DEPENDENCY_BUILD_SYSTEMS = {
     "maven",
     "meson",
 }
+_INSTALLATION_HEALTH_MARKER = "DPRAUTO_INSTALL_HEALTH_OK"
 
 
 class InstallabilityVerifier:
     level = VerificationLevel.INSTALLABILITY
 
-    def __init__(self, runtime: ContainerRuntime) -> None:
+    def __init__(
+        self,
+        runtime: ContainerRuntime,
+        config: VerificationConfig | None = None,
+    ) -> None:
         self.runtime = runtime
+        self.config = config or VerificationConfig()
 
     def supports(self, profile, level: VerificationLevel) -> bool:
         return level is self.level
@@ -126,7 +138,18 @@ class InstallabilityVerifier:
                 "working_directory": inspection.working_directory if inspection else "",
             },
         )
-        checks = (build_check, dependency_check, target_check, image_check)
+        health_check = self._installation_health_check(
+            context,
+            image_reference,
+            prerequisites_ok=build_ok and dependency_ok and image_ok,
+        )
+        checks = (
+            build_check,
+            dependency_check,
+            target_check,
+            image_check,
+            health_check,
+        )
         status = aggregate_status(checks)
         return VerificationResult(
             verification_id(self.level),
@@ -135,8 +158,214 @@ class InstallabilityVerifier:
             command_result=build_check.command_result,
             evidence=result.logs,
             summary="installability passed" if status is VerificationStatus.PASSED else "installability failed",
-            metadata={"image_reference": image_reference},
+            metadata={
+                "image_reference": image_reference,
+                "installation_health_probe": health_check.metadata.get(
+                    "probe_type", ""
+                ),
+                "installation_health_evidence_mode": health_check.metadata.get(
+                    "evidence_mode", ""
+                ),
+                "checked_dynamic_artifacts": health_check.metadata.get(
+                    "checked_dynamic_artifacts", 0
+                ),
+            },
             checks=checks,
+        )
+
+    def _installation_health_check(
+        self,
+        context: VerificationContext,
+        image_reference: str,
+        *,
+        prerequisites_ok: bool,
+    ) -> VerificationCheck:
+        if not prerequisites_ok:
+            return VerificationCheck(
+                "installation-health",
+                VerificationStatus.SKIPPED,
+                "installation health probe skipped because a prerequisite check failed",
+                metadata={"probe_type": "", "skip_reason": "prerequisite-failed"},
+            )
+        selected = self._installation_health_probe(context)
+        if selected is None:
+            return VerificationCheck(
+                "installation-health",
+                VerificationStatus.SKIPPED,
+                "no bounded installation health probe supports this language family",
+                metadata={"probe_type": "", "skip_reason": "unsupported-language"},
+            )
+        probe, probe_type = selected
+        timeout_seconds = clamped_timeout_seconds(
+            self.config.dependency_command_timeout_seconds,
+            context.deadline_at,
+        )
+        if timeout_seconds <= 0:
+            return VerificationCheck(
+                "installation-health",
+                VerificationStatus.ERROR,
+                "workflow time budget exceeded before installation health probe",
+                metadata={"probe_type": probe_type},
+            )
+        command = CommandSpec(
+            (probe,),
+            purpose=CommandPurpose.TEST,
+            timeout_seconds=timeout_seconds,
+            shell=True,
+        )
+        execution = self.runtime.run_image(
+            image_reference,
+            command,
+            timeout_seconds=timeout_seconds,
+        )
+        output = execution.output_excerpt
+        probe_succeeded = bool(
+            execution.command_result.succeeded
+            and _INSTALLATION_HEALTH_MARKER in output
+        )
+        mode_match = re.search(
+            r"DPRAUTO_INSTALL_HEALTH_MODE=([A-Za-z0-9_.+-]+)", output
+        )
+        evidence_mode = mode_match.group(1) if mode_match else ""
+        dynamic_count_match = re.search(r"DPRAUTO_NATIVE_DYNAMIC_COUNT=(\d+)", output)
+        checked_dynamic_artifacts = (
+            int(dynamic_count_match.group(1)) if dynamic_count_match else 0
+        )
+        limited_evidence = evidence_mode in {
+            "metadata",
+            "no-dynamic-artifacts",
+            "pip-check-project-clean-tool-conflicts",
+            "unavailable",
+        }
+        status = (
+            VerificationStatus.FAILED
+            if not probe_succeeded
+            else VerificationStatus.SKIPPED
+            if limited_evidence
+            else VerificationStatus.PASSED
+        )
+        if status is VerificationStatus.PASSED:
+            summary = f"installation health probe passed: {probe_type}"
+        elif status is VerificationStatus.SKIPPED:
+            summary = (
+                f"installation health probe had limited evidence: {probe_type} "
+                f"({evidence_mode})"
+            )
+        else:
+            summary = f"installation health probe failed: {probe_type}"
+        return VerificationCheck(
+            "installation-health",
+            status,
+            summary,
+            command_result=execution.command_result,
+            evidence=(
+                (execution.command_result.stdout,)
+                if execution.command_result.stdout
+                else ()
+            ),
+            metadata={
+                "probe_type": probe_type,
+                "evidence_mode": evidence_mode,
+                "checked_dynamic_artifacts": checked_dynamic_artifacts,
+                "output_excerpt": output,
+            },
+        )
+
+    @staticmethod
+    def _installation_health_probe(
+        context: VerificationContext,
+    ) -> tuple[str, str] | None:
+        languages = {value.casefold() for value in context.profile.languages}
+        managers = {value.casefold() for value in context.profile.package_managers}
+        if "python" in languages or managers & {"pip", "poetry", "pipenv", "uv", "pdm"}:
+            package_check = InstallabilityVerifier._python_package_check(
+                managers,
+                str(context.profile.metadata.get("project_name", "")),
+            )
+            return (
+                f"{package_check} && echo DPRAUTO_INSTALL_HEALTH_OK",
+                "python-pip-check",
+            )
+        if languages & {"java", "kotlin", "groovy"}:
+            return (
+                "java -version >/dev/null 2>&1 && "
+                "echo DPRAUTO_INSTALL_HEALTH_MODE=runtime-load && "
+                "echo DPRAUTO_INSTALL_HEALTH_OK",
+                "jvm-runtime-load",
+            )
+        if languages & {"c", "c++", "cpp"}:
+            system = str(
+                context.profile.metadata.get("primary_build_system", "")
+            ).casefold()
+            if not system:
+                system = next(
+                    (
+                        value
+                        for value in ("cmake", "meson", "autotools", "make")
+                        if value in managers
+                    ),
+                    "",
+                )
+            root = "build" if system in {"cmake", "meson"} else "."
+            return (
+                "if ! command -v ldd >/dev/null 2>&1; then "
+                "echo DPRAUTO_INSTALL_HEALTH_MODE=unavailable; "
+                "echo DPRAUTO_INSTALL_HEALTH_OK; exit 0; fi; "
+                f"find {root} -type f "
+                "\\( -perm -111 -o -name '*.so' -o -name '*.so.*' \\) "
+                "| sort | head -n 256 | { checked=0; "
+                "while IFS= read -r candidate; do "
+                "if linked=$(LC_ALL=C ldd \"$candidate\" 2>&1); then "
+                "checked=$((checked + 1)); "
+                "if printf '%s\\n' \"$linked\" | grep -q '=> not found'; then "
+                "printf '%s\\n' \"$candidate\" \"$linked\"; exit 1; fi; fi; done; "
+                "echo DPRAUTO_NATIVE_DYNAMIC_COUNT=$checked; "
+                "if [ \"$checked\" -gt 0 ]; then "
+                "echo DPRAUTO_INSTALL_HEALTH_MODE=dynamic-link-check; "
+                "else echo DPRAUTO_INSTALL_HEALTH_MODE=no-dynamic-artifacts; fi; } && "
+                "echo DPRAUTO_INSTALL_HEALTH_OK",
+                "native-dynamic-link-check",
+            )
+        return None
+
+    @staticmethod
+    def _python_package_check(managers: set[str], project_name: str) -> str:
+        """Check project packages without treating retained installer tools as runtime deps."""
+
+        normalized_project = re.sub(r"[-_.]+", "-", project_name.casefold())
+        ignored_tools = tuple(
+            tool
+            for tool in ("poetry", "pdm", "pipenv", "uv")
+            if tool in managers and tool != normalized_project
+        )
+        if ignored_tools:
+            tool_pattern = "|".join(re.escape(tool) for tool in ignored_tools)
+            pip_check = (
+                'if pip_output=$("$python_bin" -m pip check 2>&1); then '
+                'printf "%s\\n" "$pip_output"; '
+                "echo DPRAUTO_INSTALL_HEALTH_MODE=pip-check; "
+                "else printf \"%s\\n\" \"$pip_output\"; "
+                "project_issues=$(printf \"%s\\n\" \"$pip_output\" | "
+                f"grep -Eiv '^({tool_pattern})([[:space:]]|$)' || true); "
+                'if [ -n "$project_issues" ]; then '
+                'printf "%s\\n" "$project_issues"; exit 1; fi; '
+                "echo DPRAUTO_INSTALL_HEALTH_MODE="
+                "pip-check-project-clean-tool-conflicts; fi"
+            )
+        else:
+            pip_check = (
+                '"$python_bin" -m pip check && '
+                "echo DPRAUTO_INSTALL_HEALTH_MODE=pip-check"
+            )
+        return (
+            "python_bin=$(command -v python || command -v python3) || exit 1; "
+            "if command -v uv >/dev/null 2>&1; then "
+            "uv pip check && echo DPRAUTO_INSTALL_HEALTH_MODE=uv-pip-check; "
+            'elif "$python_bin" -m pip --version >/dev/null 2>&1; then '
+            f"{pip_check}; "
+            'else "$python_bin" -c '
+            '"import importlib.metadata as m; list(m.distributions())" '
+            "&& echo DPRAUTO_INSTALL_HEALTH_MODE=metadata; fi"
         )
 
     @staticmethod

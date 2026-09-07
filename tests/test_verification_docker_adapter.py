@@ -65,6 +65,7 @@ class DockerVerificationAdapterTests(unittest.TestCase):
                 create.index("fixture:image-with-entrypoint"),
             )
             self.assertEqual(create[create.index("--entrypoint") + 1], "/bin/sh")
+            self.assertEqual(create[-2], "-c")
             self.assertEqual(
                 create[create.index("--workdir") + 1],
                 "/workspace/modules/api",
@@ -248,6 +249,7 @@ class DockerVerificationAdapterTests(unittest.TestCase):
                 create[create.index("--workdir") + 1],
                 "/workspace/services/web",
             )
+            self.assertEqual(create[-2], "-c")
 
     def test_web_probe_uses_bridge_port_mapping_when_configured_network_is_host(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

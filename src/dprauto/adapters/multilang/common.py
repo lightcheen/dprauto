@@ -20,6 +20,28 @@ CI_ROOT_FILES = {
     "jenkinsfile",
 }
 
+_NON_PROJECT_EVIDENCE_DIRECTORIES = frozenset(
+    {
+        "3rdparty",
+        "deps",
+        "external",
+        "externals",
+        "third-party",
+        "third_party",
+        "vendor",
+        "vendors",
+    }
+)
+
+
+def _is_project_owned_evidence(path: str) -> bool:
+    """Reject documentation/CI bundled with vendored dependencies."""
+
+    return not any(
+        part.casefold() in _NON_PROJECT_EVIDENCE_DIRECTORIES
+        for part in PurePosixPath(path).parts[:-1]
+    )
+
 
 def depth(path: str) -> int:
     return len(PurePosixPath(path).parts)
@@ -30,6 +52,7 @@ def readme_files(scanned: ScannedProject) -> tuple[str, ...]:
         path
         for path in scanned.files
         if depth(path) <= 2
+        and _is_project_owned_evidence(path)
         and PurePosixPath(path).name.casefold().startswith(
             ("readme", "contributing", "building")
         )
@@ -42,10 +65,13 @@ def ci_files(scanned: ScannedProject) -> tuple[str, ...]:
     for path in scanned.files:
         normalized = PurePosixPath(path)
         name = normalized.name.casefold()
-        if name in CI_ROOT_FILES or (
+        if not _is_project_owned_evidence(path):
+            continue
+        if (len(normalized.parts) == 1 and name in CI_ROOT_FILES) or (
             len(normalized.parts) >= 3
             and normalized.parts[0] in {".github", ".gitea"}
             and normalized.parts[1] == "workflows"
+            and len(normalized.parts) == 3
             and normalized.suffix.casefold() in {".yml", ".yaml"}
         ):
             selected.append(path)

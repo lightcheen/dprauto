@@ -1,0 +1,97 @@
+[
+  {
+    "case": "java-guava",
+    "text": "Failed to execute goal maven-dependency-plugin:unpack-dependencies: The following artifacts could not be resolved: com.google.guava:guava-testlib:jar:test-sources:HEAD-jre-SNAPSHOT (absent)",
+    "category": "package_dependency"
+  },
+  {
+    "case": "java-lottie-android",
+    "text": "A problem occurred evaluating project ':lottie'. No .git directory found!",
+    "category": "policy"
+  },
+  {
+    "case": "java-androidutilcode",
+    "text": "Could not find com.android.tools.build:gradle:3.2.1. Searched in the following locations",
+    "category": "package_dependency"
+  },
+  {
+    "case": "java-caffeine",
+    "text": "Cannot find a Java installation matching the Daemon JVM defined requirements: JVM version '21'",
+    "category": "toolchain"
+  },
+  {
+    "case": "java-mockito",
+    "text": "java.lang.UnsupportedClassVersionError: Plugin has been compiled by a more recent version of the Java Runtime (class file version 61.0), this version only recognizes class file versions up to 55.0",
+    "category": "runtime_version"
+  },
+  {
+    "case": "java-eureka",
+    "text": "The following artifacts could not be resolved: com.netflix.archaius:archaius2-core:jar:0.7.8-SNAPSHOT (absent)",
+    "category": "package_dependency"
+  },
+  {
+    "case": "java-openfeign",
+    "text": "No toolchain found for type jdk",
+    "category": "toolchain"
+  },
+  {
+    "case": "py-scrapling",
+    "text": "HTTPSConnectionPool(host='pypi.org', port=443): Read timed out",
+    "category": "network"
+  },
+  {
+    "case": "py-sherlock-dockerfile",
+    "text": "ERROR: Invalid requirement: 'sherlock-project==': Expected end or semicolon",
+    "category": "dependency_conflict"
+  },
+  {
+    "case": "py-black-dockerfile",
+    "text": "hatchling.plugin.exceptions.UnknownPluginError: Unknown build hook: mypyc",
+    "category": "build_tool"
+  },
+  {
+    "case": "cpp-tesseract",
+    "text": "Package 'lept', required by 'virtual:world', not found",
+    "category": "system_dependency"
+  },
+  {
+    "case": "c-ffmpeg",
+    "text": "nasm not found or too old. Use --disable-x86asm for a crippled build.",
+    "category": "system_dependency"
+  },
+  {
+    "case": "cpp-aseprite",
+    "text": "xcb/xcb.h not found, install libxcb-dev",
+    "category": "system_dependency"
+  },
+  {
+    "case": "c-raylib",
+    "text": "Could NOT find X11 (missing: X11_X11_INCLUDE_PATH X11_X11_LIB)",
+    "category": "system_dependency"
+  },
+  {
+    "case": "cpp-rocksdb",
+    "text": "Could NOT find gflags (missing: gflags_DIR)",
+    "category": "system_dependency"
+  },
+  {
+    "case": "cpp-srs-registry",
+    "text": "load metadata for docker.io/library/ubuntu:focal: failed to read expected number of bytes: unexpected EOF",
+    "category": "network"
+  },
+  {
+    "case": "cpp-srs-fallback",
+    "text": "make: go: No such file or directory",
+    "category": "build_tool"
+  },
+  {
+    "case": "cpp-drogon",
+    "text": "Could not find a package configuration file provided by Jsoncpp",
+    "category": "system_dependency"
+  },
+  {
+    "case": "cpp-entt",
+    "text": "CMake 3.28 or higher is required. You are running version 3.25.1",
+    "category": "build_tool"
+  }
+]

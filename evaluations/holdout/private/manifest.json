@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "suite_id": "dprauto-sealed-holdout-12-20260902",
+  "visibility": "evaluator_only",
+  "created_on": "2026-09-02",
+  "selection_policy": {
+    "purpose": "Untuned cross-ecosystem generalization evaluation",
+    "no_development_runs": true,
+    "repositories_per_ecosystem": 2,
+    "revision_policy": "Use benchmark revisions where available; otherwise pin remote HEAD once at selection time."
+  },
+  "cases": [
+    {
+      "case_id": "holdout-001",
+      "ecosystem": "cpp",
+      "repository": "tesseract-ocr/tesseract",
+      "url": "https://github.com/tesseract-ocr/tesseract.git",
+      "revision": "76865fa087c15f5ea2f75f697993fc3b05eabaf2",
+      "source_origin": "cxxcrafter_top100"
+    },
+    {
+      "case_id": "holdout-002",
+      "ecosystem": "cpp",
+      "repository": "raysan5/raylib",
+      "url": "https://github.com/raysan5/raylib.git",
+      "revision": "9f3cadf1e618f125bd9b282c7759f8cb26ce17fc",
+      "source_origin": "cxxcrafter_top100"
+    },
+    {
+      "case_id": "holdout-003",
+      "ecosystem": "python",
+      "repository": "markqvist/reticulum",
+      "url": "https://github.com/markqvist/reticulum.git",
+      "revision": "6ded42edd7ae203e5a565cb70138c2d7b4b58b5b",
+      "source_origin": "envbench_python"
+    },
+    {
+      "case_id": "holdout-004",
+      "ecosystem": "python",
+      "repository": "pytest-dev/pytest-xdist",
+      "url": "https://github.com/pytest-dev/pytest-xdist.git",
+      "revision": "c7b4f6114479d4053f0ef8411ed5e0a410b207f4",
+      "source_origin": "envbench_python"
+    },
+    {
+      "case_id": "holdout-005",
+      "ecosystem": "jvm",
+      "repository": "apache/shiro",
+      "url": "https://github.com/apache/shiro.git",
+      "revision": "ec91417fbe5d2a05103ecf425d1f4394d8dd3f21",
+      "source_origin": "envbench_jvm"
+    },
+    {
+      "case_id": "holdout-006",
+      "ecosystem": "jvm",
+      "repository": "testng-team/testng",
+      "url": "https://github.com/testng-team/testng.git",
+      "revision": "0f779fe8a565d5e1024f34bc49e8a1c3df1ed8a7",
+      "source_origin": "envbench_jvm"
+    },
+    {
+      "case_id": "holdout-007",
+      "ecosystem": "node",
+      "repository": "expressjs/express",
+      "url": "https://github.com/expressjs/express.git",
+      "revision": "023767fe9872e029271df1418f73401bff20ff40",
+      "source_origin": "ecosystem_expansion_sentinel"
+    },
+    {
+      "case_id": "holdout-008",
+      "ecosystem": "node",
+      "repository": "fastify/fastify",
+      "url": "https://github.com/fastify/fastify.git",
+      "revision": "4cdb0c5def812f5773c952efdb79f1e99dcfae92",
+      "source_origin": "ecosystem_expansion_sentinel"
+    },
+    {
+      "case_id": "holdout-009",
+      "ecosystem": "go",
+      "repository": "go-chi/chi",
+      "url": "https://github.com/go-chi/chi.git",
+      "revision": "ae6be7469132cf471ca099d8c7bda4010c4ff7b2",
+      "source_origin": "ecosystem_expansion_sentinel"
+    },
+    {
+      "case_id": "holdout-010",
+      "ecosystem": "go",
+      "repository": "spf13/cobra",
+      "url": "https://github.com/spf13/cobra.git",
+      "revision": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "source_origin": "ecosystem_expansion_sentinel"
+    },
+    {
+      "case_id": "holdout-011",
+      "ecosystem": "rust",
+      "repository": "BurntSushi/ripgrep",
+      "url": "https://github.com/BurntSushi/ripgrep.git",
+      "revision": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+      "source_origin": "ecosystem_expansion_sentinel"
+    },
+    {
+      "case_id": "holdout-012",
+      "ecosystem": "rust",
+      "repository": "sharkdp/bat",
+      "url": "https://github.com/sharkdp/bat.git",
+      "revision": "0acf9417cd6d9635d927dda9f8e6ab5e57176fa4",
+      "source_origin": "ecosystem_expansion_sentinel"
+    }
+  ]
+}

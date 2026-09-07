@@ -120,7 +120,10 @@ class DockerContainerRuntime:
             create.extend(("--entrypoint", "/bin/sh"))
         create.append(image_reference)
         if command is not None:
-            create.extend(("-lc", command.display))
+            # A login shell may replace the image's ENV PATH via /etc/profile.
+            # Verification must preserve project virtual environments such as
+            # /workspace/.venv selected by the built image.
+            create.extend(("-c", command.display))
         created = subprocess.run(
             create, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False
         )
@@ -488,7 +491,7 @@ class DockerContainerRuntime:
             create.extend(("--entrypoint", "/bin/sh"))
         create.append(image_reference)
         if command is not None:
-            create.extend(("-lc", command.display))
+            create.extend(("-c", command.display))
         created = subprocess.run(
             create, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False
         )

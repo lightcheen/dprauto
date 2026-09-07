@@ -131,6 +131,66 @@ def test_lazy():
         self.assertFalse(plan.applied)
         self.assertIn("hashes", plan.reason)
 
+    def test_selected_import_installs_matching_project_extra(self) -> None:
+        (self.workspace / "pytest.ini").unlink()
+        (self.workspace / "tests" / "test_cache.py").write_text(
+            """try:
+    import requests_cache
+except ImportError as error:
+    raise RuntimeError("install the cache extra") from error
+""",
+            encoding="utf-8",
+        )
+        project = ProjectProfile(
+            "fixture",
+            SourceReference("fixture://optional-extra"),
+            package_managers=("pip",),
+            dependency_files=("pyproject.toml",),
+            metadata={
+                "safe_test_files": ("tests/test_cache.py",),
+                "optional_dependency_groups": {
+                    "cache": ("requests-cache", "requests-ratelimiter"),
+                },
+            },
+        )
+
+        plan = TestDependencyPlanner().plan(
+            project,
+            self.workspace,
+            ("tests/test_cache.py",),
+            command="python -m pytest tests/test_cache.py",
+        )
+
+        self.assertTrue(plan.applied)
+        self.assertTrue(plan.additive)
+        self.assertEqual(plan.mode, "repository-evidenced-augmentation")
+        self.assertEqual(plan.install_commands, ("python -m pip install '.[cache]'",))
+
+    def test_pytest_configuration_installs_required_plugin(self) -> None:
+        (self.workspace / "pytest.ini").unlink()
+        (self.workspace / "tox.ini").write_text(
+            "[testenv]\ncommands = pytest --asyncio-mode=strict\n",
+            encoding="utf-8",
+        )
+
+        plan = TestDependencyPlanner().plan(
+            ProjectProfile(
+                "fixture",
+                SourceReference("fixture://configured-plugin"),
+                metadata={"safe_test_files": ("tests/test_good.py",)},
+            ),
+            self.workspace,
+            ("tests/test_good.py",),
+            command="pytest tests/test_good.py",
+        )
+
+        self.assertTrue(plan.applied)
+        self.assertTrue(plan.additive)
+        self.assertEqual(
+            plan.install_commands,
+            ("python -m pip install pytest-asyncio",),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

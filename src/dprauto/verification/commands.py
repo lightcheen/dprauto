@@ -62,12 +62,34 @@ class TestCommandSelector:
         *,
         python_version: str = "",
     ) -> TestCommandSelection | None:
+        selections = self.select_candidates_with_details(
+            profile,
+            python_version=python_version,
+            max_candidates=1,
+        )
+        return selections[0] if selections else None
+
+    def select_candidates_with_details(
+        self,
+        profile: ProjectProfile,
+        *,
+        python_version: str = "",
+        max_candidates: int = 3,
+    ) -> tuple[TestCommandSelection, ...]:
+        if max_candidates <= 0:
+            return ()
         if self._required_environment(profile):
-            return None
-        test_files = self._metadata_paths(profile, "test_files")
-        safe_files = self._metadata_paths(profile, "safe_test_files")
+            return ()
+        test_files = self._primary_root_paths(
+            profile,
+            self._metadata_paths(profile, "test_files"),
+        )
+        safe_files = self._primary_root_paths(
+            profile,
+            self._metadata_paths(profile, "safe_test_files"),
+        )
         if test_files and not safe_files:
-            return None
+            return ()
         candidates: list[ProjectCommand] = []
         for item in profile.commands:
             if item.command.purpose is not CommandPurpose.TEST or is_smoke_command(item):
@@ -77,46 +99,62 @@ class TestCommandSelector:
                 continue
             if self._unsafe_test_candidate(profile, normalized):
                 continue
+            if not self._command_matches_primary_root(profile, normalized):
+                continue
             candidates.append(normalized)
         if not candidates:
-            return None
-        selected = min(
+            return ()
+        ordered = sorted(
             candidates,
             key=lambda item: (
                 self._command_rank(item.command.display),
                 self._runtime_rank(item.command.display, python_version),
+                self._primary_build_system_rank(profile, item.command.display),
                 self._source_rank(profile, item),
                 -item.confidence,
             ),
         )
-        selected = self._with_jvm_environment_options(profile, selected)
-        selected = self._bounded_matrix_command(profile, selected, python_version)
-        original = selected.command
-        bounded, targets, reason = self._bounded_local_command(profile, selected)
-        capture_safe = self._with_pytest_capture_disabled(profile, bounded)
-        parallel_safe = self._with_ctest_parallelism(capture_safe)
-        kinds: list[str] = []
-        if targets:
-            kinds.append("bounded-file-slice")
-        elif bounded.command != original:
-            kinds.append("coverage-normalized")
-        if capture_safe.command != bounded.command:
-            kinds.append("pytest-capture-disabled")
-            reason += (
-                "; disabled pytest output capture because project source rewraps "
-                "sys.stdout/sys.stderr at import time"
+        selections: list[TestCommandSelection] = []
+        seen: set[tuple[str, str]] = set()
+        for selected in ordered:
+            selected = self._with_jvm_environment_options(profile, selected)
+            selected = self._bounded_matrix_command(profile, selected, python_version)
+            original = selected.command
+            bounded, targets, reason = self._bounded_local_command(profile, selected)
+            capture_safe = self._with_pytest_capture_disabled(profile, bounded)
+            parallel_safe = self._with_ctest_parallelism(capture_safe)
+            key = (parallel_safe.command.cwd or ".", parallel_safe.command.display)
+            if key in seen:
+                continue
+            seen.add(key)
+            kinds: list[str] = []
+            if targets:
+                kinds.append("bounded-file-slice")
+            elif bounded.command != original:
+                kinds.append("coverage-normalized")
+            if capture_safe.command != bounded.command:
+                kinds.append("pytest-capture-disabled")
+                reason += (
+                    "; disabled pytest output capture because project source rewraps "
+                    "sys.stdout/sys.stderr at import time"
+                )
+            if parallel_safe.command != capture_safe.command:
+                kinds.append("ctest-bounded-parallel")
+                reason += (
+                    f"; bounded CTest concurrency to {self.max_parallel_workers} workers"
+                )
+            selections.append(
+                TestCommandSelection(
+                    parallel_safe,
+                    original,
+                    "+".join(kinds) or "project-command",
+                    targets,
+                    reason,
+                )
             )
-        if parallel_safe.command != capture_safe.command:
-            kinds.append("ctest-bounded-parallel")
-            reason += f"; bounded CTest concurrency to {self.max_parallel_workers} workers"
-        kind = "+".join(kinds) or "project-command"
-        return TestCommandSelection(
-            parallel_safe,
-            original,
-            kind,
-            targets,
-            reason,
-        )
+            if len(selections) >= max_candidates:
+                break
+        return tuple(selections)
 
     def _with_ctest_parallelism(self, command: ProjectCommand) -> ProjectCommand:
         if self.max_parallel_workers <= 1:
@@ -155,7 +193,10 @@ class TestCommandSelector:
         command: ProjectCommand,
     ) -> tuple[ProjectCommand, tuple[str, ...], str]:
         normalized = self._without_coverage_observation(command)
-        safe_files = self._metadata_paths(profile, "safe_test_files")
+        safe_files = self._primary_root_paths(
+            profile,
+            self._metadata_paths(profile, "safe_test_files"),
+        )
         risk_files = tuple(
             dict.fromkeys(
                 (
@@ -164,7 +205,11 @@ class TestCommandSelector:
                 )
             )
         )
-        needs_targets = len(safe_files) > self.max_test_files or bool(risk_files)
+        needs_targets = (
+            len(safe_files) > self.max_test_files
+            or bool(risk_files)
+            or bool(profile.metadata.get("optional_dependency_groups"))
+        )
         if not needs_targets or not safe_files or command.command.cwd:
             reason = (
                 "removed coverage-only observation arguments"
@@ -315,6 +360,58 @@ class TestCommandSelector:
         return tuple(dict.fromkeys(selected))
 
     @staticmethod
+    def _primary_root_paths(
+        profile: ProjectProfile,
+        paths: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        roots = profile.metadata.get("project_roots", (".",))
+        if not isinstance(roots, (list, tuple)):
+            roots = (".",)
+        normalized_roots = tuple(
+            dict.fromkeys(
+                "." if value in {"", "."} else PurePosixPath(value).as_posix().strip("/")
+                for value in roots
+                if isinstance(value, str)
+                and not PurePosixPath(value).is_absolute()
+                and ".." not in PurePosixPath(value).parts
+            )
+        ) or (".",)
+        primary = str(profile.metadata.get("build_root", ".")).strip("/") or "."
+
+        def owner(path: str) -> str:
+            matches = [
+                root
+                for root in normalized_roots
+                if root == "." or path == root or path.startswith(root + "/")
+            ]
+            return max(matches, key=lambda value: len(PurePosixPath(value).parts))
+
+        return tuple(path for path in paths if owner(path) == primary)
+
+    @classmethod
+    def _command_matches_primary_root(
+        cls,
+        profile: ProjectProfile,
+        command: ProjectCommand,
+    ) -> bool:
+        primary = str(profile.metadata.get("build_root", ".")).strip("/") or "."
+        roots = profile.metadata.get("project_roots", ())
+        if not isinstance(roots, (list, tuple)):
+            return True
+        nested = tuple(
+            value.strip("/")
+            for value in roots
+            if isinstance(value, str) and value not in {"", ".", primary}
+        )
+        cwd = (command.command.cwd or ".").strip("/") or "."
+        if primary != "." and not (cwd == primary or cwd.startswith(primary + "/")):
+            return False
+        if any(cwd == root or cwd.startswith(root + "/") for root in nested):
+            return False
+        source = command.source.strip("/")
+        return not any(source == root or source.startswith(root + "/") for root in nested)
+
+    @staticmethod
     def _required_environment(profile: ProjectProfile) -> tuple[str, ...]:
         values = profile.metadata.get("test_required_environment_variables", ())
         if not isinstance(values, (list, tuple)):
@@ -331,13 +428,23 @@ class TestCommandSelector:
 
     @staticmethod
     def _is_direct_pytest(command: str) -> bool:
+        if re.search(r"[;&|]", command):
+            return False
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return False
+        if not tokens:
+            return False
+        executable = PurePosixPath(tokens[0]).name.casefold()
+        if executable in {"pytest", "py.test"}:
+            return True
         return bool(
-            re.search(
-                r"(?:^|\s)(?:python\S*\s+-m\s+)?(?:pytest|py\.test)(?:\s|$)",
-                command,
-                re.IGNORECASE,
-            )
-        ) and not re.search(r"[;&|]", command)
+            executable.startswith("python")
+            and len(tokens) >= 3
+            and tokens[1].casefold() == "-m"
+            and tokens[2].casefold() in {"pytest", "py.test"}
+        )
 
     @staticmethod
     def _without_coverage_observation(command: ProjectCommand) -> ProjectCommand:
@@ -541,12 +648,12 @@ class TestCommandSelector:
             text.strip(),
         ):
             return 0
-        if re.search(r"\b(pytest|py\.test)\b", text):
+        if TestCommandSelector._is_direct_pytest(command):
             return 0
         if re.search(r"\bpython\S*\s+(?:manage\.py\s+test|runtests\.py)\b", text):
             return 0
         if re.search(r"\bpython\S*\s+[^ ]*(?:u?tests?)/[^ ]+\.py\b", text):
-            return 0
+            return 2
         if re.search(r"\bunittest\b", text):
             return 0
         if re.search(r"\b(tox|nox)\b", text):
@@ -598,7 +705,8 @@ class TestCommandSelector:
         source = command.source.casefold()
         if re.search(
             r"(?:^|[/_.-])(docs?|lint|format|fuzz|benchmarks?|integration|e2e|"
-            r"performance|slow|remote|release)(?:[/_.-]|$)",
+            r"performance|slow|remote|release|sycl|wasm|sanitizers?|universal|"
+            r"matetrack|freebsd)(?:[/_.-]|$)",
             source,
         ):
             return True
@@ -643,6 +751,20 @@ class TestCommandSelector:
             TestCommandSelector._normalize_python_version(item) for item in versions
         }
         return 0 if normalized in normalized_versions else 2
+
+    @staticmethod
+    def _primary_build_system_rank(profile: ProjectProfile, command: str) -> int:
+        """Prefer the standard test runner for the environment that was built."""
+
+        build_system = str(profile.metadata.get("primary_build_system", "")).casefold()
+        text = command.strip().casefold()
+        if build_system == "cmake":
+            return 0 if re.match(r"^ctest(?:\s|$)", text) else 1
+        if build_system == "meson":
+            return 0 if re.match(r"^meson\s+test(?:\s|$)", text) else 1
+        if build_system in {"make", "autotools"}:
+            return 0 if re.match(r"^(?:g?make)\s+(?:test|check)(?:\s|$)", text) else 1
+        return 0
 
     @staticmethod
     def _source_rank(profile: ProjectProfile, command: ProjectCommand) -> int:

@@ -102,6 +102,7 @@ class BuildConfig:
     timeout_seconds: int = 3600
     strategy_portfolio_enabled: bool = True
     max_strategy_attempts: int = 3
+    max_transient_retries: int = 1
     allow_network: bool = True
     forward_proxy_environment: bool = True
     use_cache: bool = True
@@ -129,6 +130,8 @@ class BuildConfig:
             raise ConfigurationError("build.timeout_seconds must be positive")
         if self.max_strategy_attempts <= 0:
             raise ConfigurationError("build.max_strategy_attempts must be positive")
+        if not 0 <= self.max_transient_retries <= 3:
+            raise ConfigurationError("build.max_transient_retries must be between 0 and 3")
         if not 1 <= self.max_build_jobs <= 32:
             raise ConfigurationError("build.max_build_jobs must be between 1 and 32")
         if self.poetry_tool_timeout_seconds <= 0:
@@ -202,6 +205,7 @@ class VerificationConfig:
     command_timeout_seconds: int = 300
     jvm_command_timeout_seconds: int = 900
     dependency_command_timeout_seconds: int = 180
+    native_test_preparation_timeout_seconds: int = 900
     web_startup_timeout_seconds: int = 30
     web_path: str = "/"
     output_excerpt_characters: int = 4_000
@@ -212,6 +216,7 @@ class VerificationConfig:
     nox_version: str = "2024.10.9"
     max_parallel_test_workers: int = 4
     max_test_files_per_slice: int = 8
+    max_test_command_candidates: int = 3
     service_orchestration_enabled: bool = True
     service_startup_timeout_seconds: int = 30
     max_service_containers: int = 2
@@ -228,6 +233,10 @@ class VerificationConfig:
         if self.dependency_command_timeout_seconds <= 0:
             raise ConfigurationError(
                 "verification.dependency_command_timeout_seconds must be positive"
+            )
+        if self.native_test_preparation_timeout_seconds <= 0:
+            raise ConfigurationError(
+                "verification.native_test_preparation_timeout_seconds must be positive"
             )
         if self.web_startup_timeout_seconds <= 0:
             raise ConfigurationError("verification.web_startup_timeout_seconds must be positive")
@@ -257,6 +266,10 @@ class VerificationConfig:
         if not 1 <= self.max_test_files_per_slice <= 32:
             raise ConfigurationError(
                 "verification.max_test_files_per_slice must be between 1 and 32"
+            )
+        if not 1 <= self.max_test_command_candidates <= 8:
+            raise ConfigurationError(
+                "verification.max_test_command_candidates must be between 1 and 8"
             )
         if self.service_startup_timeout_seconds <= 0:
             raise ConfigurationError(
@@ -382,6 +395,11 @@ def load_config(
             get("BUILD_MAX_STRATEGY_ATTEMPTS", "3"),
             "BUILD_MAX_STRATEGY_ATTEMPTS",
         ),
+        max_transient_retries=_read_int(
+            get("BUILD_MAX_TRANSIENT_RETRIES", "1"),
+            "BUILD_MAX_TRANSIENT_RETRIES",
+            minimum=0,
+        ),
         allow_network=_read_bool(get("BUILD_ALLOW_NETWORK", "true"), "BUILD_ALLOW_NETWORK"),
         forward_proxy_environment=_read_bool(
             get("BUILD_FORWARD_PROXY_ENVIRONMENT", "true"),
@@ -470,6 +488,10 @@ def load_config(
             get("VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS", "180"),
             "VERIFICATION_DEPENDENCY_COMMAND_TIMEOUT_SECONDS",
         ),
+        native_test_preparation_timeout_seconds=_read_int(
+            get("VERIFICATION_NATIVE_TEST_PREPARATION_TIMEOUT_SECONDS", "900"),
+            "VERIFICATION_NATIVE_TEST_PREPARATION_TIMEOUT_SECONDS",
+        ),
         web_startup_timeout_seconds=_read_int(
             get("VERIFICATION_WEB_STARTUP_TIMEOUT_SECONDS", "30"),
             "VERIFICATION_WEB_STARTUP_TIMEOUT_SECONDS",
@@ -493,6 +515,11 @@ def load_config(
         max_test_files_per_slice=_read_int(
             get("VERIFICATION_MAX_TEST_FILES_PER_SLICE", "8"),
             "VERIFICATION_MAX_TEST_FILES_PER_SLICE",
+            minimum=1,
+        ),
+        max_test_command_candidates=_read_int(
+            get("VERIFICATION_MAX_TEST_COMMAND_CANDIDATES", "3"),
+            "VERIFICATION_MAX_TEST_COMMAND_CANDIDATES",
             minimum=1,
         ),
         service_orchestration_enabled=_read_bool(

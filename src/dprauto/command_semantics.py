@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+from pathlib import PurePosixPath
 
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import CommandSpec, ProjectCommand, ProjectProfile
@@ -105,6 +107,7 @@ def select_run_command(profile: ProjectProfile) -> ProjectCommand | None:
         item
         for item in profile.commands
         if item.command.purpose is CommandPurpose.RUN and not is_smoke_command(item)
+        and not _unavailable_runtime_wrapper(profile, item.command.display)
     ]
     if profile.project_type is ProjectType.WEB:
         candidates = [
@@ -114,3 +117,19 @@ def select_run_command(profile: ProjectProfile) -> ProjectCommand | None:
     if selected is not None and profile.project_type is ProjectType.WEB:
         return _normalize_web_command(profile, selected)
     return selected
+
+
+def _unavailable_runtime_wrapper(profile: ProjectProfile, command: str) -> bool:
+    """Reject host/development launchers not present in the built runtime contract."""
+
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return True
+    if not tokens:
+        return True
+    executable = PurePosixPath(tokens[0]).name.casefold()
+    if executable in {"docker", "docker-compose"}:
+        return True
+    wrappers = {"pipenv", "poetry", "uv", "pdm", "hatch"}
+    return bool(executable in wrappers and executable not in profile.package_managers)

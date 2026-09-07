@@ -37,6 +37,8 @@ _FIXTURE_DISTRIBUTIONS = {
     "snapshot": "syrupy",
 }
 _PYTEST_CONFIG_DISTRIBUTIONS = {
+    "asyncio_mode": "pytest-asyncio",
+    "DJANGO_SETTINGS_MODULE": "pytest-django",
     "env": "pytest-env",
 }
 _DISTRIBUTION_EXECUTABLES = {"pytest-git": "git"}
@@ -63,6 +65,7 @@ class TestDependencyPlan:
     unresolved_imports: tuple[str, ...] = ()
     excluded_targets: tuple[str, ...] = ()
     required_executables: tuple[str, ...] = ()
+    additive: bool = False
     reason: str = "use the project's declared test dependency source"
 
 
@@ -110,7 +113,11 @@ class TestDependencyPlanner:
             return TestDependencyPlan(targets=targets)
         source = self._broad_requirement_source(profile)
         if not source:
-            return TestDependencyPlan(targets=targets)
+            return self._optional_and_config_augmentation(
+                profile,
+                workspace,
+                targets,
+            )
         entries = self._requirements(workspace, source)
         if entries is None:
             return TestDependencyPlan(
@@ -232,6 +239,118 @@ class TestDependencyPlanner:
                 if changed
                 else "sliced broad dev requirements to imports used by selected tests"
             ),
+        )
+
+    def _optional_and_config_augmentation(
+        self,
+        profile: ProjectProfile,
+        workspace: Path,
+        targets: tuple[str, ...],
+    ) -> TestDependencyPlan:
+        raw_groups = profile.metadata.get("optional_dependency_groups", {})
+        groups = raw_groups if isinstance(raw_groups, Mapping) else {}
+        entries: list[_RequirementEntry] = []
+        group_by_distribution: dict[str, str] = {}
+        for group, values in list(groups.items())[:64]:
+            if not isinstance(group, str) or not isinstance(values, (list, tuple)):
+                continue
+            for value in values[:256]:
+                if not isinstance(value, str):
+                    continue
+                distribution = self._canonical(value)
+                if not _REQUIREMENT_NAME.fullmatch(distribution):
+                    continue
+                roots = _CANONICAL_IMPORTS.get(
+                    distribution,
+                    (distribution.replace("-", "_"),),
+                )
+                entries.append(_RequirementEntry(distribution, distribution, roots))
+                group_by_distribution.setdefault(distribution, group)
+
+        config_distributions = self._pytest_config_distributions(workspace)
+        if not entries and not config_distributions:
+            return TestDependencyPlan(targets=targets)
+        entry_by_import = {
+            root.casefold(): entry
+            for entry in entries
+            for root in entry.import_roots
+        }
+        entry_by_distribution = {entry.distribution: entry for entry in entries}
+        provided_roots = self._runtime_import_roots(profile) | {"pytest"}
+        analyses = tuple(
+            self._analyze_target(
+                workspace,
+                target,
+                provided_roots=provided_roots,
+                entry_by_import=entry_by_import,
+                entry_by_distribution=entry_by_distribution,
+                config_distributions=(),
+            )
+            for target in targets
+        )
+        required = {
+            distribution
+            for item in analyses
+            for distribution in item.required_distributions
+        }
+        selected_groups = tuple(
+            dict.fromkeys(
+                group_by_distribution[distribution]
+                for distribution in sorted(required)
+                if distribution in group_by_distribution
+            )
+        )
+        declared_group_distributions: set[str] = set()
+        for mapping_name, selection_name in (
+            ("optional_dependency_groups", "test_dependency_extras"),
+            ("manager_dependency_groups", "test_dependency_manager_groups"),
+        ):
+            mapping = profile.metadata.get(mapping_name, {})
+            selected = profile.metadata.get(selection_name, ())
+            if not isinstance(mapping, Mapping) or not isinstance(selected, (list, tuple)):
+                continue
+            for group in selected:
+                values = mapping.get(group, ())
+                if not isinstance(values, (list, tuple)):
+                    continue
+                declared_group_distributions.update(
+                    self._canonical(value)
+                    for value in values
+                    if isinstance(value, str)
+                )
+        direct_plugins = tuple(
+            distribution
+            for distribution in config_distributions
+            if distribution not in required
+            and distribution not in declared_group_distributions
+            and distribution not in self._runtime_import_roots(profile)
+        )
+        commands: list[str] = []
+        if selected_groups:
+            rendered = ",".join(selected_groups)
+            commands.append(f"python -m pip install {shlex.quote(f'.[{rendered}]')}")
+        if direct_plugins:
+            rendered = " ".join(shlex.quote(item) for item in direct_plugins)
+            commands.append(f"python -m pip install {rendered}")
+        if not commands:
+            return TestDependencyPlan(targets=targets)
+        return TestDependencyPlan(
+            applied=True,
+            mode="repository-evidenced-augmentation",
+            source="project extras and pytest configuration",
+            install_commands=tuple(commands),
+            targets=targets,
+            analyzed_files=tuple(
+                dict.fromkeys(path for item in analyses for path in item.analyzed_files)
+            ),
+            import_roots=tuple(
+                sorted({root for item in analyses for root in item.import_roots})
+            ),
+            selected_requirements=tuple(
+                (*selected_groups, *direct_plugins)
+            ),
+            additive=True,
+            reason="install only extras and pytest plugins evidenced by the selected test slice",
         )
 
     @staticmethod
@@ -396,7 +515,14 @@ class TestDependencyPlanner:
                         )
                         for handler in statement.handlers
                     )
-                    if not optional:
+                    # A guarded import whose handler immediately raises is a
+                    # repository-declared hard test dependency, not an
+                    # optional feature that collection can safely skip.
+                    handler_raises = any(
+                        any(isinstance(node, ast.Raise) for node in ast.walk(handler))
+                        for handler in statement.handlers
+                    )
+                    if not optional or handler_raises:
                         visit(statement.body)
                     visit(statement.orelse)
                     visit(statement.finalbody)
@@ -477,14 +603,19 @@ class TestDependencyPlanner:
     @staticmethod
     def _pytest_config_distributions(workspace: Path) -> tuple[str, ...]:
         distributions: list[str] = []
-        pytest_ini = TestDependencyPlanner._safe_file(workspace, "pytest.ini")
-        if pytest_ini is not None:
+        for relative in ("pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"):
+            config = TestDependencyPlanner._safe_file(workspace, relative)
+            if config is None:
+                continue
             try:
-                content = pytest_ini.read_text(encoding="utf-8", errors="replace")
+                content = config.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 content = ""
             for option, distribution in _PYTEST_CONFIG_DISTRIBUTIONS.items():
-                if re.search(rf"(?m)^\s*{re.escape(option)}\s*=", content):
+                if re.search(
+                    rf"(?mi)(?:^\s*{re.escape(option)}\s*=|--{re.escape(option.replace('_', '-'))}\b)",
+                    content,
+                ):
                     distributions.append(distribution)
         return tuple(dict.fromkeys(distributions))
 

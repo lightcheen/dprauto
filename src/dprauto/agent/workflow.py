@@ -11,6 +11,7 @@ from typing import Any, Literal, Mapping
 
 from langgraph.graph import END, START, StateGraph
 
+from dprauto.adapters.failure import classify_failure_evidence
 from dprauto.agent.context import AgentContextManager, method_fingerprint
 from dprauto.agent.candidates import RepairCandidateManager
 from dprauto.agent.models import (
@@ -1038,32 +1039,45 @@ class AgentWorkflow:
         key_log = "\n".join(evidence_lines)[-12_000:]
         identity = f"{failed.level.value}\0{key_log or failed.summary}"
         fingerprint = f"verification:{hashlib.sha256(identity.encode()).hexdigest()[:16]}"
-        network_infrastructure = AgentWorkflow._verification_network_failure(key_log)
+        classified = classify_failure_evidence(key_log, stage)
+        rule = classified[0] if classified is not None else None
+        matched_evidence = classified[1] if classified is not None else ""
         return FailureInfo(
-            category=FailureCategory.NETWORK if network_infrastructure else category,
+            category=rule.category if rule is not None else category,
             failure_stage=stage,
             message=(
-                "Network operation failed"
-                if network_infrastructure
+                rule.message
+                if rule is not None
                 else f"{failed.level.value} verification did not pass"
             ),
             fingerprint=fingerprint,
             kind=(
-                BuildFailureKind.NETWORK
-                if network_infrastructure
+                rule.kind
+                if rule is not None
                 else BuildFailureKind.PROJECT_BUILD
             ),
             failed_command=(failed.command_results[-1].command if failed.command_results else None),
             key_log=key_log or failed.summary,
             possible_cause=(
-                "DNS, proxy, registry, or package download connectivity is unavailable or unstable"
-                if network_infrastructure
+                rule.possible_cause
+                if rule is not None
                 else "one or more layered environment checks failed"
             ),
-            evidence=tuple(evidence_lines),
-            retryable=True,
-            infrastructure_related=network_infrastructure,
-            confidence=1.0,
+            evidence=tuple(
+                dict.fromkeys(
+                    (*evidence_lines, *((matched_evidence,) if matched_evidence else ()))
+                )
+            ),
+            # Project-side verification failures remain eligible for an Agent
+            # repair, while infrastructure retry semantics come from the rule.
+            retryable=(
+                rule.retryable if rule is not None and rule.infrastructure_related else True
+            ),
+            infrastructure_related=(
+                rule.infrastructure_related if rule is not None else False
+            ),
+            confidence=rule.confidence if rule is not None else 1.0,
+            suggestions=rule.suggestions if rule is not None else (),
         )
 
     @staticmethod
@@ -1105,24 +1119,6 @@ class AgentWorkflow:
             ),
             retryable=True,
             confidence=1.0,
-        )
-
-    @staticmethod
-    def _verification_network_failure(key_log: str) -> bool:
-        normalized = key_log.casefold()
-        return any(
-            marker in normalized
-            for marker in (
-                "temporary failure in name resolution",
-                "could not resolve host",
-                "failed to establish a new connection",
-                "network is unreachable",
-                "connection timed out",
-                "connection reset",
-                "readtimeouterror",
-                "proxyerror",
-                "tls handshake timeout",
-            )
         )
 
     @staticmethod

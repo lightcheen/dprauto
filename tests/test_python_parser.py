@@ -116,6 +116,100 @@ sample = "sample.cli:main"
         self.assertEqual(profile.metadata["optional_entry_points"], ("sample",))
         self.assertNotIn("sample", command_texts(profile, CommandPurpose.RUN))
 
+    def test_console_entry_point_with_missing_target_is_not_a_runnable_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "actual_package").mkdir()
+            (root / "actual_package" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "setup.py").write_text(
+                """from setuptools import setup
+setup(
+    name='library-with-stale-script',
+    packages=['actual_package'],
+    entry_points={'console_scripts': ['sample=missing_sample:main']},
+)
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://stale-script"), root)
+
+        self.assertEqual(profile.project_type, ProjectType.LIBRARY)
+        self.assertEqual(profile.metadata["entry_points"], ())
+        self.assertEqual(profile.metadata["declared_entry_points"], ("sample",))
+        self.assertEqual(profile.metadata["invalid_entry_points"], ("sample",))
+
+    def test_nested_optional_feature_does_not_hide_valid_console_entry_point(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sample").mkdir()
+            (root / "sample" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "sample" / "cli.py").write_text(
+                """try:
+    from sample import version
+except ImportError:
+    version = 'unknown'
+
+def main(use_remote=False):
+    if use_remote:
+        try:
+            import optional_remote
+        except ImportError:
+            raise RuntimeError("install sample[remote]")
+    print(version)
+""",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                """[project]
+name = "sample"
+version = "1.0"
+[project.scripts]
+sample = "sample.cli:main"
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://feature-cli"), root)
+
+        self.assertEqual(profile.project_type, ProjectType.CLI)
+        self.assertEqual(profile.metadata["optional_entry_points"], ())
+        self.assertIn("sample", command_texts(profile, CommandPurpose.RUN))
+
+    def test_optional_and_manager_group_packages_are_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sample").mkdir()
+            (root / "sample" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "pyproject.toml").write_text(
+                """[project]
+name = "sample"
+version = "1.0"
+[project.optional-dependencies]
+server = ["aiohttp>=3.9", "requests-cache"]
+[dependency-groups]
+tests = ["pytest>=8", "pytest-asyncio"]
+[tool.poetry.group.dev.dependencies]
+pytest-mock = "^3.14"
+""",
+                encoding="utf-8",
+            )
+
+            profile = self.parser.parse(SourceReference("fixture://groups"), root)
+
+        self.assertEqual(
+            profile.metadata["optional_dependency_groups"]["server"],
+            ("aiohttp", "requests-cache"),
+        )
+        self.assertEqual(
+            profile.metadata["manager_dependency_groups"]["tests"],
+            ("pytest", "pytest-asyncio"),
+        )
+        self.assertEqual(
+            profile.metadata["manager_dependency_groups"]["dev"],
+            ("pytest-mock",),
+        )
+
     def test_same_command_text_is_preserved_for_distinct_purposes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

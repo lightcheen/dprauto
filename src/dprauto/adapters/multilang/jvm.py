@@ -77,6 +77,10 @@ class JVMProjectParser:
             java_target_version,
             target_version_evidence,
         ) = self._java_version(scanned, build_systems)
+        build_tool_constraints, build_tool_version_evidence = self._build_tool_versions(
+            scanned,
+            build_systems,
+        )
         language_counts = self.language_detector.counts(scanned)
         languages = tuple(
             language
@@ -129,6 +133,8 @@ class JVMProjectParser:
                 "java_version_evidence": version_evidence,
                 "java_target_version": java_target_version,
                 "java_target_version_evidence": target_version_evidence,
+                "build_tool_constraints": build_tool_constraints,
+                "build_tool_version_evidence": build_tool_version_evidence,
                 "language_file_counts": language_counts,
                 "test_commands": test_commands,
                 "maven_git_hook_install_source": maven_git_hook_install_source,
@@ -279,6 +285,8 @@ class JVMProjectParser:
             "build.gradle.kts",
             "gradle.properties",
             "gradlew",
+            "gradle-wrapper.properties",
+            "maven-wrapper.properties",
             "mvnw",
             "pom.xml",
             "settings.gradle",
@@ -297,6 +305,8 @@ class JVMProjectParser:
             "build.gradle.kts",
             "gradle.properties",
             "libs.versions.toml",
+            "gradle-wrapper.properties",
+            "maven-wrapper.properties",
             "pom.xml",
             "settings.gradle",
             "settings.gradle.kts",
@@ -327,6 +337,34 @@ class JVMProjectParser:
             if match:
                 return match.group(1).strip()
         return ""
+
+    @staticmethod
+    def _build_tool_versions(
+        scanned: ScannedProject,
+        systems: tuple[str, ...],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        constraints: dict[str, str] = {}
+        evidence: dict[str, str] = {}
+        candidates = (
+            (
+                "gradle",
+                "gradle/wrapper/gradle-wrapper.properties",
+                r"gradle-([0-9]+(?:\.[0-9]+){1,3})-(?:bin|all)\.zip",
+            ),
+            (
+                "maven",
+                ".mvn/wrapper/maven-wrapper.properties",
+                r"apache-maven-([0-9]+(?:\.[0-9]+){1,3})-bin\.zip",
+            ),
+        )
+        for system, path, pattern in candidates:
+            if system not in systems:
+                continue
+            match = re.search(pattern, scanned.read_text(path), re.IGNORECASE)
+            if match:
+                constraints[system] = match.group(1)
+                evidence[system] = f"{path}:distributionUrl"
+        return constraints, evidence
 
     @staticmethod
     def _subprojects(scanned: ScannedProject, systems: tuple[str, ...]) -> tuple[str, ...]:
@@ -450,7 +488,7 @@ class JVMProjectParser:
             commands.extend(
                 (
                     ExtractedCommand(
-                        f"{executable} -B -DskipTests package",
+                        f"{executable} -B -Dmaven.test.skip=true package",
                         CommandPurpose.BUILD,
                         source,
                         0.9,

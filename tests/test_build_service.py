@@ -1,7 +1,7 @@
+import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 
 from dprauto.adapters.storage import LocalArtifactStorage
@@ -60,7 +60,7 @@ class ScriptedStrategy:
         self.build_calls += 1
         now = datetime.now(timezone.utc)
         return BuildResult(
-            f"{self.name}-attempt",
+            f"{self.name}-attempt-{self.build_calls}",
             plan.plan_id,
             self.status,
             now,
@@ -79,17 +79,30 @@ class ScriptedStrategy:
         )
 
 
+class SequencedStrategy(ScriptedStrategy):
+    def __init__(self, name, outcomes, *, repair_surface=False):
+        status, failure = outcomes[0]
+        super().__init__(name, status, failure, repair_surface=repair_surface)
+        self.outcomes = outcomes
+
+    def build(self, plan, workspace, *, deadline_at=None):
+        index = min(self.build_calls, len(self.outcomes) - 1)
+        self.status, self.failure = self.outcomes[index]
+        return super().build(plan, workspace, deadline_at=deadline_at)
+
+
 class ScriptedClassifier:
     def classify(self, profile, plan, result):
         return result.metadata.get("scripted_failure")
 
 
-def project_failure(name="project failure", *, confidence=1.0):
+def project_failure(name="project failure", *, confidence=1.0, retryable=False):
     return FailureInfo(
         FailureCategory.BUILD_COMMAND,
         BuildStage.BUILD,
         name,
         name.replace(" ", "-"),
+        retryable=retryable,
         confidence=confidence,
     )
 
@@ -101,6 +114,18 @@ def infrastructure_failure():
         "docker unavailable",
         "docker-unavailable",
         kind=BuildFailureKind.DOCKER_INFRASTRUCTURE,
+        infrastructure_related=True,
+    )
+
+
+def network_failure(fingerprint="network-timeout"):
+    return FailureInfo(
+        FailureCategory.NETWORK,
+        BuildStage.BUILD,
+        "transient network failure",
+        fingerprint,
+        kind=BuildFailureKind.NETWORK,
+        retryable=True,
         infrastructure_related=True,
     )
 
@@ -157,6 +182,120 @@ class DeterministicBuildServiceTests(unittest.TestCase):
         self.assertEqual(tuple(item.plan.strategy for item in execution.attempts), ("docker",))
         self.assertEqual(second.build_calls, 0)
         self.assertTrue(execution.failure.infrastructure_related)
+
+    def test_transient_network_failure_retries_same_strategy_once_and_records_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            storage = LocalArtifactStorage(root / "artifacts")
+            first = SequencedStrategy(
+                "template",
+                (
+                    (BuildStatus.FAILED, network_failure()),
+                    (BuildStatus.SUCCEEDED, None),
+                ),
+            )
+            fallback = ScriptedStrategy("cnb", BuildStatus.SUCCEEDED)
+            builder = DeterministicBuildService(
+                StrategyRegistry((first, fallback)),
+                ScriptedClassifier(),
+                config=BuildConfig(max_transient_retries=1),
+                storage=storage,
+            )
+
+            execution = builder.build(
+                ProjectProfile("network-retry", SourceReference("fixture")),
+                root,
+            )
+
+            self.assertEqual(first.build_calls, 2)
+            self.assertEqual(fallback.build_calls, 0)
+            self.assertEqual(len(execution.attempts), 2)
+            self.assertEqual(execution.attempts[1].strategy_attempt_number, 2)
+            self.assertEqual(
+                execution.attempts[1].retry_of_attempt_id,
+                execution.attempts[0].result.attempt_id,
+            )
+            self.assertIn("after 1 transient retry", execution.selection_reason)
+            selection = json.loads(storage.load(execution.artifacts[0]))
+            self.assertEqual(selection["attempt_sequence"][1]["strategy_attempt_number"], 2)
+            self.assertEqual(
+                selection["attempt_sequence"][1]["retry_of_attempt_id"],
+                execution.attempts[0].result.attempt_id,
+            )
+            self.assertEqual(
+                selection["portfolio_result"]["metadata"][
+                    "portfolio_transient_retry_count"
+                ],
+                1,
+            )
+
+    def test_repeated_network_failure_stops_after_bounded_retry(self) -> None:
+        first = SequencedStrategy(
+            "template",
+            (
+                (BuildStatus.FAILED, network_failure("network-first")),
+                (BuildStatus.FAILED, network_failure("network-second")),
+                (BuildStatus.SUCCEEDED, None),
+            ),
+        )
+        fallback = ScriptedStrategy("cnb", BuildStatus.SUCCEEDED)
+        builder = DeterministicBuildService(
+            StrategyRegistry((first, fallback)),
+            ScriptedClassifier(),
+            config=BuildConfig(max_transient_retries=1),
+        )
+
+        execution = builder.build(
+            ProjectProfile("network-exhausted", SourceReference("fixture")),
+            Path.cwd(),
+        )
+
+        self.assertEqual(first.build_calls, 2)
+        self.assertEqual(fallback.build_calls, 0)
+        self.assertEqual(len(execution.attempts), 2)
+        self.assertIn("transient retry exhausted", execution.selection_reason)
+
+    def test_transient_retry_can_be_disabled(self) -> None:
+        first = SequencedStrategy(
+            "template",
+            (
+                (BuildStatus.FAILED, network_failure()),
+                (BuildStatus.SUCCEEDED, None),
+            ),
+        )
+        builder = DeterministicBuildService(
+            StrategyRegistry((first,)),
+            ScriptedClassifier(),
+            config=BuildConfig(max_transient_retries=0),
+        )
+
+        execution = builder.build(
+            ProjectProfile("network-no-retry", SourceReference("fixture")),
+            Path.cwd(),
+        )
+
+        self.assertEqual(first.build_calls, 1)
+        self.assertEqual(len(execution.attempts), 1)
+
+    def test_retryable_project_failure_is_not_rerun_unchanged(self) -> None:
+        first = ScriptedStrategy(
+            "template",
+            BuildStatus.FAILED,
+            project_failure("repairable project error", retryable=True),
+        )
+        builder = DeterministicBuildService(
+            StrategyRegistry((first,)),
+            ScriptedClassifier(),
+            config=BuildConfig(max_transient_retries=3),
+        )
+
+        execution = builder.build(
+            ProjectProfile("project-no-blind-retry", SourceReference("fixture")),
+            Path.cwd(),
+        )
+
+        self.assertEqual(first.build_calls, 1)
+        self.assertEqual(len(execution.attempts), 1)
 
     def test_portfolio_stops_on_timeout(self) -> None:
         first = ScriptedStrategy(

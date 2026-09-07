@@ -114,7 +114,16 @@ class PythonProjectParser:
         ci_files = self._ci_files(scanned)
         package_managers = self._package_managers(scanned, dependency_files)
         python_constraint, version_evidence = self._python_version(scanned, ci_files)
-        entry_points = self._entry_points(scanned)
+        entry_point_definitions = self._entry_point_definitions(scanned)
+        declared_entry_points = tuple(entry_point_definitions)
+        invalid_entry_points = tuple(
+            name
+            for name, module in entry_point_definitions.items()
+            if not self._entry_module_exists(scanned, module)
+        )
+        entry_points = tuple(
+            name for name in declared_entry_points if name not in invalid_entry_points
+        )
         optional_entry_points = self._optional_entry_points(scanned, entry_points)
         runtime_entry_points = tuple(
             entry for entry in entry_points if entry not in optional_entry_points
@@ -128,6 +137,9 @@ class PythonProjectParser:
         )
         test_dependency_extras, test_dependency_manager_groups = self._test_dependency_groups(
             scanned
+        )
+        optional_dependency_groups, manager_dependency_groups = (
+            self._dependency_group_requirements(scanned)
         )
         test_dependency_groups = tuple(
             dict.fromkeys((*test_dependency_extras, *test_dependency_manager_groups))
@@ -176,6 +188,11 @@ class PythonProjectParser:
                 str(pytest_parallel["factor"]),
             )
         scm_versioning = self._scm_versioning(scanned)
+        vcs_metadata_evidence = self._vcs_metadata_evidence(
+            scanned,
+            (*build_files, *dependency_files),
+        )
+        project_roots = self._project_roots(scanned)
         test_file_metadata = self._test_file_metadata(scanned)
         pytest_capture_files, pytest_capture_scan_truncated = (
             self._pytest_capture_incompatible_files(scanned)
@@ -202,6 +219,8 @@ class PythonProjectParser:
                 "import_modules": import_modules,
                 "python_version_evidence": version_evidence,
                 "entry_points": entry_points,
+                "declared_entry_points": declared_entry_points,
+                "invalid_entry_points": invalid_entry_points,
                 "optional_entry_points": optional_entry_points,
                 "dependency_names": tuple(sorted(dependencies)),
                 "runtime_dependency_names": tuple(sorted(runtime_dependencies)),
@@ -214,6 +233,8 @@ class PythonProjectParser:
                 "test_dependency_groups": test_dependency_groups,
                 "test_dependency_extras": test_dependency_extras,
                 "test_dependency_manager_groups": test_dependency_manager_groups,
+                "optional_dependency_groups": optional_dependency_groups,
+                "manager_dependency_groups": manager_dependency_groups,
                 "default_tox_env": default_tox_env,
                 "default_nox_session": default_nox_session,
                 "tox_environments": tox_environments,
@@ -222,6 +243,9 @@ class PythonProjectParser:
                 "pytest_capture_incompatible_files": pytest_capture_files,
                 "pytest_capture_scan_truncated": pytest_capture_scan_truncated,
                 "scm_versioning": scm_versioning,
+                "vcs_metadata_required": bool(vcs_metadata_evidence),
+                "vcs_metadata_evidence": vcs_metadata_evidence,
+                "project_roots": project_roots,
                 **framework_metadata,
                 **service_metadata,
                 **test_file_metadata,
@@ -231,6 +255,32 @@ class PythonProjectParser:
                 "scan_truncated": scanned.truncated,
             },
         )
+
+    @staticmethod
+    def _vcs_metadata_evidence(
+        scanned: ScannedProject,
+        files: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        pattern = re.compile(
+            r"(?i)(?:\bgit\s+(?:describe|rev-parse|log)\b|"
+            r"\bsetuptools[_-]scm\b|\bhatch-vcs\b|\bversioningit\b)"
+        )
+        return tuple(
+            path
+            for path in tuple(dict.fromkeys(files))[:128]
+            if pattern.search(scanned.read_text(path))
+        )[:16]
+
+    @staticmethod
+    def _project_roots(scanned: ScannedProject) -> tuple[str, ...]:
+        roots = {
+            PurePosixPath(path).parent.as_posix()
+            for path in scanned.files
+            if PurePosixPath(path).name.casefold()
+            in {"pyproject.toml", "setup.py", "setup.cfg", "tox.ini", "noxfile.py"}
+        }
+        roots.add(".")
+        return tuple(sorted(roots, key=lambda value: (len(PurePosixPath(value).parts), value)))
 
     @staticmethod
     def _depth(path: str) -> int:
@@ -328,6 +378,108 @@ class PythonProjectParser:
             )
         return tuple(dict.fromkeys(extras)), tuple(dict.fromkeys(manager_groups))
 
+    def _dependency_group_requirements(
+        self,
+        scanned: ScannedProject,
+    ) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+        """Record bounded package names for extras and manager-only groups."""
+
+        pyproject = scanned.read_text("pyproject.toml")
+        extras: dict[str, tuple[str, ...]] = {}
+        manager: dict[str, tuple[str, ...]] = {}
+
+        for section_name, target in (
+            ("project.optional-dependencies", extras),
+            ("tool.poetry.extras", extras),
+            ("dependency-groups", manager),
+            ("tool.pdm.dev-dependencies", manager),
+        ):
+            section = self._toml_section(pyproject, section_name)
+            for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=\s*\[", section):
+                values = self._bracketed_string_assignment(section, match.group(1))
+                packages = self._requirement_names(values)
+                if packages:
+                    target[match.group(1)] = packages
+
+        for match in re.finditer(
+            r"(?m)^\s*\[tool\.poetry\.group\.([A-Za-z0-9_.-]+)\.dependencies\]\s*$",
+            pyproject,
+        ):
+            section = self._toml_section(
+                pyproject,
+                f"tool.poetry.group.{match.group(1)}.dependencies",
+            )
+            packages = tuple(
+                dict.fromkeys(
+                    name.casefold().replace("_", "-")
+                    for name in re.findall(
+                        r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=",
+                        section,
+                    )
+                    if name.casefold() != "python"
+                )
+            )
+            if packages:
+                manager[match.group(1)] = packages[:256]
+
+        setup_cfg = scanned.read_text("setup.cfg")
+        extras_section = self._ini_section(setup_cfg, "options.extras_require")
+        for match in re.finditer(
+            r"(?ms)^\s*([A-Za-z0-9_.-]+)\s*=\s*\n(.*?)(?=^\S|\Z)",
+            extras_section,
+        ):
+            packages = self._requirement_names(match.group(2).splitlines())
+            if packages:
+                extras[match.group(1)] = packages
+
+        for name, values in self._setup_extras(scanned.read_text("setup.py")).items():
+            packages = self._requirement_names(values)
+            if packages:
+                extras[name] = packages
+        return extras, manager
+
+    @staticmethod
+    def _requirement_names(values) -> tuple[str, ...]:
+        names: list[str] = []
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", value)
+            if match:
+                names.append(match.group(1).casefold().replace("_", "-"))
+        return tuple(dict.fromkeys(names))[:256]
+
+    @staticmethod
+    def _setup_extras(content: str) -> dict[str, tuple[str, ...]]:
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            keyword = next(
+                (item for item in node.keywords if item.arg == "extras_require"),
+                None,
+            )
+            if keyword is None or not isinstance(keyword.value, ast.Dict):
+                continue
+            result: dict[str, tuple[str, ...]] = {}
+            for key, value in zip(keyword.value.keys, keyword.value.values):
+                if (
+                    not isinstance(key, ast.Constant)
+                    or not isinstance(key.value, str)
+                    or not isinstance(value, (ast.List, ast.Tuple))
+                ):
+                    continue
+                result[key.value] = tuple(
+                    item.value
+                    for item in value.elts
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                )
+            return result
+        return {}
+
     @staticmethod
     def _test_group_names(section: str, accepted: set[str]) -> tuple[str, ...]:
         """Recognize conventional and pytest-semantic dependency groups."""
@@ -371,6 +523,7 @@ class PythonProjectParser:
             in_test_tree = any(part.casefold() in {"test", "tests"} for part in pure.parts[:-1])
             is_test = path.endswith(".py") and (
                 name.startswith("test_")
+                or name.startswith("tests_")
                 or name.endswith("_test.py")
                 or (in_test_tree and name == "test.py")
             )
@@ -821,15 +974,17 @@ class PythonProjectParser:
         )
         return match.group(1) if match else ""
 
-    def _entry_points(self, scanned: ScannedProject) -> tuple[str, ...]:
-        entries: list[str] = []
+    def _entry_point_definitions(self, scanned: ScannedProject) -> dict[str, str]:
+        definitions: dict[str, str] = {}
         pyproject = scanned.read_text("pyproject.toml")
         for section_name in ("project.scripts", "tool.poetry.scripts"):
             section = self._toml_section(pyproject, section_name)
-            entries.extend(
-                match.group(1)
-                for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=\s*[\"'][^\"']+", section)
-            )
+            for match in re.finditer(
+                r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=\s*[\"']"
+                r"([A-Za-z_][A-Za-z0-9_.]*):[^\"']+[\"']",
+                section,
+            ):
+                definitions.setdefault(match.group(1), match.group(2))
 
         setup_py = scanned.read_text("setup.py")
         console_match = re.search(
@@ -838,11 +993,29 @@ class PythonProjectParser:
             re.DOTALL,
         )
         if console_match:
-            entries.extend(
-                match.group(1)
-                for match in re.finditer(r"[\"']\s*([A-Za-z0-9_.-]+)\s*=", console_match.group(1))
-            )
-        return tuple(dict.fromkeys(entries))
+            for match in re.finditer(
+                r"[\"']\s*([A-Za-z0-9_.-]+)\s*=\s*"
+                r"([A-Za-z_][A-Za-z0-9_.]*):",
+                console_match.group(1),
+            ):
+                definitions.setdefault(match.group(1), match.group(2))
+        return definitions
+
+    @staticmethod
+    def _entry_module_exists(scanned: ScannedProject, module: str) -> bool:
+        if not module or not all(part.isidentifier() for part in module.split(".")):
+            return False
+        relative = module.replace(".", "/")
+        candidates = {
+            f"{relative}.py",
+            f"{relative}/__init__.py",
+            f"src/{relative}.py",
+            f"src/{relative}/__init__.py",
+        }
+        if candidates.intersection(scanned.files):
+            return True
+        prefixes = (f"{relative}/", f"src/{relative}/")
+        return any(path.startswith(prefixes) for path in scanned.files)
 
     def _optional_entry_points(
         self,
@@ -853,34 +1026,52 @@ class PythonProjectParser:
 
         if not entry_points:
             return ()
-        pyproject = scanned.read_text("pyproject.toml")
-        definitions: dict[str, str] = {}
-        for section_name in ("project.scripts", "tool.poetry.scripts"):
-            section = self._toml_section(pyproject, section_name)
-            for match in re.finditer(
-                r"(?m)^\s*([A-Za-z0-9_.-]+)\s*=\s*[\"']([A-Za-z0-9_.]+):[^\"']+[\"']",
-                section,
-            ):
-                definitions[match.group(1)] = match.group(2)
+        definitions = self._entry_point_definitions(scanned)
         selected: list[str] = []
         for entry, module in definitions.items():
             module_path = module.replace(".", "/") + ".py"
             content = scanned.read_text(module_path)
             if not content:
                 content = scanned.read_text(module.replace(".", "/") + "/__init__.py")
-            if self._requires_optional_extra(content):
+            if self._requires_optional_extra(scanned, content):
                 selected.append(entry)
         return tuple(dict.fromkeys(selected))
 
-    @staticmethod
-    def _requires_optional_extra(content: str) -> bool:
-        return bool(
-            re.search(r"\bexcept\s+ImportError\b", content)
-            and re.search(
-                r"(?i)install[^\n]{0,160}\[[A-Za-z0-9_.-]+\]",
-                content,
+    @classmethod
+    def _requires_optional_extra(cls, scanned: ScannedProject, content: str) -> bool:
+        if not re.search(
+            r"(?i)install[^\n]{0,160}\[[A-Za-z0-9_.-]+\]",
+            content,
+        ):
+            return False
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return False
+        for statement in tree.body:
+            if not isinstance(statement, ast.Try) or not any(
+                handler.type is None
+                or isinstance(handler.type, ast.Name)
+                and handler.type.id in {"ImportError", "ModuleNotFoundError"}
+                for handler in statement.handlers
+            ):
+                continue
+            modules = tuple(
+                alias.name
+                for item in statement.body
+                if isinstance(item, ast.Import)
+                for alias in item.names
+            ) + tuple(
+                item.module or ""
+                for item in statement.body
+                if isinstance(item, ast.ImportFrom)
             )
-        )
+            if any(
+                module and not cls._entry_module_exists(scanned, module)
+                for module in modules
+            ):
+                return True
+        return False
 
     def _dependencies(
         self,
@@ -1007,8 +1198,14 @@ class PythonProjectParser:
             elif character == "]":
                 depth -= 1
                 if depth == 0:
-                    block = text[start + 1 : index]
-                    return tuple(re.findall(r"[\"']([^\"']+)[\"']", block))
+                    block = text[start : index + 1]
+                    try:
+                        values = ast.literal_eval(block)
+                    except (SyntaxError, ValueError):
+                        values = ()
+                    if isinstance(values, (list, tuple)):
+                        return tuple(value for value in values if isinstance(value, str))
+                    return ()
         return ()
 
     def _extract_commands(
@@ -1223,7 +1420,7 @@ class PythonProjectParser:
             target = scanned.read_text(module.replace(".", "/") + ".py")
             if not target:
                 target = scanned.read_text(module.replace(".", "/") + "/__init__.py")
-            if cls._requires_optional_extra(target):
+            if cls._requires_optional_extra(scanned, target):
                 return ""
         return ".".join(parts)
 

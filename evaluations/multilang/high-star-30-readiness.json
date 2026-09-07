@@ -1,0 +1,77 @@
+{
+  "case_count": 30,
+  "datasets": {
+    "cxxcrafter_top100": 10,
+    "envbench_jvm": 10,
+    "heragent_python": 10
+  },
+  "execution_performed": false,
+  "fetch_required_case_ids": [],
+  "ground_truth_review": {
+    "reviewed": 30
+  },
+  "ground_truth_sha256": "b280508ac6cbfef41acc450b90255600d2790b7afba02a83c3d717af1700615c",
+  "languages": {
+    "c": 2,
+    "cpp": 8,
+    "java": 10,
+    "python": 10
+  },
+  "legacy_python_baseline": "evaluations/baselines/python-21-m9-20260824.json",
+  "manifest_sha256": "67bae7f94e0a9d3e7fead47ddf6ce5d6960b2d60292541e2abe733bf05d09a2b",
+  "ready_case_ids": [
+    "java-guava",
+    "java-jadx",
+    "java-lottie-android",
+    "java-androidutilcode",
+    "java-caffeine",
+    "java-mockito",
+    "java-eureka",
+    "java-activiti",
+    "java-openfeign",
+    "java-wiremock",
+    "py-sherlock",
+    "py-scrapling",
+    "py-flask",
+    "py-rich",
+    "py-you-get",
+    "py-black",
+    "py-textual",
+    "py-poetry",
+    "py-tqdm",
+    "py-yfinance",
+    "cpp-tesseract",
+    "c-ffmpeg",
+    "cpp-aseprite",
+    "c-raylib",
+    "cpp-rocksdb",
+    "cpp-srs",
+    "cpp-xgboost",
+    "cpp-stockfish",
+    "cpp-drogon",
+    "cpp-entt"
+  ],
+  "required_services": {},
+  "required_system_executables": {
+    "c++": 8,
+    "cc": 2,
+    "cmake": 7,
+    "java": 10,
+    "make": 3,
+    "mvn": 1
+  },
+  "schema_version": 1,
+  "source_states": {
+    "ready": 30
+  },
+  "suite_id": "dprauto-multilang-high-star-30-20260903",
+  "tiers": {
+    "android-library": 2,
+    "cli": 9,
+    "desktop": 1,
+    "framework": 4,
+    "library": 12,
+    "service": 2
+  },
+  "validated": true
+}

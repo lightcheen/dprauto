@@ -26,6 +26,7 @@ from dprauto.strategies.common import (
     stable_image_reference,
     stable_plan_id,
 )
+from dprauto.strategies.context import generated_dockerignore
 
 
 def poetry_tool_image_reference(config: BuildConfig, python_version: str) -> str:
@@ -79,7 +80,13 @@ class TemplateStrategy:
         image = stable_image_reference(profile, self.config.image_repository)
         generated_files = (
             GeneratedFile("Dockerfile", dockerfile, media_type="text/x-dockerfile"),
-            GeneratedFile("setup.sh", setup_script, executable=True, media_type="text/x-shellscript"),
+            generated_dockerignore(profile),
+            GeneratedFile(
+                "setup.sh",
+                setup_script,
+                executable=True,
+                media_type="text/x-shellscript",
+            ),
         )
         argv = [
             self.config.docker_binary,

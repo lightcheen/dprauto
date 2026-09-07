@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - exercised by the real CLI invocation.
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 IDENTITY_SCHEMA_VERSION = 1
 RECORD_SCHEMA_VERSION = 1
-SUMMARY_SCHEMA_VERSION = 1
+SUMMARY_SCHEMA_VERSION = 3
 DEFAULT_CASE_TIMEOUT_SECONDS = 4_800
 
 
@@ -166,7 +166,7 @@ def _verification_statuses(report: Any) -> dict[str, str]:
 
 def _strict_verification_succeeded(report: Any) -> bool:
     statuses = _verification_statuses(report)
-    return all(
+    raw_passed = all(
         statuses.get(level.value) == VerificationStatus.PASSED.value
         for level in (
             VerificationLevel.INSTALLABILITY,
@@ -174,6 +174,13 @@ def _strict_verification_succeeded(report: Any) -> bool:
             VerificationLevel.RUNNABILITY,
         )
     )
+    runnability = report.result_for(VerificationLevel.RUNNABILITY)
+    runtime_proven = (
+        runnability.metadata.get("runtime_semantically_proven", True)
+        if runnability is not None
+        else False
+    )
+    return bool(raw_passed and runtime_proven)
 
 
 def _outcome(execution: Any, report: Any, error: str = "") -> dict[str, Any]:
@@ -302,16 +309,88 @@ def _percentile(values: list[float], fraction: float) -> float:
 
 
 def _record_layer_status(record: Mapping[str, Any], level: str) -> str:
+    result = _record_layer_result(record, level)
+    return str(result.get("status", "")) if result else ""
+
+
+def _record_layer_result(record: Mapping[str, Any], level: str) -> Mapping[str, Any]:
     verification = record.get("verification")
     if not isinstance(verification, dict):
-        return ""
+        return {}
     results = verification.get("results")
     if not isinstance(results, list):
-        return ""
+        return {}
     for result in results:
         if isinstance(result, dict) and result.get("level") == level:
-            return str(result.get("status", ""))
-    return ""
+            return result
+    return {}
+
+
+def _runnability_evidence(record: Mapping[str, Any]) -> tuple[str, str, str, bool]:
+    result = _record_layer_result(record, "runnability")
+    metadata = result.get("metadata") if isinstance(result, Mapping) else {}
+    if not isinstance(metadata, Mapping):
+        metadata = {}
+    status = str(result.get("status", ""))
+    outcome = str(metadata.get("runtime_outcome_category", ""))
+    strength = str(metadata.get("runtime_evidence_strength", ""))
+    contract = str(metadata.get("runtime_contract", ""))
+    if not result:
+        return "not-run", "none", "unknown", False
+    if not outcome:
+        checks = {
+            str(check.get("name", "")): check
+            for check in result.get("checks", ())
+            if isinstance(check, Mapping)
+        }
+        names = set(checks)
+        if status == "passed" and "web-http" in names:
+            outcome, strength, contract = "service-responsive", "strong", "service-health"
+        elif status == "passed" and "cli-output" in names:
+            outcome, strength, contract = "cli-invocable", "moderate", "cli-entrypoint"
+        elif status == "passed" and "script-observable-effect" in names:
+            outcome, strength, contract = (
+                "script-observable-execution",
+                "strong",
+                "script-observable-effect",
+            )
+        elif status == "passed" and "library-import" in names:
+            outcome, strength, contract = "python-library-import-only", "limited", "library-load"
+        elif status == "passed" and "library-artifact" in names:
+            observed = checks.get("library-artifact-or-tests", {}).get(
+                "metadata", {}
+            )
+            test_backed = bool(
+                isinstance(observed, Mapping)
+                and observed.get("project_tests_passed")
+            )
+            outcome, strength, contract = (
+                (
+                    "compiled-library-test-backed"
+                    if test_backed
+                    else "compiled-artifact-present"
+                ),
+                "moderate" if test_backed else "limited",
+                "compiled-library-availability",
+            )
+        elif status == "passed":
+            outcome, strength, contract = "runtime-command-passed", "moderate", "unknown"
+        else:
+            outcome, strength, contract = "runtime-command-failure", "none", contract or "unknown"
+    proven = metadata.get("runtime_semantically_proven")
+    if not isinstance(proven, bool):
+        proven = status == "passed" and strength in {"strong", "moderate"}
+    return outcome, strength or "none", contract or "unknown", bool(proven)
+
+
+def _record_strict_verification_succeeded(record: Mapping[str, Any]) -> bool:
+    return bool(
+        all(
+            _record_layer_status(record, level) == VerificationStatus.PASSED.value
+            for level in ("installability", "testability", "runnability")
+        )
+        and _runnability_evidence(record)[3]
+    )
 
 
 def summarize(
@@ -319,6 +398,7 @@ def summarize(
     *,
     suite_id: str,
     expected_case_count: int,
+    selected_indices: Sequence[int] = (),
     implementation_sha256: str,
     policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -337,6 +417,7 @@ def summarize(
         )
         for level in ("installability", "testability", "runnability")
     }
+    runtime_evidence = [_runnability_evidence(record) for record in records]
     languages: dict[str, dict[str, int]] = {}
     for language in sorted({str(record["case"]["primary_language"]) for record in records}):
         selected = [record for record in records if record["case"]["primary_language"] == language]
@@ -348,7 +429,13 @@ def summarize(
                 for record in selected
             ),
             "environment_succeeded": sum(record["outcome"]["status"] == "succeeded" for record in selected),
-            "strict_test_succeeded": sum(bool(record["outcome"].get("strict_test_succeeded")) for record in selected),
+            "strict_test_succeeded": sum(
+                _record_strict_verification_succeeded(record)
+                for record in selected
+            ),
+            "runnability_semantically_proven": sum(
+                _runnability_evidence(record)[3] for record in selected
+            ),
         }
     elapsed = [float(record.get("elapsed_seconds", 0.0)) for record in records]
     return {
@@ -358,6 +445,7 @@ def summarize(
         "agent_enabled": False,
         "llm_enabled": False,
         "expected_case_count": expected_case_count,
+        "selected_indices": list(selected_indices),
         "record_count": len(records),
         "complete": len(records) == expected_case_count,
         "implementation_sha256": implementation_sha256,
@@ -366,8 +454,25 @@ def summarize(
         "build_statuses": dict(sorted(build_counts.items())),
         "standard_build_success": build_counts["succeeded"],
         "environment_success": status_counts["succeeded"],
-        "strict_test_success": sum(bool(record["outcome"].get("strict_test_succeeded")) for record in records),
+        "strict_test_success": sum(
+            _record_strict_verification_succeeded(record) for record in records
+        ),
         "verification_layers": layer_counts,
+        "runnability_semantically_proven": sum(item[3] for item in runtime_evidence),
+        "artifact_only_runnability_pass": sum(
+            _record_layer_status(record, "runnability") == "passed"
+            and evidence[1] == "limited"
+            for record, evidence in zip(records, runtime_evidence)
+        ),
+        "runnability_outcome_categories": dict(
+            sorted(Counter(item[0] for item in runtime_evidence).items())
+        ),
+        "runtime_evidence_strength_distribution": dict(
+            sorted(Counter(item[1] for item in runtime_evidence).items())
+        ),
+        "runtime_contract_distribution": dict(
+            sorted(Counter(item[2] for item in runtime_evidence).items())
+        ),
         "languages": languages,
         "failure_categories": dict(
             sorted(
@@ -400,6 +505,10 @@ def summarize(
                 "installability": _record_layer_status(record, "installability"),
                 "testability": _record_layer_status(record, "testability"),
                 "runnability": _record_layer_status(record, "runnability"),
+                "runnability_semantically_proven": _runnability_evidence(record)[3],
+                "runnability_outcome_category": _runnability_evidence(record)[0],
+                "runtime_evidence_strength": _runnability_evidence(record)[1],
+                "runtime_contract": _runnability_evidence(record)[2],
                 "elapsed_seconds": record.get("elapsed_seconds", 0.0),
             }
             for record in records
@@ -479,7 +588,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for index, case in enumerate(manifest["cases"], start=1)
     }
     records: dict[int, dict[str, Any]] = {}
-    for index, case in enumerate(manifest["cases"], start=1):
+    for index in selected:
+        case = manifest["cases"][index - 1]
         record_path = output / "records" / f"{index:02d}-{case['case_id']}.json"
         cached = reusable_record(record_path, identities[index])
         if cached is not None:
@@ -517,7 +627,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         summary = summarize(
             ordered,
             suite_id=manifest["suite_id"],
-            expected_case_count=len(manifest["cases"]),
+            expected_case_count=len(selected),
+            selected_indices=selected,
             implementation_sha256=implementation_sha256,
             policy=policy,
         )

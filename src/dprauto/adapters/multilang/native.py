@@ -15,6 +15,7 @@ from dprauto.adapters.multilang.common import (
     safe_subproject,
 )
 from dprauto.adapters.multilang.detector import RepositoryLanguageDetector
+from dprauto.adapters.multilang.dependencies import NativeDependencyResolver
 from dprauto.domain.enums import CommandPurpose, ProjectType
 from dprauto.domain.models import ProjectProfile, SourceReference
 from dprauto.errors import ProjectParsingError
@@ -41,9 +42,11 @@ class NativeProjectParser:
         self,
         command_extractor: CommandExtractor | None = None,
         language_detector: RepositoryLanguageDetector | None = None,
+        dependency_resolver: NativeDependencyResolver | None = None,
     ) -> None:
         self.command_extractor = command_extractor or CommandExtractor()
         self.language_detector = language_detector or RepositoryLanguageDetector()
+        self.dependency_resolver = dependency_resolver or NativeDependencyResolver()
 
     def supports(self, scanned: ScannedProject) -> bool:
         has_build_root = any(
@@ -97,9 +100,19 @@ class NativeProjectParser:
         )
         standards = self._language_standards(scanned)
         subprojects = self._subprojects(scanned, build_systems)
-        cmake_arguments = self._cmake_configuration_arguments(scanned, build_systems)
+        cmake_arguments = self._cmake_configuration_arguments(
+            scanned,
+            build_systems,
+            enable_tests=False,
+        )
+        cmake_test_arguments = self._cmake_configuration_arguments(
+            scanned,
+            build_systems,
+            enable_tests=True,
+        )
         cmake_test_target = self._cmake_test_build_target(scanned, build_systems)
-        system_packages = self._system_dependency_packages(scanned, build_systems)
+        system_dependency_evidence = self.dependency_resolver.resolve(scanned, build_systems)
+        system_packages = self.dependency_resolver.packages(system_dependency_evidence)
         test_executables, test_executable_evidence = self._test_required_executables(scanned)
         project_id = f"{project_name}@{source.revision}" if source.revision else project_name
         build_pipeline = tuple(
@@ -134,13 +147,27 @@ class NativeProjectParser:
                 "project_name": project_name,
                 "build_systems": build_systems,
                 "primary_build_system": build_systems[0],
+                "make_build_target": (
+                    self._make_build_target(scanned.read_text("Makefile"))
+                    if "make" in build_systems
+                    else ""
+                ),
                 "subprojects": subprojects,
                 "working_directories": (".", *subprojects),
                 "language_file_counts": language_counts,
                 "build_pipeline": build_pipeline,
                 "cmake_configuration_arguments": cmake_arguments,
+                "cmake_test_configuration_arguments": cmake_test_arguments,
                 "cmake_test_build_target": cmake_test_target,
+                "cmake_version_evidence": (
+                    "CMakeLists.txt:cmake_minimum_required"
+                    if "cmake" in standards
+                    else ""
+                ),
                 "system_dependency_packages": system_packages,
+                "system_dependency_evidence": tuple(
+                    item.as_metadata() for item in system_dependency_evidence
+                ),
                 "test_required_executables": test_executables,
                 "test_prerequisite_evidence": test_executable_evidence,
                 "test_commands": test_commands,
@@ -231,6 +258,36 @@ class NativeProjectParser:
             match = re.search(r"AC_INIT\s*\(\s*\[?([^,\]\s]+)", configure)
             if match:
                 return match.group(1)
+        if "make" in systems:
+            executable = NativeProjectParser._make_executable_name(
+                scanned.read_text("Makefile")
+            )
+            if executable:
+                return executable
+        return ""
+
+    @staticmethod
+    def _make_executable_name(makefile: str) -> str:
+        """Return a stable Make executable variable, excluding expansions."""
+
+        for variable in ("EXE", "PROGRAM", "BINARY", "TARGET"):
+            matches = tuple(re.finditer(
+                rf"(?m)^\s*{variable}\s*(?::=|\?=|=)\s*([A-Za-z0-9_.+-]+)\s*$",
+                makefile,
+            ))
+            if matches:
+                # Conditional Make branches conventionally leave the portable
+                # default in the final ``else`` branch.
+                return matches[-1].group(1)
+        return ""
+
+    @staticmethod
+    def _make_build_target(makefile: str) -> str:
+        """Prefer an explicit conventional build target over Make's first target."""
+
+        for target in ("all", "build"):
+            if re.search(rf"(?m)^\s*{target}\s*:", makefile):
+                return target
         return ""
 
     @staticmethod
@@ -281,6 +338,25 @@ class NativeProjectParser:
             )
             if re.search(r"\bmain\s*\(", shallow_sources):
                 return ProjectType.CLI
+        if "make" in systems:
+            makefile = scanned.read_text("Makefile")
+            executable = NativeProjectParser._make_executable_name(makefile)
+            shallow_sources = "\n".join(
+                scanned.read_text(path)
+                for path in scanned.files
+                if depth(path) <= 2
+                and PurePosixPath(path).suffix.casefold()
+                in {".c", ".cc", ".cpp", ".cxx"}
+            )
+            if (
+                executable == project_name
+                and re.search(r"\bmain\s*\(", shallow_sources)
+                and re.search(
+                    r"(?m)^\s*(?:all|build)\s*:.*\$\((?:EXE|PROGRAM|BINARY|TARGET)\)",
+                    makefile,
+                )
+            ):
+                return ProjectType.CLI
         return ProjectType.LIBRARY
 
     @staticmethod
@@ -311,6 +387,10 @@ class NativeProjectParser:
     def _language_standards(scanned: ScannedProject) -> dict[str, str]:
         cmake = scanned.read_text("CMakeLists.txt")
         constraints: dict[str, str] = {}
+        cmake_version = re.search(
+            r"(?i)\bcmake_minimum_required\s*\(\s*VERSION\s+([0-9]+(?:\.[0-9]+){1,2})",
+            cmake,
+        )
         c_standard = re.search(
             r"(?i)(?:CMAKE_C_STANDARD|C_STANDARD)\s+(\d{2})", cmake
         )
@@ -321,12 +401,16 @@ class NativeProjectParser:
             constraints["c_standard"] = c_standard.group(1)
         if cpp_standard:
             constraints["cpp_standard"] = cpp_standard.group(1)
+        if cmake_version:
+            constraints["cmake"] = f">={cmake_version.group(1)}"
         return constraints
 
     @staticmethod
     def _cmake_configuration_arguments(
         scanned: ScannedProject,
         systems: tuple[str, ...],
+        *,
+        enable_tests: bool,
     ) -> tuple[str, ...]:
         if "cmake" not in systems:
             return ()
@@ -346,7 +430,10 @@ class NativeProjectParser:
             )
             if not test_switch and not developer_test_switch:
                 continue
-            value = "OFF" if "disable" in normalized_name else "ON"
+            negative_switch = bool(
+                re.search(r"(?:^|_)(?:disable|without|no)_?.*tests?", normalized_name)
+            )
+            value = "ON" if enable_tests != negative_switch else "OFF"
             selected.append(f"-D{name}={value}")
         dependency_files = "\n".join(
             scanned.read_text(path)
@@ -358,37 +445,6 @@ class NativeProjectParser:
             r"(?is)\bDEPS\b.*?\bDOWNLOAD\b", dependency_files
         ):
             selected.append("-DDEPS=DOWNLOAD")
-        return tuple(dict.fromkeys(selected))
-
-    @staticmethod
-    def _system_dependency_packages(
-        scanned: ScannedProject,
-        systems: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        selected: list[str] = []
-        if "cmake" in systems:
-            cmake = "\n".join(
-                scanned.read_text(path)
-                for path in scanned.files
-                if len(PurePosixPath(path).parts) <= 3
-                and path.casefold().endswith((".cmake", "cmakelists.txt"))
-            )
-            for package, apt_package in (
-                ("OpenSSL", "libssl-dev"),
-                ("ZLIB", "zlib1g-dev"),
-                ("LibLZMA", "liblzma-dev"),
-            ):
-                if re.search(rf"(?i)\bfind_package\s*\(\s*{package}\b", cmake):
-                    selected.append(apt_package)
-        if "autotools" in systems:
-            configure = scanned.read_text("configure.ac") or scanned.read_text("configure.in")
-            if re.search(r"\b(?:AM_PATH_PYTHON|PYTHON)\b", configure):
-                selected.append("python3")
-            if re.search(
-                r"(?i)\bPKG_CHECK_MODULES\s*\(\s*POPT\s*,\s*\[?\s*popt\b",
-                configure,
-            ):
-                selected.append("libpopt-dev")
         return tuple(dict.fromkeys(selected))
 
     @staticmethod

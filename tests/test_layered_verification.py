@@ -51,14 +51,16 @@ class FakeRuntime:
         self.commands = []
         self.output_by_command = {}
         self.exit_code_by_command = {}
+        self.timed_out_by_command = {}
         self.environments = []
+        self.default_command = ("python", "app.py")
 
     def inspect_image(self, image_reference: str) -> ImageInspection:
         return ImageInspection(
             bool(image_reference),
             "sha256:image" if image_reference else "",
             "/workspace",
-            ("python", "app.py"),
+            self.default_command,
             (8000,),
         )
 
@@ -68,11 +70,31 @@ class FakeRuntime:
         output = self.output_by_command.get(actual.display, self.output)
         if "DPRAUTO_IMPORT_OK" in actual.display:
             output = f"DPRAUTO_IMPORT_OK\nDPRAUTO_API_COUNT={self.library_api_count}\n"
+        if (
+            "DPRAUTO_INSTALL_HEALTH_OK" in actual.display
+            and actual.display not in self.output_by_command
+        ):
+            if "command -v ldd" in actual.display:
+                output = (
+                    "DPRAUTO_NATIVE_DYNAMIC_COUNT=1\n"
+                    "DPRAUTO_INSTALL_HEALTH_MODE=dynamic-link-check\n"
+                    "DPRAUTO_INSTALL_HEALTH_OK\n"
+                )
+            elif "java -version" in actual.display:
+                output = (
+                    "DPRAUTO_INSTALL_HEALTH_MODE=runtime-load\n"
+                    "DPRAUTO_INSTALL_HEALTH_OK\n"
+                )
+            else:
+                output = (
+                    "DPRAUTO_INSTALL_HEALTH_MODE=pip-check\n"
+                    "DPRAUTO_INSTALL_HEALTH_OK\n"
+                )
         result = CommandResult(
             actual,
             self.exit_code_by_command.get(actual.display, self.exit_code),
             stdout=ArtifactRef("fake/run.log"),
-            timed_out=False,
+            timed_out=self.timed_out_by_command.get(actual.display, False),
         )
         return ContainerExecution(result, output, self.filesystem_changes)
 
@@ -160,6 +182,116 @@ def build_context(
 
 
 class CommandSelectionTests(unittest.TestCase):
+    def test_selector_keeps_tests_owned_by_primary_manifest_root(self) -> None:
+        selected = TestCommandSelector(max_test_files=2).select_with_details(
+            ProjectProfile(
+                "python-project",
+                SourceReference("fixture://python"),
+                languages=("Python",),
+                commands=(
+                    project_command("pytest", CommandPurpose.TEST, "pyproject.toml"),
+                    ProjectCommand(
+                        "example-tests",
+                        CommandSpec(
+                            ("pytest",),
+                            purpose=CommandPurpose.TEST,
+                            cwd="examples/tutorial",
+                        ),
+                        "examples/tutorial/pyproject.toml",
+                        0.99,
+                    ),
+                ),
+                metadata={
+                    "build_root": ".",
+                    "project_roots": (".", "examples/tutorial"),
+                    "test_files": (
+                        "tests/test_app.py",
+                        "examples/tutorial/tests/test_app.py",
+                    ),
+                    "safe_test_files": (
+                        "tests/test_app.py",
+                        "examples/tutorial/tests/test_app.py",
+                    ),
+                    "optional_dependency_groups": {"test": ("pytest",)},
+                },
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(selected.targets, ("tests/test_app.py",))
+        self.assertEqual(selected.command.command.cwd, None)
+
+    def test_native_standard_runner_beats_specialized_ci_pipeline(self) -> None:
+        selected = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "native-project",
+                SourceReference("fixture://native"),
+                languages=("C++",),
+                commands=(
+                    project_command(
+                        "bash ops/pipeline/build-test-sycl.sh pytest",
+                        CommandPurpose.TEST,
+                        ".github/workflows/sycl_tests.yml",
+                        0.98,
+                    ),
+                    project_command(
+                        "pytest -s tests/python",
+                        CommandPurpose.TEST,
+                        ".github/workflows/main.yml",
+                        0.98,
+                    ),
+                    project_command(
+                        "ctest --test-dir build --output-on-failure",
+                        CommandPurpose.TEST,
+                        "inferred:CMakeLists.txt:test-layout",
+                        0.85,
+                    ),
+                ),
+                metadata={"primary_build_system": "cmake"},
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(
+            selected.command.command.display,
+            "ctest --test-dir build --output-on-failure",
+        )
+
+    def test_make_test_beats_ci_script_with_parent_relative_path(self) -> None:
+        selected = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "make-project",
+                SourceReference("fixture://make"),
+                languages=("C++",),
+                commands=(
+                    ProjectCommand(
+                        "make-test",
+                        CommandSpec(
+                            ("make", "test"),
+                            purpose=CommandPurpose.TEST,
+                            cwd="src",
+                        ),
+                        "inferred:Makefile",
+                        0.7,
+                    ),
+                    project_command(
+                        "python3 ../tests/instrumented.py --none ./binary",
+                        CommandPurpose.TEST,
+                        ".github/workflows/matetrack.yml",
+                        0.98,
+                    ),
+                ),
+                metadata={"primary_build_system": "make"},
+            )
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual(selected.command.command.display, "make test")
+        self.assertEqual(selected.command.command.cwd, "src")
+
     def test_ctest_parallelism_is_bounded_by_verification_policy(self) -> None:
         selected = TestCommandSelector(max_parallel_workers=4).select_with_details(
             profile(
@@ -596,6 +728,31 @@ class CommandSelectionTests(unittest.TestCase):
             "python -m pytest tests/test_unit.py",
         )
 
+    def test_optional_dependencies_make_a_small_pytest_suite_explicit(self) -> None:
+        selection = TestCommandSelector().select_with_details(
+            ProjectProfile(
+                "project",
+                SourceReference("fixture://project"),
+                commands=(
+                    project_command(
+                        "python -m pytest",
+                        CommandPurpose.TEST,
+                        "inferred:test-layout",
+                    ),
+                ),
+                metadata={
+                    "safe_test_files": ("tests/test_cache.py",),
+                    "optional_dependency_groups": {"cache": ("requests-cache",)},
+                },
+            )
+        )
+
+        self.assertEqual(selection.targets, ("tests/test_cache.py",))
+        self.assertEqual(
+            selection.command.command.display,
+            "python -m pytest tests/test_cache.py",
+        )
+
     def test_coverage_only_arguments_are_removed_from_testability(self) -> None:
         selection = TestCommandSelector().select_with_details(
             ProjectProfile(
@@ -856,12 +1013,34 @@ class VerificationPolicyTests(unittest.TestCase):
 
         self.assertEqual(result.status, VerificationStatus.PASSED)
         self.assertIn(
-            "python -m pip install pytest==8.3.5 && python -m pytest -q",
+            "python -m pip install pytest==8.3.5 && "
+            "env -u HTTP_PROXY -u HTTPS_PROXY -u NO_PROXY "
+            "-u http_proxy -u https_proxy -u no_proxy python -m pytest -q",
             self.runtime.commands[0].display,
         )
         self.assertEqual(result.metadata["original_command"], "python -m pytest -q")
         self.assertEqual(result.metadata["timeout_policy"], "dependency-and-test")
         self.assertEqual(result.metadata["requested_timeout_seconds"], 180)
+
+    def test_dependency_setup_keeps_proxy_for_install_but_clears_it_for_tests(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command(
+                "python -m pytest",
+                CommandPurpose.TEST,
+                "inferred:test-layout",
+            ),
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertTrue(result.passed)
+        command = self.runtime.commands[0].display
+        self.assertTrue(command.startswith("python -m pip install pytest==8.3.5 && env "))
+        self.assertIn("-u HTTP_PROXY", command)
+        self.assertTrue(command.endswith("python -m pytest"))
 
     def test_testability_keeps_short_timeout_when_no_dependency_setup_is_needed(self) -> None:
         project = profile(
@@ -912,6 +1091,12 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertEqual(self.runtime.environments[0].command_environment, {"CI": "true"})
 
     def test_testability_records_bounded_slice_and_original_command(self) -> None:
+        (self.workspace / "tests/unit").mkdir(parents=True)
+        for index in range(5):
+            (self.workspace / f"tests/unit/test_{index}.py").write_text(
+                "def test_ok(): assert True\n",
+                encoding="utf-8",
+            )
         project = profile(
             ProjectType.LIBRARY,
             project_command("pytest tests/unit", CommandPurpose.TEST, "README.rst"),
@@ -939,6 +1124,230 @@ class VerificationPolicyTests(unittest.TestCase):
                 "python -m pytest tests/unit/test_0.py tests/unit/test_1.py"
             )
         )
+
+    def test_testability_rejects_missing_make_target_and_uses_next_candidate(self) -> None:
+        (self.workspace / "Makefile").write_text(
+            "check:\n\t@echo ok\n",
+            encoding="utf-8",
+        )
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("make test", CommandPurpose.TEST, "README.md", 0.99),
+            project_command("make check", CommandPurpose.TEST, "README.md", 0.90),
+            metadata={"primary_build_system": "make"},
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["attempted_candidate_count"], 1)
+        self.assertEqual(
+            tuple(item["status"] for item in result.metadata["command_attempts"]),
+            ("preflight-rejected", "passed"),
+        )
+        self.assertEqual(self.runtime.commands[0].display, "make check")
+
+    def test_testability_dry_runs_target_from_generated_makefile(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("make check", CommandPurpose.TEST, "inferred:configure.ac"),
+            metadata={"primary_build_system": "autotools"},
+        )
+        preflight = "make --dry-run --no-builtin-rules check"
+        self.runtime.exit_code_by_command[preflight] = 2
+        self.runtime.output_by_command[preflight] = (
+            "make: *** No rule to make target 'devprogs', needed by 'check'. Stop."
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.SKIPPED)
+        self.assertEqual(result.metadata["skip_reason"], "generated-make-target-dry-run-failed")
+        self.assertEqual(result.metadata["make_target"], "check")
+        self.assertEqual(self.runtime.commands[0].display, preflight)
+
+    def test_testability_does_not_hide_real_test_failure_with_fallback(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m unittest", CommandPurpose.TEST, "README.md", 0.99),
+            project_command("tox", CommandPurpose.TEST, "tox.ini", 0.80),
+        )
+        self.runtime.exit_code = 1
+        self.runtime.output = "FAILED: expected 2 but got 1"
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.FAILED)
+        self.assertEqual(result.metadata["attempted_candidate_count"], 1)
+        self.assertEqual(len(self.runtime.commands), 1)
+
+    def test_testability_retries_invalid_candidate_and_keeps_consistent_checks(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command(
+                "python -m unittest",
+                CommandPurpose.TEST,
+                "inferred:test-layout",
+                0.99,
+            ),
+            project_command("tox", CommandPurpose.TEST, "tox.ini", 0.80),
+        )
+        self.runtime.output_by_command["python -m unittest"] = "Ran 0 tests\nNO TESTS RAN"
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["attempted_candidate_count"], 2)
+        self.assertEqual(result.metadata["selected_candidate"], 2)
+        self.assertTrue(result.metadata["candidate_fallback_used"])
+        self.assertEqual(result.metadata["candidate_stop_reason"], "tests-passed")
+        self.assertEqual(
+            tuple(item["outcome_category"] for item in result.metadata["command_attempts"]),
+            ("no-tests-collected", "tests-passed"),
+        )
+        self.assertEqual(
+            tuple(check.status for check in result.checks),
+            (VerificationStatus.SKIPPED, VerificationStatus.PASSED),
+        )
+        self.assertTrue(result.checks[0].metadata["superseded"])
+        self.assertEqual(result.checks[0].metadata["original_status"], "failed")
+
+    def test_testability_records_observed_test_count_and_evidence_strength(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command(
+                "python -m unittest",
+                CommandPurpose.TEST,
+                ".github/workflows/tests.yml",
+            ),
+        )
+        self.runtime.output_by_command["python -m unittest"] = "Ran 12 tests in 0.25s\nOK"
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["observed_test_count"], 12)
+        self.assertEqual(result.metadata["test_evidence_strength"], "strong")
+        self.assertEqual(result.metadata["test_evidence_source_kind"], "ci")
+        self.assertEqual(result.metadata["test_evidence_scope"], "project-command")
+
+    def test_bounded_gradle_tests_require_and_count_xml_results(self) -> None:
+        project = replace(
+            profile(
+                ProjectType.LIBRARY,
+                project_command(
+                    "./gradlew test",
+                    CommandPurpose.TEST,
+                    "inferred:gradlew",
+                ),
+                package_managers=("gradle",),
+                metadata={
+                    "primary_build_system": "gradle",
+                    "safe_test_files": tuple(
+                        f"src/test/java/example/Sample{index}Test.java"
+                        for index in range(9)
+                    ),
+                },
+            ),
+            languages=("Java",),
+        )
+        selection = TestCommandSelector().select_with_details(project)
+        self.assertIsNotNone(selection)
+        assert selection is not None
+
+        wrapped = TestabilityVerifier._with_gradle_result_probe(
+            project,
+            selection.command.command,
+            selection,
+        )
+        evidence = TestabilityVerifier._test_evidence(
+            selection,
+            "BUILD SUCCESSFUL\nDPRAUTO_TEST_COUNT=8\n",
+            passed=True,
+            outcome_category="tests-passed",
+        )
+
+        self.assertIn("build/test-results", wrapped.display)
+        self.assertIn("DPRAUTO_NO_TESTS_COLLECTED", wrapped.display)
+        self.assertEqual(evidence["observed_test_count"], 8)
+        self.runtime.exit_code = 1
+        self.runtime.output = "BUILD SUCCESSFUL\nDPRAUTO_NO_TESTS_COLLECTED\n"
+        execution = self.runtime.run_image("image", wrapped, timeout_seconds=30)
+        self.assertEqual(
+            TestabilityVerifier._execution_outcome(execution),
+            ("no-tests-collected", True),
+        )
+
+    def test_testability_classifies_timeout_without_trying_another_candidate(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command(
+                "python -m unittest",
+                CommandPurpose.TEST,
+                "inferred:test-layout",
+                0.99,
+            ),
+            project_command("tox", CommandPurpose.TEST, "tox.ini", 0.80),
+        )
+        self.runtime.exit_code_by_command["python -m unittest"] = 1
+        self.runtime.timed_out_by_command["python -m unittest"] = True
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace)
+        )
+
+        self.assertEqual(result.status, VerificationStatus.FAILED)
+        self.assertEqual(result.metadata["outcome_category"], "test-timeout")
+        self.assertFalse(result.metadata["candidate_retryable"])
+        self.assertEqual(result.metadata["attempted_candidate_count"], 1)
+        self.assertEqual(
+            result.metadata["candidate_stop_reason"],
+            "non-retryable-test-timeout",
+        )
+
+    def test_ctest_enables_tests_only_during_testability(self) -> None:
+        project = ProjectProfile(
+            "native-project",
+            SourceReference("fixture://native"),
+            languages=("C++",),
+            project_type=ProjectType.LIBRARY,
+            commands=(
+                project_command(
+                    "ctest --test-dir build --output-on-failure",
+                    CommandPurpose.TEST,
+                    "inferred:CMakeLists.txt:test-layout",
+                ),
+            ),
+            metadata={
+                "primary_build_system": "cmake",
+                "cmake_test_configuration_arguments": ("-DBUILD_TESTING=ON",),
+                "cmake_test_build_target": "tests",
+            },
+        )
+
+        result = TestabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, strategy="native-template")
+        )
+
+        self.assertTrue(result.passed)
+        command = self.runtime.commands[0].display
+        self.assertIn("timeout --signal=TERM --kill-after=5s 900s", command)
+        self.assertIn("cmake -S . -B build -DBUILD_TESTING=ON", command)
+        self.assertIn("cmake --build build --target tests", command)
+        self.assertIn("&& ctest --test-dir build --output-on-failure", command)
+        self.assertEqual(result.metadata["timeout_policy"], "native-test-preparation-and-test")
+        self.assertEqual(result.metadata["requested_timeout_seconds"], 1200)
+        self.assertEqual(result.metadata["native_test_preparation_timeout_seconds"], 900)
 
     def test_testability_records_capture_compatibility_command_and_reason(self) -> None:
         project = profile(
@@ -1179,6 +1588,24 @@ class VerificationPolicyTests(unittest.TestCase):
         self.assertIn("--extras testing", executed)
         self.assertNotIn("pytest==8.3.5", executed)
 
+    def test_testability_bootstraps_runner_when_declared_group_lacks_pytest(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            project_command("python -m pytest", CommandPurpose.TEST, "pyproject.toml"),
+            dependency_files=("pyproject.toml",),
+            package_managers=("poetry",),
+            metadata={
+                "test_dependency_manager_groups": ("dev",),
+                "manager_dependency_groups": {"dev": ("jsonschema",)},
+            },
+        )
+
+        TestabilityVerifier(self.runtime).verify(build_context(project, self.workspace))
+
+        executed = self.runtime.commands[0].display
+        self.assertIn("poetry install --only main,dev", executed)
+        self.assertIn("python -m pip install pytest==8.3.5", executed)
+
     def test_testability_prefers_pip_extra_over_broad_dev_requirements(self) -> None:
         project = profile(
             ProjectType.LIBRARY,
@@ -1332,7 +1759,7 @@ fiftyone==0.23.8
         self.assertIn("pdm install --no-editable -G test", unlocked_pdm_command)
         self.assertNotIn("pdm sync", unlocked_pdm_command)
 
-    def test_installability_records_all_four_checks(self) -> None:
+    def test_installability_records_all_five_checks(self) -> None:
         project = profile(
             ProjectType.SCRIPT,
             dependency_files=("requirements.txt",),
@@ -1346,8 +1773,166 @@ fiftyone==0.23.8
         self.assertTrue(result.passed)
         self.assertEqual(
             [check.name for check in result.checks],
-            ["build", "dependency-installation", "target-artifact", "image"],
+            [
+                "build",
+                "dependency-installation",
+                "target-artifact",
+                "image",
+                "installation-health",
+            ],
         )
+
+    def test_python_installability_runs_offline_dependency_health_probe(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            dependency_files=("pyproject.toml",),
+            package_managers=("pip",),
+        )
+
+        result = InstallabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, setup="python -m pip install .")
+        )
+
+        self.assertTrue(result.passed)
+        self.assertIn("-m pip check", self.runtime.commands[-1].display)
+        health = next(check for check in result.checks if check.name == "installation-health")
+        self.assertEqual(health.metadata["probe_type"], "python-pip-check")
+        self.assertEqual(health.metadata["evidence_mode"], "pip-check")
+
+    def test_installability_fails_when_dependency_health_probe_fails(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            dependency_files=("pyproject.toml",),
+            package_managers=("pip",),
+        )
+        probe = InstallabilityVerifier._installation_health_probe(
+            build_context(project, self.workspace)
+        )[0]
+        self.runtime.exit_code_by_command[probe] = 1
+        self.runtime.output_by_command[probe] = "sample requires missing-package"
+
+        result = InstallabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, setup="python -m pip install .")
+        )
+
+        self.assertEqual(result.status, VerificationStatus.FAILED)
+        health = next(check for check in result.checks if check.name == "installation-health")
+        self.assertEqual(health.status, VerificationStatus.FAILED)
+
+    def test_python_installability_scopes_retained_tool_conflicts(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            dependency_files=("poetry.lock", "pyproject.toml"),
+            package_managers=("poetry",),
+        )
+        context = build_context(
+            project,
+            self.workspace,
+            setup="python -m pip install poetry && poetry install --only main",
+        )
+        probe = InstallabilityVerifier._installation_health_probe(context)[0]
+        self.assertIn("grep -Eiv '^(poetry)", probe)
+        self.runtime.output_by_command[probe] = (
+            "poetry 1.8.5 requires pexpect, which is not installed.\n"
+            "DPRAUTO_INSTALL_HEALTH_MODE=pip-check-project-clean-tool-conflicts\n"
+            "DPRAUTO_INSTALL_HEALTH_OK\n"
+        )
+
+        result = InstallabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        health = next(check for check in result.checks if check.name == "installation-health")
+        self.assertEqual(health.status, VerificationStatus.SKIPPED)
+        self.assertEqual(
+            health.metadata["evidence_mode"],
+            "pip-check-project-clean-tool-conflicts",
+        )
+
+    def test_python_project_does_not_ignore_its_own_tool_named_distribution(self) -> None:
+        project = profile(
+            ProjectType.LIBRARY,
+            dependency_files=("poetry.lock", "pyproject.toml"),
+            package_managers=("poetry",),
+            metadata={"project_name": "poetry"},
+        )
+
+        probe = InstallabilityVerifier._installation_health_probe(
+            build_context(project, self.workspace)
+        )[0]
+
+        self.assertNotIn("grep -Eiv", probe)
+
+    def test_native_installability_checks_dynamic_links_without_python(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+        command = "apt-get update && apt-get install -y cmake g++"
+
+        result = InstallabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, setup=command)
+        )
+
+        self.assertTrue(result.passed)
+        self.assertIn("command -v ldd", self.runtime.commands[-1].display)
+        self.assertIn("find build", self.runtime.commands[-1].display)
+        self.assertNotIn("python", self.runtime.commands[-1].display)
+        self.assertEqual(
+            result.metadata["installation_health_probe"],
+            "native-dynamic-link-check",
+        )
+        self.assertEqual(result.metadata["checked_dynamic_artifacts"], 1)
+
+    def test_jvm_installability_checks_runtime_load(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("Java",),
+            package_managers=("maven",),
+            dependency_files=("pom.xml",),
+        )
+        command = "mvn -B -DskipTests package"
+
+        result = InstallabilityVerifier(self.runtime).verify(
+            build_context(
+                project,
+                self.workspace,
+                setup=command,
+                plan_metadata={"dependency_installation_commands": (command,)},
+            )
+        )
+
+        self.assertTrue(result.passed)
+        self.assertIn("java -version", self.runtime.commands[-1].display)
+        self.assertEqual(
+            result.metadata["installation_health_probe"],
+            "jvm-runtime-load",
+        )
+
+    def test_native_installability_marks_no_dynamic_artifacts_as_limited_evidence(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+        context = build_context(
+            project,
+            self.workspace,
+            setup="apt-get update && apt-get install -y cmake g++",
+        )
+        probe = InstallabilityVerifier._installation_health_probe(context)[0]
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_NATIVE_DYNAMIC_COUNT=0\n"
+            "DPRAUTO_INSTALL_HEALTH_MODE=no-dynamic-artifacts\n"
+            "DPRAUTO_INSTALL_HEALTH_OK\n"
+        )
+
+        result = InstallabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        health = next(check for check in result.checks if check.name == "installation-health")
+        self.assertEqual(health.status, VerificationStatus.SKIPPED)
+        self.assertEqual(health.metadata["checked_dynamic_artifacts"], 0)
 
     def test_testability_executes_project_tests_but_skips_smoke_only(self) -> None:
         smoke = profile(
@@ -1377,6 +1962,9 @@ fiftyone==0.23.8
         self.assertEqual(
             [check.name for check in passed.checks], ["web-process", "web-port", "web-http"]
         )
+        self.assertEqual(passed.metadata["runtime_contract"], "service-health")
+        self.assertEqual(passed.metadata["runtime_evidence_strength"], "strong")
+        self.assertTrue(passed.metadata["runtime_semantically_proven"])
 
         self.runtime.web = WebProbe(True, True, False, 8000, 43210, None)
         failed = verifier.verify(build_context(project, self.workspace))
@@ -1415,6 +2003,9 @@ fiftyone==0.23.8
             [command.display for command in self.runtime.commands], ["sample", "sample --help"]
         )
         self.assertTrue(result.metadata["empty_output_help_fallback"])
+        self.assertEqual(result.metadata["runtime_outcome_category"], "cli-invocable")
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "moderate")
+        self.assertTrue(result.metadata["runtime_semantically_proven"])
 
     def test_cli_nonzero_usage_exit_is_retried_with_help(self) -> None:
         verifier = RunnabilityVerifier(self.runtime)
@@ -1432,6 +2023,48 @@ fiftyone==0.23.8
         )
         self.assertTrue(result.metadata["help_fallback_used"])
         self.assertEqual(result.metadata["help_fallback_reason"], "initial-command-failed")
+
+    def test_inferred_bare_cli_uses_help_before_it_can_block(self) -> None:
+        verifier = RunnabilityVerifier(self.runtime)
+        cli = profile(
+            ProjectType.CLI,
+            project_command(
+                "python -m sample",
+                CommandPurpose.RUN,
+                "inferred:__main__.py",
+            ),
+        )
+
+        result = verifier.verify(build_context(cli, self.workspace))
+
+        self.assertTrue(result.passed)
+        self.assertEqual([item.display for item in self.runtime.commands], ["python -m sample --help"])
+        self.assertTrue(result.metadata["safe_probe_normalized"])
+        self.assertEqual(result.metadata["selected_command"], "python -m sample")
+
+    def test_unavailable_development_wrapper_is_not_selected_for_runtime(self) -> None:
+        verifier = RunnabilityVerifier(self.runtime)
+        cli = profile(
+            ProjectType.CLI,
+            project_command(
+                "pipenv run sample --version",
+                CommandPurpose.RUN,
+                "README.md",
+                0.95,
+            ),
+            project_command(
+                "python -m sample",
+                CommandPurpose.RUN,
+                "inferred:__main__.py",
+                0.85,
+            ),
+            package_managers=("pip",),
+        )
+
+        result = verifier.verify(build_context(cli, self.workspace))
+
+        self.assertTrue(result.passed)
+        self.assertEqual(self.runtime.commands[0].display, "python -m sample --help")
 
     def test_jvm_library_uses_strategy_owned_artifact_probe(self) -> None:
         project = replace(
@@ -1457,6 +2090,9 @@ fiftyone==0.23.8
         self.assertTrue(result.passed)
         self.assertEqual(result.metadata["artifact_count"], 14)
         self.assertEqual(self.runtime.commands[0].display, probe)
+        self.assertEqual(result.metadata["runtime_outcome_category"], "compiled-artifact-present")
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(result.metadata["runtime_semantically_proven"])
 
     def test_native_library_requires_artifact_or_passing_project_tests(self) -> None:
         project = replace(
@@ -1493,6 +2129,135 @@ fiftyone==0.23.8
         )
         self.assertTrue(passed.passed)
         self.assertTrue(passed.metadata["project_tests_passed"])
+        self.assertEqual(passed.metadata["runtime_evidence_strength"], "moderate")
+        self.assertTrue(passed.metadata["runtime_semantically_proven"])
+
+        limited_tests = replace(
+            passed_tests,
+            metadata={
+                "outcome_category": "tests-passed",
+                "test_evidence_strength": "limited",
+            },
+        )
+        limited = RunnabilityVerifier(self.runtime).verify(
+            replace(context, prior_results=(limited_tests,))
+        )
+        self.assertTrue(limited.passed)
+        self.assertEqual(limited.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(limited.metadata["runtime_semantically_proven"])
+
+    def test_compiled_library_rejects_zero_test_false_success_as_runtime_evidence(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+        probe = "test -d build"
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_NATIVE_BUILD_OK\nDPRAUTO_ARTIFACT_COUNT=2\n"
+        )
+        false_success = VerificationResult(
+            "zero-tests",
+            VerificationLevel.TESTABILITY,
+            VerificationStatus.PASSED,
+            summary="ctest returned zero",
+            metadata={
+                "outcome_category": "no-tests-collected",
+                "test_evidence_strength": "limited",
+            },
+        )
+        context = build_context(
+            project,
+            self.workspace,
+            strategy="native-template",
+            plan_metadata={
+                "runtime_probe_command": probe,
+                "runtime_probe_marker": "DPRAUTO_NATIVE_BUILD_OK",
+                "runtime_probe_type": "native-build-artifacts",
+            },
+        )
+
+        result = RunnabilityVerifier(self.runtime).verify(
+            replace(context, prior_results=(false_success,))
+        )
+
+        self.assertTrue(result.passed)
+        self.assertFalse(result.metadata["project_tests_passed"])
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(result.metadata["runtime_semantically_proven"])
+
+    def test_repaired_native_docker_plan_recovers_image_artifact_probe(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+        probe = (
+            "test -d build && count=$(find build -type f -name '*.so' | wc -l) "
+            '&& test "$count" -gt 0 && echo DPRAUTO_NATIVE_BUILD_OK '
+            "&& echo DPRAUTO_ARTIFACT_COUNT=$count"
+        )
+        self.runtime.default_command = ("/bin/sh", "-lc", probe)
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_NATIVE_BUILD_OK\nDPRAUTO_ARTIFACT_COUNT=3\n"
+        )
+        context = build_context(project, self.workspace, strategy="docker")
+
+        result = RunnabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["artifact_count"], 3)
+        self.assertEqual(
+            result.metadata["runtime_probe_type"],
+            "native-image-default-artifacts",
+        )
+        self.assertEqual([command.display for command in self.runtime.commands], [probe])
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(result.metadata["runtime_semantically_proven"])
+
+    def test_repaired_jvm_docker_plan_recovers_image_artifact_probe(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("Java",),
+            package_managers=("maven",),
+        )
+        probe = (
+            "count=$(find . -path '*/target/*.jar' | wc -l) "
+            '&& test "$count" -gt 0 && echo DPRAUTO_JVM_ARTIFACT_OK '
+            "&& echo DPRAUTO_API_COUNT=$count"
+        )
+        self.runtime.default_command = ("/bin/sh", "-lc", probe)
+        self.runtime.output_by_command[probe] = (
+            "DPRAUTO_JVM_ARTIFACT_OK\nDPRAUTO_API_COUNT=2\n"
+        )
+        context = build_context(project, self.workspace, strategy="docker")
+
+        result = RunnabilityVerifier(self.runtime).verify(context)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.metadata["artifact_count"], 2)
+        self.assertEqual(
+            result.metadata["runtime_probe_type"],
+            "jvm-image-default-artifacts",
+        )
+        self.assertEqual([command.display for command in self.runtime.commands], [probe])
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(result.metadata["runtime_semantically_proven"])
+
+    def test_non_python_library_never_falls_back_to_python_import(self) -> None:
+        project = replace(
+            profile(ProjectType.LIBRARY),
+            languages=("C++",),
+            package_managers=("cmake",),
+        )
+
+        result = RunnabilityVerifier(self.runtime).verify(
+            build_context(project, self.workspace, strategy="docker")
+        )
+
+        self.assertEqual(result.status, VerificationStatus.ERROR)
+        self.assertIn("compiled-library runtime probe", result.summary)
+        self.assertFalse(self.runtime.commands)
 
     def test_library_import_alone_is_not_enough_without_api_or_tests(self) -> None:
         project = profile(ProjectType.LIBRARY, import_modules=("sample",))
@@ -1535,6 +2300,8 @@ fiftyone==0.23.8
             policy_check.metadata["tests_unavailable_reason"],
             "required-secret-environment",
         )
+        self.assertEqual(result.metadata["runtime_evidence_strength"], "limited")
+        self.assertFalse(result.metadata["runtime_semantically_proven"])
 
     def test_service_persists_each_layer_and_aggregate(self) -> None:
         storage = LocalArtifactStorage(self.workspace / "artifacts")

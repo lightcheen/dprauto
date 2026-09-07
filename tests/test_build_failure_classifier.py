@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -343,6 +344,23 @@ class BuildFailureClassifierTests(unittest.TestCase):
         self.assertIn("Could not resolve host", failure.key_log)
         self.assertLess(len(failure.key_log), len(text) // 4)
 
+    def test_last_missing_dependency_beats_earlier_optional_cmake_probes(self) -> None:
+        failure = self.classify_text(
+            "-- Could NOT find c-ares (missing: C-ARES_LIBRARIES)\n"
+            "-- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE)\n"
+            "CMake Error at FindPackageHandleStandardArgs.cmake:230 (message):\n"
+            "  Could NOT find Jsoncpp (missing: JSONCPP_LIBRARIES)\n"
+            "-- Configuring incomplete, errors occurred!\n"
+        )
+
+        self.assertEqual(failure.category, FailureCategory.SYSTEM_DEPENDENCY)
+        self.assertEqual(
+            failure.evidence,
+            ("Could NOT find Jsoncpp (missing: JSONCPP_LIBRARIES)",),
+        )
+        self.assertIn("Jsoncpp", failure.key_log)
+        self.assertNotIn("c-ares", failure.key_log)
+
     def test_prompt12_build_failures_are_classified_by_causal_error(self) -> None:
         cases = (
             (
@@ -382,6 +400,19 @@ class BuildFailureClassifierTests(unittest.TestCase):
                 failure = self.classify_text(text)
                 self.assertEqual(failure.category, category)
                 self.assertEqual(failure.infrastructure_related, infrastructure)
+
+    def test_high_star_build_failures_have_specific_general_categories(self) -> None:
+        cases = json.loads((FIXTURES / "high_star30_failure_classes.json").read_text())
+        for case in cases:
+            with self.subTest(case=case["case"]):
+                failure = self.classify_text(case["text"])
+                self.assertEqual(failure.category.value, case["category"])
+
+        unpack_failure = self.classify_text(
+            "Failed to execute goal maven-dependency-plugin:unpack-dependencies: "
+            "Could not find artifact com.example:demo:jar:1.0"
+        )
+        self.assertNotEqual(unpack_failure.category, FailureCategory.DOCKER)
 
     def test_download_progress_number_is_not_an_external_service_failure(self) -> None:
         failure = self.classify_text(

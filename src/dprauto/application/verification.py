@@ -127,7 +127,7 @@ def create_layered_verifier(
     runtime = DockerContainerRuntime(storage, build_config, verification_config)
     return LayeredVerificationService(
         (
-            InstallabilityVerifier(runtime),
+            InstallabilityVerifier(runtime, verification_config),
             TestabilityVerifier(runtime, config=verification_config),
             RunnabilityVerifier(runtime, verification_config),
         ),

@@ -40,6 +40,10 @@ class BuildStrategyAttempt:
     plan: BuildPlan
     result: BuildResult
     failure: FailureInfo | None
+    attempt_number: int = 1
+    strategy_attempt_number: int = 1
+    retry_of_attempt_id: str = ""
+    retry_reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,36 +92,82 @@ class DeterministicBuildService:
                 selection_reason = "shared build deadline exhausted before fallback"
                 break
             plan = strategy.create_plan(profile)
-            result = strategy.build(plan, workspace, deadline_at=deadline_at)
-            failure = self.failure_classifier.classify(profile, plan, result)
-            attempts.append(BuildStrategyAttempt(plan, result, failure))
+            strategy_attempt_number = 0
+            retry_of_attempt_id = ""
+            retry_reason = ""
+            retried_fingerprints: set[str] = set()
+            while True:
+                strategy_attempt_number += 1
+                result = strategy.build(plan, workspace, deadline_at=deadline_at)
+                failure = self.failure_classifier.classify(profile, plan, result)
+                attempts.append(
+                    BuildStrategyAttempt(
+                        plan,
+                        result,
+                        failure,
+                        attempt_number=len(attempts) + 1,
+                        strategy_attempt_number=strategy_attempt_number,
+                        retry_of_attempt_id=retry_of_attempt_id,
+                        retry_reason=retry_reason,
+                    )
+                )
 
-            if result.status is BuildStatus.SUCCEEDED and failure is None:
-                selection_reason = f"strategy {plan.strategy} succeeded"
-                terminal_attempt = attempts[-1]
+                if result.status is BuildStatus.SUCCEEDED and failure is None:
+                    suffix = (
+                        f" after {strategy_attempt_number - 1} transient retry"
+                        if strategy_attempt_number > 1
+                        else ""
+                    )
+                    selection_reason = f"strategy {plan.strategy} succeeded{suffix}"
+                    terminal_attempt = attempts[-1]
+                    break
+                if result.status is BuildStatus.TIMED_OUT:
+                    selection_reason = f"strategy {plan.strategy} exhausted its build budget"
+                    terminal_attempt = attempts[-1]
+                    break
+                if result.status is BuildStatus.CANCELLED:
+                    selection_reason = f"strategy {plan.strategy} was cancelled"
+                    terminal_attempt = attempts[-1]
+                    break
+                if failure is None:
+                    selection_reason = (
+                        f"strategy {plan.strategy} failed without classified fallback evidence"
+                    )
+                    terminal_attempt = attempts[-1]
+                    break
+                if self._should_retry_transient_network(
+                    failure,
+                    result,
+                    strategy_attempt_number=strategy_attempt_number,
+                    retried_fingerprints=retried_fingerprints,
+                    deadline_at=deadline_at,
+                ):
+                    retried_fingerprints.add(failure.fingerprint)
+                    retry_of_attempt_id = result.attempt_id
+                    retry_reason = (
+                        f"{failure.category.value}:{failure.fingerprint}"
+                    )
+                    continue
+                if failure.infrastructure_related or failure.kind in {
+                    BuildFailureKind.NETWORK,
+                    BuildFailureKind.DOCKER_INFRASTRUCTURE,
+                }:
+                    if strategy_attempt_number > 1:
+                        selection_reason = (
+                            f"strategy {plan.strategy} transient retry exhausted; "
+                            "fallback stopped"
+                        )
+                    else:
+                        selection_reason = (
+                            f"strategy {plan.strategy} hit infrastructure failure; "
+                            "fallback stopped"
+                        )
+                    terminal_attempt = attempts[-1]
+                    break
+                # A classified project failure may use the next compatible
+                # deterministic strategy, but it is never retried unchanged.
                 break
-            if result.status is BuildStatus.TIMED_OUT:
-                selection_reason = f"strategy {plan.strategy} exhausted its build budget"
-                terminal_attempt = attempts[-1]
-                break
-            if result.status is BuildStatus.CANCELLED:
-                selection_reason = f"strategy {plan.strategy} was cancelled"
-                terminal_attempt = attempts[-1]
-                break
-            if failure is None:
-                selection_reason = (
-                    f"strategy {plan.strategy} failed without classified fallback evidence"
-                )
-                terminal_attempt = attempts[-1]
-                break
-            if failure.infrastructure_related or failure.kind in {
-                BuildFailureKind.NETWORK,
-                BuildFailureKind.DOCKER_INFRASTRUCTURE,
-            }:
-                selection_reason = (
-                    f"strategy {plan.strategy} hit infrastructure failure; fallback stopped"
-                )
-                terminal_attempt = attempts[-1]
+            if terminal_attempt is not None:
                 break
         else:
             if len(strategies) >= self.config.max_strategy_attempts:
@@ -138,6 +188,28 @@ class DeterministicBuildService:
             tuple(attempts),
             selection_reason,
             artifacts,
+        )
+
+    def _should_retry_transient_network(
+        self,
+        failure: FailureInfo,
+        result: BuildResult,
+        *,
+        strategy_attempt_number: int,
+        retried_fingerprints: set[str],
+        deadline_at: datetime | None,
+    ) -> bool:
+        retries_used = strategy_attempt_number - 1
+        return (
+            self.config.allow_network
+            and result.status is BuildStatus.FAILED
+            and failure.kind is BuildFailureKind.NETWORK
+            and failure.category is FailureCategory.NETWORK
+            and failure.retryable
+            and failure.infrastructure_related
+            and retries_used < self.config.max_transient_retries
+            and failure.fingerprint not in retried_fingerprints
+            and not time_budget_exhausted(deadline_at)
         )
 
     @staticmethod
@@ -188,11 +260,29 @@ class DeterministicBuildService:
                 ),
                 "portfolio_selected_strategy": selected.plan.strategy,
                 "portfolio_selection_reason": reason,
+                "portfolio_transient_retry_count": sum(
+                    bool(item.retry_of_attempt_id) for item in attempts
+                ),
             },
         )
         payload: dict[str, Any] = {
             "project_id": profile.project_id,
             "strategy_order": [item.plan.strategy for item in attempts],
+            "attempt_sequence": [
+                {
+                    "attempt_id": item.result.attempt_id,
+                    "attempt_number": item.attempt_number,
+                    "strategy": item.plan.strategy,
+                    "strategy_attempt_number": item.strategy_attempt_number,
+                    "retry_of_attempt_id": item.retry_of_attempt_id,
+                    "retry_reason": item.retry_reason,
+                    "status": item.result.status.value,
+                    "failure_fingerprint": (
+                        item.failure.fingerprint if item.failure is not None else ""
+                    ),
+                }
+                for item in attempts
+            ],
             "attempts": attempts,
             "selected_attempt_id": selected.result.attempt_id,
             "selected_strategy": selected.plan.strategy,

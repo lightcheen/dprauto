@@ -33,6 +33,7 @@ class FailureRule:
     retryable: bool = False
     infrastructure_related: bool = False
     confidence: float = 0.96
+    suggestions: tuple[str, ...] = ()
 
 
 DOCKER_RULE = FailureRule(
@@ -50,7 +51,7 @@ DOCKER_RULE = FailureRule(
         r"is the docker daemon running",
         r"permission denied[^\n]*docker\.sock",
         r"error during connect[^\n]*docker",
-        r"failed to execute [^\n]*(?:docker|pack)[^\n]*",
+        r"failed to execute [^\n]*(?:\bdocker\b|\bpack\b)[^\n]*",
         r"failed to create ephemeral bridge network",
         r"all predefined address pools have been fully subnetted",
         r"error response from daemon[^\n]*(?:network|containerd|overlay)",
@@ -80,6 +81,8 @@ NETWORK_RULE = FailureRule(
         r"failed to establish a new connection",
         r"failed to fetch dependency[^\n]*(?:dial tcp|connection refused|timeout)",
         r"dial tcp[^\n]*:443[^\n]*connect: connection refused",
+        r"(?:load metadata for|pulling from|container registry)[\s\S]{0,300}unexpected eof",
+        r"failed to read expected number of bytes: unexpected eof",
     ),
 )
 
@@ -90,7 +93,7 @@ IMAGE_RESOLUTION_RULE = FailureRule(
     possible_cause=(
         "The registry image, tag, manifest, or requested host platform is unavailable"
     ),
-    retryable=True,
+    retryable=False,
     infrastructure_related=True,
     confidence=0.99,
     patterns=(
@@ -127,6 +130,24 @@ VCS_METADATA_RULE = FailureRule(
     patterns=(
         r"setuptools-scm was unable to detect version",
         r"building from a fully intact git repository",
+    ),
+)
+
+OMITTED_VCS_METADATA_RULE = FailureRule(
+    category=FailureCategory.POLICY,
+    message="Build requires VCS metadata omitted from the generated context",
+    possible_cause=(
+        "A build plugin reads Git metadata, while the generated container context excludes .git"
+    ),
+    patterns=(
+        r"no \.git directory found",
+        r"could not find (?:the )?\.git directory",
+        r"git repository metadata (?:is )?(?:missing|required)",
+    ),
+    confidence=0.99,
+    suggestions=(
+        "Use a repository-supported version override or disable a metadata-only build plugin.",
+        "Do not copy credentials or the host Git configuration into the image.",
     ),
 )
 
@@ -206,9 +227,16 @@ JVM_TOOLCHAIN_RULE = FailureRule(
     ),
     patterns=(
         r"cannot find a java installation[^\n]+matching: \{languageversion=\d+[^\n]+\}",
+        r"cannot find a java installation[^\n]+matching the daemon jvm defined requirements",
         r"no matching toolchains found for requested specification",
+        r"no toolchain found for type jdk",
+        r"cannot find matching toolchain definitions[^\n]*",
     ),
     confidence=0.99,
+    suggestions=(
+        "Select the build-launcher JDK independently from the compilation target JDK.",
+        "Materialize only repository-declared JDK toolchains in the generated image.",
+    ),
 )
 
 JVM_RUNTIME_REQUIREMENT_RULE = FailureRule(
@@ -221,11 +249,33 @@ JVM_RUNTIME_REQUIREMENT_RULE = FailureRule(
     patterns=(
         r"dependency requires at least jvm runtime version \d+[^\n]+uses a java \d+ jvm",
         r"run this build using a java \d+ or newer jvm",
+        r"unsupportedclassversionerror:[^\n]+class file version [0-9.]+[^\n]+"
+        r"recognizes class file versions up to [0-9.]+",
     ),
     confidence=0.99,
+    suggestions=(
+        "Raise the build-launcher JDK to the minimum version evidenced by the failing plugin.",
+        "Keep the repository compilation target unchanged unless its own manifest requires it.",
+    ),
 )
 
 PROJECT_RULES = (
+    FailureRule(
+        category=FailureCategory.BUILD_COMMAND,
+        message="Verification command references an invalid workspace path",
+        possible_cause=(
+            "The selected repository command assumes a different working directory or a clean "
+            "build tree"
+        ),
+        patterns=(
+            r"(?:python(?:[0-9.]+)?): can(?:not|'t) open file [^\n]+(?:no such file or directory)",
+            r"mkdir: cannot create director(?:y|ies) [^\n]+file exists",
+        ),
+        suggestions=(
+            "Resolve command paths relative to the selected build root and container workdir.",
+            "Make setup commands idempotent when a generated image already contains build output.",
+        ),
+    ),
     FailureRule(
         category=FailureCategory.BUILD_COMMAND,
         message="Dockerfile references a missing build-context path",
@@ -252,6 +302,23 @@ PROJECT_RULES = (
         ),
     ),
     FailureRule(
+        category=FailureCategory.BUILD_TOOL,
+        message="Build tool version is too old",
+        possible_cause=(
+            "The container build tool does not satisfy the minimum version declared by the project"
+        ),
+        patterns=(
+            r"cmake [0-9.]+ or higher is required[^\n]+running version [0-9.]+",
+            r"requires cmake (?:version )?[0-9.]+ or higher",
+            r"(?:gradle|maven) [0-9.]+ or (?:higher|newer) is required",
+        ),
+        confidence=0.99,
+        suggestions=(
+            "Use the exact minimum build-tool version declared by the repository.",
+            "Do not change project source to weaken its minimum-version check.",
+        ),
+    ),
+    FailureRule(
         category=FailureCategory.SYSTEM_DEPENDENCY,
         message="System dependency is missing",
         possible_cause=(
@@ -259,13 +326,41 @@ PROJECT_RULES = (
         ),
         patterns=(
             r"fatal error: [^\n]+\.h: no such file or directory",
+            r"(?:looking for include file )?[^\n ]+\.h (?:-|was )?not found",
             r"pg_config executable not found",
             r"pkg-config[^\n]*(?:not found|could not find)",
+            r'''package ['"][^'"]+['"][^\n]+required by ['"]virtual:world['"][^\n]+not found''',
+            r"cannot find required librar(?:y|ies) [^\n]+",
+            r"could not find [a-z0-9_.+-]+ \(missing: [^)]+\)",
+            r"could not find a package configuration file provided by",
+            r"(?:nasm|yasm) not found or too old",
             r"cannot find -l[a-z0-9_.+-]+",
             r"(?:gcc|g\+\+|clang|make): (?:command )?not found",
             r"unable to execute ['\"]?(?:gcc|g\+\+|clang|cc)['\"]?: no such file or directory",
             r"cannot find command ['\"]git['\"]",
             r"no such file or directory: ['\"]git['\"]",
+        ),
+        suggestions=(
+            "Resolve the named capability through the dependency evidence safety table.",
+            "Install only packages supported by repository build-file evidence.",
+        ),
+    ),
+    FailureRule(
+        category=FailureCategory.PACKAGE_DEPENDENCY,
+        message="Declared package artifact is unavailable",
+        possible_cause=(
+            "A Maven or Gradle dependency is absent from the repositories configured by the project"
+        ),
+        patterns=(
+            r"could not find artifact [a-z0-9_.+-]+:[a-z0-9_.+-]+:[^\s]+",
+            r"could not find [a-z0-9_.+-]+:[a-z0-9_.+-]+:[a-z0-9_.+${}-]+",
+            r"the following artifacts could not be resolved:[^\n]+\(absent\)",
+            r"no versions? (?:of [^\n]+ )?(?:are|is) available",
+        ),
+        confidence=0.98,
+        suggestions=(
+            "Check repository declarations, snapshot availability, and the pinned source revision.",
+            "Do not repeatedly download an artifact that the configured repository reports absent.",
         ),
     ),
     FailureRule(
@@ -281,6 +376,7 @@ PROJECT_RULES = (
             r"version solving failed",
             r"because [^\n]+ depends on [^\n]+ and [^\n]+ depends on",
             r"pyproject\.toml changed significantly since [^\n]*lock",
+            r"invalid requirement: [^\n]+expected end or semicolon",
         ),
     ),
     FailureRule(
@@ -324,10 +420,16 @@ PROJECT_RULES = (
             r"no buildpack groups passed detection",
             r"failed to detect: buildpack",
             r"(?:cmake|make|ninja|poetry|pip|python): (?:command )?not found",
+            r"(?:make:\s+)?(?:go|cargo|rustc|javac): no such file or directory",
             r"/bin/sh: [0-9]+: [^\n]+: not found",
             r"could not find a package configuration file provided by",
             r"unknown build backend",
+            r"unknown build hook: [^\n]+",
             r"not supporting pep 517 builds",
+            r"pytest: error: unrecognized arguments:",
+        ),
+        suggestions=(
+            "Add only a build tool explicitly invoked by a selected root build manifest.",
         ),
     ),
 )
@@ -350,6 +452,71 @@ EXTERNAL_SERVICE_RULE = FailureRule(
 )
 
 
+def ordered_failure_rules(stage: BuildStage) -> tuple[FailureRule, ...]:
+    """Return the shared, deterministic rule precedence for one build stage."""
+
+    strong_project_rules = tuple(
+        rule
+        for rule in PROJECT_RULES
+        if rule.category is not FailureCategory.PYTHON_DEPENDENCY
+    )
+    python_dependency_rule = next(
+        rule
+        for rule in PROJECT_RULES
+        if rule.category is FailureCategory.PYTHON_DEPENDENCY
+    )
+    rules: list[FailureRule] = [
+        DOCKER_RULE,
+        IMAGE_RESOLUTION_RULE,
+        BENCHMARK_SENTINEL_POLICY_RULE,
+        MAVEN_WRAPPER_CONFIG_RULE,
+        MAVEN_LICENSE_METADATA_RULE,
+        MAVEN_GIT_HOOK_METADATA_RULE,
+        OMITTED_VCS_METADATA_RULE,
+        GRADLE_WRAPPER_DOWNLOAD_RULE,
+        JVM_TOOLCHAIN_RULE,
+        JVM_RUNTIME_REQUIREMENT_RULE,
+    ]
+    if stage in {BuildStage.STARTUP, BuildStage.TEST}:
+        rules.append(EXTERNAL_SERVICE_RULE)
+    # Explicit terminal project errors beat transient retry warnings. Network
+    # still precedes generic missing-distribution symptoms, which pip may emit
+    # after an index outage.
+    rules.extend(
+        (
+            GIT_RULE,
+            VCS_METADATA_RULE,
+            *strong_project_rules,
+            NETWORK_RULE,
+            python_dependency_rule,
+        )
+    )
+    if stage not in {BuildStage.STARTUP, BuildStage.TEST}:
+        rules.append(EXTERNAL_SERVICE_RULE)
+    return tuple(rules)
+
+
+def classify_failure_evidence(
+    text: str,
+    stage: BuildStage,
+) -> tuple[FailureRule, str] | None:
+    """Classify already-bounded log evidence without requiring storage artifacts."""
+
+    for rule in ordered_failure_rules(stage):
+        matches: list[re.Match[str]] = []
+        for pattern in rule.patterns:
+            matches.extend(re.finditer(pattern, text, re.IGNORECASE))
+        if matches:
+            # Build tools often print optional missing dependencies before the
+            # actual fatal one. Within the same failure class, the last match
+            # is closest to the terminating error and is the safer repair
+            # target. Rule ordering still preserves infrastructure/category
+            # precedence.
+            match = max(matches, key=lambda item: item.start())
+            return rule, match.group(0).strip()
+    return None
+
+
 class RuleBasedBuildFailureClassifier:
     def __init__(self, storage: Storage, *, inspection_bytes: int = 512 * 1024) -> None:
         if inspection_bytes <= 0:
@@ -370,53 +537,15 @@ class RuleBasedBuildFailureClassifier:
         stage = self._failure_stage(result, command)
         text = self._normalized_log(result)
 
-        strong_project_rules = tuple(
-            rule
-            for rule in PROJECT_RULES
-            if rule.category is not FailureCategory.PYTHON_DEPENDENCY
-        )
-        python_dependency_rule = next(
-            rule
-            for rule in PROJECT_RULES
-            if rule.category is FailureCategory.PYTHON_DEPENDENCY
-        )
-        ordered_rules: list[FailureRule] = [
-            DOCKER_RULE,
-            IMAGE_RESOLUTION_RULE,
-            BENCHMARK_SENTINEL_POLICY_RULE,
-            MAVEN_WRAPPER_CONFIG_RULE,
-            MAVEN_LICENSE_METADATA_RULE,
-            MAVEN_GIT_HOOK_METADATA_RULE,
-            GRADLE_WRAPPER_DOWNLOAD_RULE,
-            JVM_TOOLCHAIN_RULE,
-            JVM_RUNTIME_REQUIREMENT_RULE,
-        ]
-        if stage in {BuildStage.STARTUP, BuildStage.TEST}:
-            ordered_rules.append(EXTERNAL_SERVICE_RULE)
-        # Explicit terminal project errors beat transient retry warnings. Network
-        # still precedes generic missing-distribution symptoms, which pip may emit
-        # after an index outage.
-        ordered_rules.extend(
-            (
-                GIT_RULE,
-                VCS_METADATA_RULE,
-                *strong_project_rules,
-                NETWORK_RULE,
-                python_dependency_rule,
+        classified = classify_failure_evidence(text, stage)
+        if classified is not None:
+            rule, match = classified
+            return self._with_timeout_guidance(
+                self._failure(profile, plan, stage, command, text, rule, match),
+                text,
+                command,
+                result,
             )
-        )
-        if stage not in {BuildStage.STARTUP, BuildStage.TEST}:
-            ordered_rules.append(EXTERNAL_SERVICE_RULE)
-
-        for rule in ordered_rules:
-            match = self._match_rule(text, rule)
-            if match:
-                return self._with_timeout_guidance(
-                    self._failure(profile, plan, stage, command, text, rule, match),
-                    text,
-                    command,
-                    result,
-                )
 
         fallback_category, message, cause = self._stage_fallback(stage, result)
         fallback_rule = FailureRule(
@@ -457,14 +586,6 @@ class RuleBasedBuildFailureClassifier:
             re.sub(r"^(?:#[0-9]+\s+)?\[(?:builder|detector|analyzer|exporter)\]\s*", "", line)
             for line in text.splitlines()
         )
-
-    @staticmethod
-    def _match_rule(text: str, rule: FailureRule) -> str:
-        for pattern in rule.patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(0).strip()
-        return ""
 
     @staticmethod
     def _failed_command(plan: BuildPlan, result: BuildResult) -> CommandSpec | None:
@@ -554,6 +675,7 @@ class RuleBasedBuildFailureClassifier:
             retryable=rule.retryable,
             infrastructure_related=rule.infrastructure_related,
             confidence=rule.confidence,
+            suggestions=rule.suggestions,
         )
 
     @staticmethod

@@ -11,6 +11,7 @@ from evaluations.multilang.run_execution import (
     reusable_record,
     summarize,
 )
+from evaluations.multilang.run_agent_canary import terminal_llm_service_error
 
 
 def record(
@@ -21,7 +22,17 @@ def record(
     outcome: str = "succeeded",
     strict: bool = True,
     layers: tuple[str, str, str] = ("passed", "passed", "passed"),
+    runtime_metadata: dict | None = None,
 ) -> dict:
+    results = [
+        {"level": name, "status": status}
+        for name, status in zip(
+            ("installability", "testability", "runnability"),
+            layers,
+        )
+    ]
+    if runtime_metadata is not None:
+        results[-1]["metadata"] = runtime_metadata
     return {
         "case": {
             "case_id": case_id,
@@ -29,15 +40,7 @@ def record(
             "primary_language": language,
         },
         "build": {"result": {"status": build}},
-        "verification": {
-            "results": [
-                {"level": name, "status": status}
-                for name, status in zip(
-                    ("installability", "testability", "runnability"),
-                    layers,
-                )
-            ]
-        },
+        "verification": {"results": results},
         "outcome": {
             "status": outcome,
             "category": "none" if outcome == "succeeded" else "testability",
@@ -48,6 +51,24 @@ def record(
 
 
 class MultilangExecutionTests(unittest.TestCase):
+    def test_agent_canary_stops_batch_on_terminal_llm_service_error(self) -> None:
+        record = {
+            "state_metrics": {
+                "stop_reason": "[llm_error] LLM API returned HTTP 402: balance insufficient"
+            }
+        }
+
+        self.assertEqual(
+            terminal_llm_service_error(record),
+            "LLM service returned terminal HTTP 402",
+        )
+        self.assertEqual(
+            terminal_llm_service_error(
+                {"state_metrics": {"stop_reason": "LLM request timed out"}}
+            ),
+            "",
+        )
+
     def test_live_records_use_the_same_json_shape_as_resumed_records(self) -> None:
         @dataclass
         class Result:
@@ -121,16 +142,75 @@ class MultilangExecutionTests(unittest.TestCase):
             records,
             suite_id="suite",
             expected_case_count=3,
+            selected_indices=(21, 22, 23),
             implementation_sha256="implementation",
             policy={"llm_enabled": False},
         )
 
         self.assertTrue(result["complete"])
+        self.assertEqual(result["expected_case_count"], 3)
+        self.assertEqual(result["selected_indices"], [21, 22, 23])
         self.assertEqual(result["standard_build_success"], 2)
         self.assertEqual(result["environment_success"], 2)
         self.assertEqual(result["strict_test_success"], 1)
         self.assertEqual(result["verification_layers"]["testability"]["skipped"], 1)
         self.assertEqual(result["languages"]["cpp"]["strict_test_succeeded"], 0)
+
+    def test_summary_separates_artifact_presence_from_proven_runnability(self) -> None:
+        records = [
+            record(
+                "artifact-only",
+                "cpp",
+                strict=False,
+                runtime_metadata={
+                    "runtime_outcome_category": "compiled-artifact-present",
+                    "runtime_evidence_strength": "limited",
+                    "runtime_contract": "compiled-library-availability",
+                    "runtime_semantically_proven": False,
+                },
+            ),
+            record(
+                "service",
+                "python",
+                runtime_metadata={
+                    "runtime_outcome_category": "service-responsive",
+                    "runtime_evidence_strength": "strong",
+                    "runtime_contract": "service-health",
+                    "runtime_semantically_proven": True,
+                },
+            ),
+        ]
+
+        result = summarize(
+            records,
+            suite_id="suite",
+            expected_case_count=2,
+            implementation_sha256="implementation",
+            policy={"llm_enabled": False},
+        )
+
+        self.assertEqual(result["schema_version"], 3)
+        self.assertEqual(result["runnability_semantically_proven"], 1)
+        self.assertEqual(result["artifact_only_runnability_pass"], 1)
+        self.assertEqual(
+            result["runtime_evidence_strength_distribution"],
+            {"limited": 1, "strong": 1},
+        )
+        self.assertFalse(result["projects"][0]["runnability_semantically_proven"])
+
+    def test_subset_summary_completion_uses_selected_case_count(self) -> None:
+        result = summarize(
+            [record("cpp-one", "cpp"), record("cpp-two", "cpp")],
+            suite_id="suite",
+            expected_case_count=2,
+            selected_indices=(29, 30),
+            implementation_sha256="implementation",
+            policy={"llm_enabled": False},
+        )
+
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["record_count"], 2)
+        self.assertEqual(result["selected_indices"], [29, 30])
 
 
 if __name__ == "__main__":

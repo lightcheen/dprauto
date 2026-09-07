@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = Path(__file__).with_name("manifest.json")
 DEFAULT_OUTPUT = Path(__file__).with_name("runs") / "first-round-20260812"
 EVALUATION_IDENTITY_SCHEMA = 1
+SUMMARY_SCHEMA_VERSION = 4
 WORKSPACE_IGNORED_NAMES = (
     ".git",
     ".venv",
@@ -611,12 +612,14 @@ def run_one(
     config: AppConfig | None = None,
     implementation_sha256: str | None = None,
     expected_identity: dict[str, Any] | None = None,
+    source_reference: SourceReference | None = None,
+    run_id_prefix: str = "prompt12",
 ):
     repo = case["repo"]
     project_slug = f"{index + 1:02d}-{slug(repo)}"
     record_path = output / "records" / f"{project_slug}.json"
     source_path = Path(case["source"]).resolve()
-    source = load_source(source_path, repo)
+    source = source_reference or load_source(source_path, repo)
     effective_config = config or make_config(output)
     identity = expected_identity or evaluation_identity(
         case,
@@ -636,7 +639,7 @@ def run_one(
     identity_short = identity["digest"][:12]
     workspace = output / "workspaces" / f"{project_slug}-{identity_short}"
     copy_workspace(source_path, workspace)
-    run_id = f"prompt12-{index + 1:02d}-{slug(repo)}-{identity_short}"
+    run_id = f"{run_id_prefix}-{index + 1:02d}-{slug(repo)}-{identity_short}"
     before = attempt_results(storage_root)
     before_portfolios = portfolio_results(storage_root)
     started = time.monotonic()
@@ -734,12 +737,240 @@ def build_duration(build_result: dict[str, Any]) -> float:
 
 
 def verification_status(record: dict[str, Any], level: str) -> str:
-    result = (record.get("final_result") or {}).get(level)
+    result = verification_result(record, level)
     return str(result.get("status", "")) if isinstance(result, dict) else ""
+
+
+def verification_result(record: dict[str, Any], level: str) -> dict[str, Any]:
+    result = (record.get("final_result") or {}).get(level)
+    return result if isinstance(result, dict) else {}
+
+
+def verification_metadata(record: dict[str, Any], level: str) -> dict[str, Any]:
+    metadata = verification_result(record, level).get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def testability_output(record: dict[str, Any]) -> str:
+    result = verification_result(record, "testability")
+    checks = result.get("checks", ())
+    if not isinstance(checks, (list, tuple)):
+        return ""
+    excerpts: list[str] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        metadata = check.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("output_excerpt"):
+            excerpts.append(str(metadata["output_excerpt"]))
+    return "\n".join(excerpts)
+
+
+def testability_observed_count(record: dict[str, Any]) -> int:
+    metadata = verification_metadata(record, "testability")
+    value = metadata.get("observed_test_count")
+    if isinstance(value, int) and value >= 0:
+        return value
+    counts: list[int] = []
+    output = testability_output(record)
+    for pattern in (
+        r"\b(\d+)\s+passed\b",
+        r"\bran\s+(\d+)\s+tests?\b",
+        r"\btests run:\s*(\d+)\b",
+        r"\bout of\s+(\d+)\b",
+    ):
+        counts.extend(int(item) for item in re.findall(pattern, output, re.I))
+    return max(counts, default=0)
+
+
+def testability_outcome_category(record: dict[str, Any]) -> str:
+    metadata = verification_metadata(record, "testability")
+    category = metadata.get("outcome_category")
+    if isinstance(category, str) and category:
+        return category
+    output = testability_output(record).casefold()
+    if re.search(r"(?:no tests ran|collected 0 items|no tests were found)", output):
+        if testability_observed_count(record) == 0:
+            return "no-tests-collected"
+    result = verification_result(record, "testability")
+    command = result.get("command_result") or {}
+    if isinstance(command, dict) and command.get("timed_out"):
+        return "test-timeout"
+    if verification_status(record, "testability") == VerificationStatus.PASSED.value:
+        return "tests-passed"
+    if verification_status(record, "testability") == VerificationStatus.SKIPPED.value:
+        return "tests-skipped"
+    return "test-command-failure"
+
+
+def testability_evidence_strength(record: dict[str, Any]) -> str:
+    metadata = verification_metadata(record, "testability")
+    strength = metadata.get("test_evidence_strength")
+    if isinstance(strength, str) and strength:
+        return strength
+    category = testability_outcome_category(record)
+    if category == "no-tests-collected":
+        return "limited"
+    if testability_observed_count(record) > 0:
+        return "strong"
+    if category == "tests-passed":
+        return "moderate"
+    return "none"
+
+
+def testability_semantically_passed(record: dict[str, Any]) -> bool:
+    return bool(
+        verification_status(record, "testability") == VerificationStatus.PASSED.value
+        and testability_outcome_category(record) == "tests-passed"
+    )
+
+
+def runnability_outcome_category(record: dict[str, Any]) -> str:
+    result = verification_result(record, "runnability")
+    metadata = verification_metadata(record, "runnability")
+    category = metadata.get("runtime_outcome_category")
+    if isinstance(category, str) and category:
+        return category
+    checks = result.get("checks", ())
+    if not isinstance(checks, (list, tuple)):
+        checks = ()
+    by_name = {
+        str(check.get("name", "")): check
+        for check in checks
+        if isinstance(check, dict)
+    }
+    status = verification_status(record, "runnability")
+    if status == VerificationStatus.PASSED.value:
+        if "web-http" in by_name:
+            return "service-responsive"
+        if "cli-output" in by_name:
+            return "cli-invocable"
+        if "script-observable-effect" in by_name:
+            return "script-observable-execution"
+        if "library-import" in by_name:
+            api = by_name.get("library-api-or-tests", {}).get("metadata", {})
+            if isinstance(api, dict) and api.get("public_api_found"):
+                return "python-library-loadable"
+            if isinstance(api, dict) and api.get("project_tests_passed"):
+                return "python-library-test-backed"
+            return "python-library-import-only"
+        if "library-artifact" in by_name:
+            observed = by_name.get("library-artifact-or-tests", {}).get("metadata", {})
+            if isinstance(observed, dict) and observed.get("project_tests_passed"):
+                return "compiled-library-test-backed"
+            return "compiled-artifact-present"
+        return "runtime-command-passed"
+    command = result.get("command_result") or {}
+    if isinstance(command, dict) and command.get("timed_out"):
+        return "runtime-command-timeout"
+    if status == VerificationStatus.SKIPPED.value:
+        return "runtime-skipped"
+    return "runtime-command-failure"
+
+
+def runnability_evidence_strength(record: dict[str, Any]) -> str:
+    metadata = verification_metadata(record, "runnability")
+    strength = metadata.get("runtime_evidence_strength")
+    if isinstance(strength, str) and strength:
+        return strength
+    category = runnability_outcome_category(record)
+    if category in {"service-responsive", "script-observable-execution", "python-library-loadable"}:
+        return "strong"
+    if category in {
+        "cli-invocable",
+        "compiled-library-test-backed",
+        "python-library-test-backed",
+        "runtime-command-passed",
+    }:
+        return "moderate"
+    if category in {"compiled-artifact-present", "python-library-import-only"}:
+        return "limited"
+    return "none"
+
+
+def runnability_contract(record: dict[str, Any]) -> str:
+    metadata = verification_metadata(record, "runnability")
+    contract = metadata.get("runtime_contract")
+    if isinstance(contract, str) and contract:
+        return contract
+    category = runnability_outcome_category(record)
+    if category.startswith("service-"):
+        return "service-health"
+    if category.startswith("cli-"):
+        return "cli-entrypoint"
+    if category.startswith("script-"):
+        return "script-observable-effect"
+    if category.startswith("python-library-"):
+        return "library-load"
+    if category.startswith("compiled-"):
+        return "compiled-library-availability"
+    return "unknown"
+
+
+def runnability_semantically_passed(record: dict[str, Any]) -> bool:
+    metadata = verification_metadata(record, "runnability")
+    explicit = metadata.get("runtime_semantically_proven")
+    if isinstance(explicit, bool):
+        return bool(passed(record, "runnability") and explicit)
+    return bool(
+        passed(record, "runnability")
+        and runnability_evidence_strength(record) in {"strong", "moderate"}
+    )
 
 
 def passed(record, level):
     return verification_status(record, level) == VerificationStatus.PASSED.value
+
+
+def final_build_status(record: dict[str, Any]) -> str:
+    """Return the terminal build status, including Agent-repaired builds.
+
+    Older evaluation records did not always serialize ``build_result``.  Their
+    terminal environment status is retained as a conservative compatibility
+    fallback so frozen historical records remain summarizable.
+    """
+
+    final = record.get("final_result") or {}
+    build = final.get("build_result")
+    if isinstance(build, dict) and build.get("status"):
+        return str(build["status"])
+    if final.get("final_status") in {"succeeded", "verification_failed", "regression"}:
+        return "succeeded"
+    standard = record.get("standard_build") or {}
+    return str(standard.get("status", "not_started"))
+
+
+def agent_build_repaired(record: dict[str, Any]) -> bool:
+    final = record.get("final_result") or {}
+    return bool(
+        final.get("agent_participated")
+        and (record.get("standard_build") or {}).get("status") != "succeeded"
+        and final_build_status(record) == "succeeded"
+    )
+
+
+def final_failure_stage(record: dict[str, Any]) -> str:
+    """Attribute terminal failure to the pipeline stage, not its root-cause type."""
+
+    final = record.get("final_result")
+    if not isinstance(final, dict):
+        return "runner"
+    if final.get("final_status") == "succeeded":
+        return "none"
+    if final_build_status(record) != "succeeded":
+        return "build"
+    for level in ("installability", "testability", "runnability"):
+        if verification_status(record, level) in {
+            VerificationStatus.FAILED.value,
+            VerificationStatus.ERROR.value,
+        }:
+            return level
+    regression = final.get("regression_result") or {}
+    if final.get("final_status") == "regression" or regression.get("status") == "regression":
+        return "regression"
+    if final.get("final_status") == "verification_failed":
+        return "verification"
+    return "workflow"
 
 
 def terminal_failure(record: dict[str, Any]) -> dict[str, Any]:
@@ -757,7 +988,15 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         (r.get("standard_build") or {}).get("status") == "succeeded" for r in records
     )
     entered = [r for r in completed if r["final_result"]["agent_participated"]]
-    repaired = [r for r in entered if r["final_result"]["final_status"] == "succeeded"]
+    environment_repaired = [
+        r for r in entered if r["final_result"]["final_status"] == "succeeded"
+    ]
+    build_repair_candidates = [
+        r
+        for r in entered
+        if (r.get("standard_build") or {}).get("status") != "succeeded"
+    ]
+    build_repaired = [r for r in build_repair_candidates if agent_build_repaired(r)]
     final_success = sum(
         r["final_result"]["final_status"] == "succeeded" for r in completed
     )
@@ -779,7 +1018,12 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     )
     repaired_categories = Counter(
         r["initial_failure"]["category"]
-        for r in repaired
+        for r in environment_repaired
+        if r.get("initial_failure")
+    )
+    build_repaired_categories = Counter(
+        r["initial_failure"]["category"]
+        for r in build_repaired
         if r.get("initial_failure")
     )
     unresolved_categories = Counter(
@@ -810,7 +1054,38 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         or (r["final_result"].get("regression_result") or {}).get("status") == "regression"
         for r in completed
     )
+    failure_stages = Counter(
+        final_failure_stage(r)
+        for r in records
+        if final_failure_stage(r) != "none"
+    )
+    testability_records = [
+        record
+        for record in completed
+        if verification_result(record, "testability")
+    ]
+    test_outcomes = Counter(
+        testability_outcome_category(record) for record in testability_records
+    )
+    test_evidence_strength = Counter(
+        testability_evidence_strength(record) for record in testability_records
+    )
+    runnability_records = [
+        record
+        for record in completed
+        if verification_result(record, "runnability")
+    ]
+    runtime_outcomes = Counter(
+        runnability_outcome_category(record) for record in runnability_records
+    )
+    runtime_evidence_strength = Counter(
+        runnability_evidence_strength(record) for record in runnability_records
+    )
+    runtime_contracts = Counter(
+        runnability_contract(record) for record in runnability_records
+    )
     return {
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "evaluation_policy": {
             "sample_size": total,
             "build_timeout_seconds": 300,
@@ -827,8 +1102,23 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "agent_capability": {
             "entered_agent": len(entered),
-            "agent_repair_success": len(repaired),
-            "agent_repair_success_rate": len(repaired) / len(entered) if entered else 0,
+            "build_repair_candidates": len(build_repair_candidates),
+            "build_repair_success": len(build_repaired),
+            "build_repair_success_rate": (
+                len(build_repaired) / len(build_repair_candidates)
+                if build_repair_candidates
+                else 0
+            ),
+            "environment_repair_success": len(environment_repaired),
+            "environment_repair_success_rate": (
+                len(environment_repaired) / len(entered) if entered else 0
+            ),
+            # Backward-compatible aliases.  Historically "agent repair" meant
+            # strict final environment success, not successful build recovery.
+            "agent_repair_success": len(environment_repaired),
+            "agent_repair_success_rate": (
+                len(environment_repaired) / len(entered) if entered else 0
+            ),
             "final_environment_success": final_success,
             "final_environment_success_rate": final_success / total if total else 0,
             "average_repair_rounds": statistics.mean(repair_rounds) if repair_rounds else 0,
@@ -839,7 +1129,22 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "verification": {
             "installability_pass": sum(passed(r, "installability") for r in completed),
-            "testability_pass": sum(passed(r, "testability") for r in completed),
+            "installability_failed_or_error": sum(
+                verification_status(r, "installability")
+                in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
+                for r in completed
+            ),
+            "testability_pass": sum(
+                testability_semantically_passed(r) for r in completed
+            ),
+            "reported_testability_pass": sum(
+                passed(r, "testability") for r in completed
+            ),
+            "zero_test_false_success": sum(
+                passed(r, "testability")
+                and testability_outcome_category(r) == "no-tests-collected"
+                for r in completed
+            ),
             "testability_skipped": sum(
                 verification_status(r, "testability")
                 == VerificationStatus.SKIPPED.value
@@ -850,17 +1155,64 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
                 in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
                 for r in completed
             ),
-            "runnability_pass": sum(passed(r, "runnability") for r in completed),
+            "runnability_pass": sum(
+                runnability_semantically_passed(r) for r in completed
+            ),
+            "reported_runnability_pass": sum(
+                passed(r, "runnability") for r in completed
+            ),
+            "artifact_only_runnability_pass": sum(
+                passed(r, "runnability")
+                and runnability_evidence_strength(r) == "limited"
+                for r in completed
+            ),
+            "runnability_failed_or_error": sum(
+                verification_status(r, "runnability")
+                in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
+                for r in completed
+            ),
             "build_success_test_failure": sum(
+                final_build_status(r) == "succeeded"
+                and verification_status(r, "testability")
+                in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
+                for r in completed
+            ),
+            "standard_build_success_test_failure": sum(
                 (r.get("standard_build") or {}).get("status") == "succeeded"
                 and verification_status(r, "testability")
                 in {VerificationStatus.FAILED.value, VerificationStatus.ERROR.value}
                 for r in completed
             ),
-            "test_success_run_failure": sum(
-                passed(r, "testability") and not passed(r, "runnability")
+            "final_build_success_testability_not_proven": sum(
+                final_build_status(r) == "succeeded"
+                and not testability_semantically_passed(r)
                 for r in completed
             ),
+            "test_success_run_failure": sum(
+                testability_semantically_passed(r)
+                and not runnability_semantically_passed(r)
+                for r in completed
+            ),
+            "failure_stage_distribution": dict(sorted(failure_stages.items())),
+            "testability_outcome_categories": dict(sorted(test_outcomes.items())),
+            "test_evidence_strength_distribution": dict(
+                sorted(test_evidence_strength.items())
+            ),
+            "test_candidate_fallbacks": sum(
+                bool(metadata.get("candidate_fallback_used"))
+                for metadata in (
+                    verification_metadata(record, "testability")
+                    for record in testability_records
+                )
+            ),
+            "observed_test_count_total": sum(
+                testability_observed_count(record) for record in testability_records
+            ),
+            "runnability_outcome_categories": dict(sorted(runtime_outcomes.items())),
+            "runtime_evidence_strength_distribution": dict(
+                sorted(runtime_evidence_strength.items())
+            ),
+            "runtime_contract_distribution": dict(sorted(runtime_contracts.items())),
         },
         "repair_quality": {
             "regression_count": regressions,
@@ -886,6 +1238,7 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         "infrastructure": dict(infrastructure),
         "failure_type_distribution": dict(initial_categories),
         "agent_repaired_failure_types": dict(repaired_categories),
+        "agent_build_repaired_failure_types": dict(build_repaired_categories),
         "unresolved_failure_types": dict(unresolved_categories),
         "runner_errors": sum(bool(r.get("error")) for r in records),
         "projects": [
@@ -895,11 +1248,42 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "workspace_path": r["workspace_path"],
                 "historical_cnb_status": r["historical_cnb_status"],
                 "standard_build_status": (r.get("standard_build") or {}).get("status"),
+                "final_build_status": final_build_status(r),
                 "final_status": (r.get("final_result") or {}).get("final_status", "error"),
                 "agent_participated": (r.get("final_result") or {}).get(
                     "agent_participated", False
                 ),
                 "repair_attempts": (r.get("final_result") or {}).get("repair_attempts", 0),
+                "build_repaired_by_agent": agent_build_repaired(r),
+                "environment_repaired_by_agent": bool(
+                    (r.get("final_result") or {}).get("agent_participated")
+                    and (r.get("final_result") or {}).get("final_status") == "succeeded"
+                ),
+                "final_failure_stage": final_failure_stage(r),
+                "testability_outcome_category": testability_outcome_category(r),
+                "testability_reported_status": verification_status(
+                    r, "testability"
+                ),
+                "testability_semantically_passed": testability_semantically_passed(r),
+                "test_evidence_strength": testability_evidence_strength(r),
+                "observed_test_count": testability_observed_count(r),
+                "test_candidate_fallback_used": bool(
+                    verification_metadata(r, "testability").get(
+                        "candidate_fallback_used"
+                    )
+                ),
+                "test_candidate_attempts": len(
+                    verification_metadata(r, "testability").get(
+                        "command_attempts", ()
+                    )
+                ),
+                "runnability_reported_status": verification_status(
+                    r, "runnability"
+                ),
+                "runnability_semantically_passed": runnability_semantically_passed(r),
+                "runnability_outcome_category": runnability_outcome_category(r),
+                "runtime_evidence_strength": runnability_evidence_strength(r),
+                "runtime_contract": runnability_contract(r),
                 "initial_failure_category": (r.get("initial_failure") or {}).get("category"),
                 "final_failure_category": terminal_failure(r).get("category"),
             }

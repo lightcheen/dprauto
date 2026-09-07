@@ -1268,6 +1268,74 @@ class AgentWorkflowTests(unittest.TestCase):
         )
         self.assertIn("ModuleNotFoundError", context["current_failure"]["key_log"])
 
+    def test_verification_failures_reuse_specific_build_evidence_categories(self) -> None:
+        cases = (
+            (
+                VerificationLevel.INSTALLABILITY,
+                "python -c 'import sherlock'",
+                "ModuleNotFoundError: No module named 'pytest'",
+                FailureCategory.PYTHON_DEPENDENCY,
+            ),
+            (
+                VerificationLevel.TESTABILITY,
+                "python -m pytest",
+                "pytest: error: unrecognized arguments: --asyncio-mode=strict",
+                FailureCategory.BUILD_TOOL,
+            ),
+            (
+                VerificationLevel.TESTABILITY,
+                "mkdir build && cd build && cmake ..",
+                "mkdir: cannot create directory 'build': File exists",
+                FailureCategory.BUILD_COMMAND,
+            ),
+            (
+                VerificationLevel.RUNNABILITY,
+                "python /workspace/../tests/instrumented.py",
+                "python: can't open file '/tests/instrumented.py': "
+                "[Errno 2] No such file or directory",
+                FailureCategory.BUILD_COMMAND,
+            ),
+            (
+                VerificationLevel.TESTABILITY,
+                "python -m pytest",
+                "FAILED tests/test_api.py::test_response - AssertionError: expected 200",
+                FailureCategory.TEST,
+            ),
+        )
+        for index, (level, command_text, excerpt, expected) in enumerate(cases):
+            with self.subTest(level=level, expected=expected):
+                purpose = {
+                    VerificationLevel.INSTALLABILITY: CommandPurpose.INSTALL,
+                    VerificationLevel.TESTABILITY: CommandPurpose.TEST,
+                    VerificationLevel.RUNNABILITY: CommandPurpose.RUN,
+                }[level]
+                command = CommandSpec((command_text,), purpose=purpose, shell=True)
+                command_result = CommandResult(command, 1)
+                check = VerificationCheck(
+                    f"failed-check-{index}",
+                    VerificationStatus.FAILED,
+                    "verification command failed",
+                    command_result=command_result,
+                    metadata={"output_excerpt": excerpt},
+                )
+                result = VerificationResult(
+                    f"verification-{index}",
+                    level,
+                    VerificationStatus.FAILED,
+                    command_result=command_result,
+                    checks=(check,),
+                )
+                report = VerificationReport(
+                    f"report-{index}",
+                    f"attempt-{index}",
+                    (result,),
+                )
+
+                failure_info = AgentWorkflow._verification_failure(report)
+
+                self.assertEqual(failure_info.category, expected)
+                self.assertIn(excerpt, failure_info.key_log)
+
     def test_testability_overlay_reverifies_without_rebuilding_runtime_image(self) -> None:
         now = datetime.now(timezone.utc)
         successful_build = BuildResult(

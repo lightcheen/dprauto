@@ -18,9 +18,17 @@ from evaluations.prompt12.run_evaluation import (
     make_config,
     required_poetry_python_versions,
     run_one,
+    runnability_contract as _runnability_contract,
+    runnability_evidence_strength as _runnability_evidence_strength,
+    runnability_outcome_category as _runnability_outcome_category,
+    runnability_semantically_passed as _runnability_semantically_passed,
     selected_indices,
     slug,
     summarize,
+    testability_evidence_strength as _testability_evidence_strength,
+    testability_observed_count as _testability_observed_count,
+    testability_outcome_category as _testability_outcome_category,
+    testability_semantically_passed as _testability_semantically_passed,
 )
 
 
@@ -500,6 +508,148 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertEqual(summary["unresolved_failure_types"], {"network": 1})
         self.assertEqual(summary["infrastructure"], {"network_failure": 1})
         self.assertEqual(summary["projects"][0]["final_failure_category"], "network")
+
+    def test_summarize_separates_agent_build_repair_from_runtime_failure(self) -> None:
+        record = {
+            "repo": "example/repaired-native-library",
+            "source_path": "/tmp/source",
+            "workspace_path": "/tmp/workspace",
+            "historical_cnb_status": "failure",
+            "standard_build": {
+                "status": "failed",
+                "started_at": "2026-09-06T00:00:00+00:00",
+                "finished_at": "2026-09-06T00:00:01+00:00",
+            },
+            "elapsed_seconds": 3.0,
+            "final_result": {
+                "agent_participated": True,
+                "final_status": "verification_failed",
+                "repair_attempts": 2,
+                "build_result": {"status": "succeeded"},
+                "installability": {"status": "passed"},
+                "testability": {
+                    "status": "passed",
+                    "metadata": {
+                        "outcome_category": "tests-passed",
+                        "test_evidence_strength": "strong",
+                        "observed_test_count": 12,
+                        "candidate_fallback_used": True,
+                        "command_attempts": ({"candidate": 1}, {"candidate": 2}),
+                    },
+                },
+                "runnability": {"status": "failed"},
+                "failure": {"category": "run", "kind": "project_build"},
+            },
+            "initial_failure": {
+                "category": "system_dependency",
+                "kind": "project_build",
+            },
+            "state_metrics": {
+                "stop_reason": "verification repair rejected",
+                "ineffective_modifications": 0,
+                "duplicate_repair_plan": 0,
+            },
+            "llm": {
+                "calls": 2,
+                "api_seconds": 1,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+            },
+        }
+
+        summary = summarize([record])
+
+        self.assertEqual(summary["summary_schema_version"], 4)
+        self.assertEqual(summary["agent_capability"]["build_repair_candidates"], 1)
+        self.assertEqual(summary["agent_capability"]["build_repair_success"], 1)
+        self.assertEqual(summary["agent_capability"]["environment_repair_success"], 0)
+        self.assertEqual(summary["agent_capability"]["agent_repair_success"], 0)
+        self.assertEqual(
+            summary["agent_build_repaired_failure_types"],
+            {"system_dependency": 1},
+        )
+        self.assertEqual(
+            summary["verification"]["failure_stage_distribution"],
+            {"runnability": 1},
+        )
+        self.assertEqual(summary["verification"]["test_success_run_failure"], 1)
+        self.assertEqual(
+            summary["verification"]["testability_outcome_categories"],
+            {"tests-passed": 1},
+        )
+        self.assertEqual(
+            summary["verification"]["test_evidence_strength_distribution"],
+            {"strong": 1},
+        )
+        self.assertEqual(summary["verification"]["observed_test_count_total"], 12)
+        self.assertEqual(summary["verification"]["test_candidate_fallbacks"], 1)
+        self.assertEqual(summary["verification"]["runnability_pass"], 0)
+        self.assertEqual(summary["verification"]["reported_runnability_pass"], 0)
+        self.assertEqual(
+            summary["verification"]["runnability_outcome_categories"],
+            {"runtime-command-failure": 1},
+        )
+        self.assertTrue(summary["projects"][0]["build_repaired_by_agent"])
+        self.assertFalse(summary["projects"][0]["environment_repaired_by_agent"])
+        self.assertEqual(summary["projects"][0]["final_failure_stage"], "runnability")
+        self.assertEqual(summary["projects"][0]["testability_outcome_category"], "tests-passed")
+        self.assertEqual(summary["projects"][0]["test_candidate_attempts"], 2)
+
+    def test_legacy_testability_output_reclassifies_zero_test_false_success(self) -> None:
+        record = {
+            "final_result": {
+                "testability": {
+                    "status": "passed",
+                    "checks": [
+                        {
+                            "metadata": {
+                                "output_excerpt": (
+                                    "Internal ctest changing into directory /workspace/build\n"
+                                    "No tests were found!!!\n"
+                                )
+                            }
+                        }
+                    ],
+                }
+            }
+        }
+
+        self.assertEqual(
+            _testability_outcome_category(record),
+            "no-tests-collected",
+        )
+        self.assertEqual(_testability_observed_count(record), 0)
+        self.assertEqual(_testability_evidence_strength(record), "limited")
+        self.assertFalse(_testability_semantically_passed(record))
+
+    def test_legacy_compiled_artifact_pass_is_limited_runnability_evidence(self) -> None:
+        record = {
+            "final_result": {
+                "runnability": {
+                    "status": "passed",
+                    "checks": [
+                        {"name": "library-artifact", "status": "passed"},
+                        {
+                            "name": "library-artifact-or-tests",
+                            "status": "passed",
+                            "metadata": {
+                                "artifact_count": 3,
+                                "project_tests_passed": False,
+                            },
+                        },
+                    ],
+                }
+            }
+        }
+
+        self.assertEqual(
+            _runnability_outcome_category(record),
+            "compiled-artifact-present",
+        )
+        self.assertEqual(_runnability_evidence_strength(record), "limited")
+        self.assertEqual(_runnability_contract(record), "compiled-library-availability")
+        self.assertFalse(_runnability_semantically_passed(record))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
+from pathlib import PurePosixPath
 
+from dprauto.adapters.multilang.dependencies import validated_native_system_packages
 from dprauto.command_semantics import GRADLE_PROXY_EXECUTABLE
 from dprauto.config import BuildConfig
 from dprauto.domain.enums import BuildStage, CommandPurpose, ProjectType
@@ -24,18 +26,22 @@ from dprauto.strategies.common import (
     stable_image_reference,
     stable_plan_id,
 )
+from dprauto.strategies.context import generated_dockerignore
 
 JVM_RUNTIME_MARKER = "DPRAUTO_JVM_ARTIFACT_OK"
 NATIVE_RUNTIME_MARKER = "DPRAUTO_NATIVE_BUILD_OK"
-GENERATED_DOCKERIGNORE = """# DPRAuto template context policy
-.git
-.dprauto
-.cnb-benchmark-source-ready
-"""
-
 GRADLE_WRAPPER_NETWORK_TIMEOUT_MILLISECONDS = 120_000
 GRADLE_WRAPPER_PREFETCH_ATTEMPTS = 3
 GRADLE_WRAPPER_RETRY_DELAY_SECONDS = 5
+
+
+def _container_workdir(profile: ProjectProfile) -> str:
+    build_root = str(profile.metadata.get("build_root", ".")).strip().strip("/")
+    return "/workspace" if not build_root or build_root == "." else f"/workspace/{build_root}"
+
+
+def _build_file_names(profile: ProjectProfile) -> set[str]:
+    return {PurePosixPath(path).name for path in profile.build_files}
 
 
 def _docker_build_command(config: BuildConfig, image: str) -> CommandSpec:
@@ -76,11 +82,7 @@ def _plan(
         # repository root .dockerignore. Project-owned ignore rules are often
         # tailored to a different Dockerfile and may exclude pom.xml,
         # CMakeLists.txt, or other inputs required by this generated template.
-        GeneratedFile(
-            "Dockerfile.dockerignore",
-            GENERATED_DOCKERIGNORE,
-            media_type="text/plain",
-        ),
+        generated_dockerignore(profile),
     )
     command = _docker_build_command(config, image)
     complete_metadata = {
@@ -154,7 +156,8 @@ class JVMTemplateStrategy:
                 " -Dgitbuildhook.install.skip=true" if git_hook_source else ""
             )
             build_command = (
-                f"{executable} -B -DskipTests{license_option}{git_hook_option} package"
+                f"{executable} -B -Dmaven.test.skip=true"
+                f"{license_option}{git_hook_option} package"
             )
             artifact_glob = "*/target/*.jar"
             prefetch_command = ""
@@ -175,7 +178,7 @@ class JVMTemplateStrategy:
             f"FROM {base_image}",
             "USER root",
             "ENTRYPOINT []",
-            "WORKDIR /workspace",
+            f"WORKDIR {_container_workdir(profile)}",
             "COPY . /workspace",
         ])
         if toolchain_version:
@@ -294,7 +297,7 @@ class JVMTemplateStrategy:
     @staticmethod
     def _wrapper(profile: ProjectProfile, system: str) -> bool:
         expected = "mvnw" if system == "maven" else "gradlew"
-        return expected in profile.build_files
+        return expected in _build_file_names(profile)
 
     @staticmethod
     def _maven_license_skip(profile: ProjectProfile) -> str:
@@ -384,10 +387,6 @@ class NativeTemplateStrategy:
 
     name = "native-template"
     _SYSTEMS = frozenset({"cmake", "meson", "autotools", "make"})
-    _EVIDENCE_PACKAGES = frozenset(
-        {"liblzma-dev", "libpopt-dev", "libssl-dev", "python3", "zlib1g-dev"}
-    )
-
     def __init__(self, runner: RecordedBuildRunner, config: BuildConfig | None = None) -> None:
         self.runner = runner
         self.config = config or BuildConfig()
@@ -410,7 +409,7 @@ class NativeTemplateStrategy:
             f"FROM {self.config.native_base_image}",
             "USER root",
             "ENTRYPOINT []",
-            "WORKDIR /workspace",
+            f"WORKDIR {_container_workdir(profile)}",
         ]
         apt_mount = (
             "--mount=type=cache,id=dprauto-apt-cache,target=/var/cache/apt,sharing=locked "
@@ -478,17 +477,10 @@ class NativeTemplateStrategy:
         elif system == "meson":
             packages.extend(("meson", "ninja-build", "python3"))
         elif system == "autotools":
-            root_files = set(profile.build_files)
+            root_files = _build_file_names(profile)
             if "configure" not in root_files or "autogen.sh" in root_files:
                 packages.extend(("autoconf", "automake", "libtool"))
-        evidence_packages = profile.metadata.get("system_dependency_packages", ())
-        if isinstance(evidence_packages, (list, tuple)):
-            packages.extend(
-                package
-                for package in evidence_packages[:16]
-                if isinstance(package, str)
-                and package in NativeTemplateStrategy._EVIDENCE_PACKAGES
-            )
+        packages.extend(validated_native_system_packages(profile.metadata)[:24])
         return tuple(dict.fromkeys(packages))
 
     def _install_command(self, packages: tuple[str, ...]) -> str:
@@ -540,7 +532,7 @@ class NativeTemplateStrategy:
         if system == "meson":
             return ("meson setup build", f"meson compile -C build -j {jobs}")
         if system == "autotools":
-            root_files = set(profile.build_files)
+            root_files = _build_file_names(profile)
             if "autogen.sh" in root_files:
                 configure = (
                     "chmod +x ./autogen.sh && ./autogen.sh && "
@@ -551,24 +543,26 @@ class NativeTemplateStrategy:
             else:
                 configure = "autoreconf -fi && ./configure"
             return (configure, f"make -j{jobs}")
-        return (f"make -j{jobs}",)
+        target = str(profile.metadata.get("make_build_target", ""))
+        if target not in {"all", "build"}:
+            target = ""
+        return (f"make -j{jobs}" + (f" {target}" if target else ""),)
 
     @staticmethod
     def _runtime_probe(profile: ProjectProfile, system: str) -> tuple[str, str]:
         if profile.project_type is ProjectType.CLI:
-            command = next(
-                (
-                    item.command.display
-                    for item in profile.commands
-                    if item.command.purpose is CommandPurpose.RUN
-                    and item.source == "inferred:root-executable-target"
-                    and re.fullmatch(
-                        r"(?:\./|build/)[A-Za-z0-9_.+-]+ (?:--version|--help|-h)",
-                        item.command.display,
-                    )
-                ),
-                "",
+            candidates = tuple(
+                item
+                for item in profile.commands
+                if item.command.purpose is CommandPurpose.RUN
+                and re.fullmatch(
+                    r"(?:\./|build/)[A-Za-z0-9_.+-]+"
+                    r"(?: [A-Za-z0-9_.+:/=-]+){1,8}",
+                    item.command.display,
+                )
             )
+            selected = max(candidates, key=lambda item: item.confidence, default=None)
+            command = selected.command.display if selected is not None else ""
             if command:
                 return (
                     f"{command} && echo {NATIVE_RUNTIME_MARKER} && echo DPRAUTO_CLI_COMMAND_OK=1",
@@ -579,7 +573,7 @@ class NativeTemplateStrategy:
             (
                 f"test -d {build_directory} && "
                 f"count=$(find {build_directory} -type f "
-                "\\( -perm -111 -o -name '*.a' -o -name '*.so' -o -name '*.dylib' \\) "
+                "\\( -name '*.a' -o -name '*.so' -o -name '*.dylib' \\) "
                 "| wc -l) && test \"$count\" -gt 0 && "
                 f"echo {NATIVE_RUNTIME_MARKER} && echo DPRAUTO_ARTIFACT_COUNT=$count"
             ),

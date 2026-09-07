@@ -59,10 +59,19 @@ profile = MultiLanguageProjectParser().parse(
 ```
 
 结果统一写入 `ProjectProfile`。生产 parser registry 当前识别 Python、Maven/Gradle JVM 和
-CMake/Meson/Autotools/Make Native 根项目，记录语言、版本/标准、真实子项目与工作目录、
-依赖与构建文件、包管理器以及按 build/test/run/install 分类的有界命令候选。JVM/Native
-解析不会被仓库中的辅助 Python 脚本抢占；这一阶段只建立项目智能画像，实际确定性容器构建
-仍仅支持 Python，Java/C/C++ 构建策略在后续阶段接入。
+CMake/Meson/Autotools/Make Native 项目。构建生态选择按根构建清单、子目录构建清单、匹配
+源码数量及目录风险进行可审计评分；工具型 `pyproject.toml`、辅助 Python 脚本以及
+examples/tests/vendor/third-party 中的嵌套工程不会覆盖更强的主项目证据。没有根构建清单时，
+解析器可选择两层以内的安全构建根，并将 Docker 工作目录及项目命令的 `cwd` 一并调整。
+
+`profile.metadata["repository_evidence"]` 以稳定 schema 记录 parser/build root 候选得分、
+置信度和原始文件证据，以及版本约束、构建/依赖清单、文档、CI 和 build/test/run/install
+命令的来源与工作目录。Java/C/C++ 确定性模板直接使用该构建根，不需要项目名称特例。
+
+`profile.metadata["dependency_contract"]` 进一步将 Python、JVM 和 Native 的依赖清单、运行时/
+工具链约束、语言依赖、测试依赖和系统依赖归一为同一份可审计契约。Native 解析器只从
+CMake `find_package`/`pkg_check_modules`/头文件检查、Autoconf 程序检查及根构建脚本的明确
+工具检查生成系统包证据；构建策略只接受带来源、达到置信度阈值且位于集中安全表中的包。
 
 ## Tree-sitter 全仓库知识图谱
 
@@ -131,9 +140,12 @@ second = service.query(
 默认使用有界策略组合：仓库自带 Dockerfile 时先运行 `DockerStrategy`，可恢复的项目构建
 失败再依次尝试 `TemplateStrategy` 和 `CNBStrategy`。没有 Dockerfile 的 Python 项目从
 Template 开始；CNB 仅在 `pack` 实际可执行且项目含标准 Python manifest 时进入候选。
-任一策略成功即停止，网络/Docker 基础设施错误、超时、取消或共享截止时间耗尽也立即停止，
-普通构建不会调用 LLM。`DPRAUTO_BUILD_STRATEGY_PORTFOLIO_ENABLED=false` 可恢复旧的单策略
-行为，`DPRAUTO_BUILD_MAX_STRATEGY_ATTEMPTS` 控制单次组合最多尝试数（默认 3）。
+任一策略成功即停止。明确的临时网络故障会在同一计划、同一策略内默认重试一次；相同失败
+fingerprint 不会重复重试，Docker 非网络基础设施错误、超时、取消或共享截止时间耗尽立即停止。
+项目构建错误不会原样重跑，只能进入下一个兼容策略。普通构建不会调用 LLM。
+`DPRAUTO_BUILD_STRATEGY_PORTFOLIO_ENABLED=false` 可恢复旧的单策略行为，
+`DPRAUTO_BUILD_MAX_STRATEGY_ATTEMPTS` 控制单次组合最多尝试数（默认 3），
+`DPRAUTO_BUILD_MAX_TRANSIENT_RETRIES` 控制每个策略的临时网络重试上限（默认 1，范围 0–3）。
 
 ```python
 from pathlib import Path
@@ -161,10 +173,16 @@ runs/
 ```
 
 `BuildExecution.attempts` 与 `selection.json` 保留所有实际策略尝试、每次分类结果、最终选择和
-停止原因；各策略共用调用方传入的总截止时间。`BuildResult` 同时保留开始/结束时间、耗时、
+停止原因；`attempt_sequence` 额外记录策略内序号、被重试的 attempt id 和重试原因。各策略
+共用调用方传入的总截止时间。`BuildResult` 同时保留开始/结束时间、耗时、
 退出码、命令结果、日志 Artifact、输出 Artifact 和成功镜像引用。失败由
 `FailureInfo.kind` 明确区分 `git`、`network`、`docker_infrastructure` 和
 `project_build`。
+
+构建与分层验证共用确定性失败证据规则。它会优先区分包制品缺失、Python 依赖、系统库、
+JVM toolchain/运行时、构建工具版本、工作目录/命令、VCS 元数据策略、网络及外部服务；没有
+具体环境证据的测试断言和启动失败仍分别保留为 `testability` 与 `runnability`，避免为了真实
+代码测试失败而修改镜像。
 
 Docker 构建网络可通过 `DPRAUTO_BUILD_DOCKER_NETWORK` 设置，验证容器网络可通过
 `DPRAUTO_VERIFICATION_DOCKER_NETWORK` 独立设置。当前评估环境使用 `host` 完成
@@ -261,6 +279,17 @@ coverage 只属于观测能力，因此 `--cov`、`--cov-report` 等 coverage-on
 Testability 成败的前置条件。若 conftest 在收集阶段明确需要 secret，或者只发现外部服务/
 昂贵测试，Testability 会带 `skip_reason` 明确标记 SKIPPED；系统不会伪造密钥、调用付费
 服务，也不会把未执行测试写成 PASSED。Installability 和 Runnability 仍必须通过。
+
+Testability 会保留最多 3 个来源不同的项目命令候选，并在执行前校验工作目录、选中的测试
+文件及源码树中可确认的 Make 目标。只有命令不存在、目标不存在、零测试或验证环境错误等
+可替换失败才会继续下一候选；真实测试断言失败不会被后续简单命令掩盖。候选上限可通过
+`DPRAUTO_VERIFICATION_MAX_TEST_COMMAND_CANDIDATES` 设置为 1–8，每次尝试及拒绝原因都会写入
+`command_attempts`。
+
+生成式 Python/JVM/native Dockerfile 使用统一的源码上下文契约：保留测试、manifest 和源码，
+仅排除缓存数据；检测到 `git describe`、Grgit、setuptools-scm 等构建期 VCS 消费者时保留
+`.git`。CMake 和 Maven 的 Installability 构建不会编译或启用测试，测试开关和测试目标只在
+Testability 容器中准备。
 
 临时安装的验证 runner 使用固定版本，默认分别为 `pytest==8.3.5`、`tox==4.23.2` 和
 `nox==2024.10.9`，避免上游最新版改变导致同一项目在不同时间得到不同结果。版本可通过

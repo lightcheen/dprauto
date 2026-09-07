@@ -125,7 +125,10 @@ class BuildStrategyTests(unittest.TestCase):
 
         self.assertIsInstance(strategy, BuildStrategy)
         self.assertEqual(first.plan_id, second.plan_id)
-        self.assertEqual({item.path for item in first.generated_files}, {"Dockerfile", "setup.sh"})
+        self.assertEqual(
+            {item.path for item in first.generated_files},
+            {"Dockerfile", "Dockerfile.dockerignore", "setup.sh"},
+        )
         self.assertIn("python:3.11-slim", first.generated_files[0].content)
 
         result = strategy.build(first, self.root)
@@ -155,12 +158,15 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertEqual(first.plan_id, second.plan_id)
         self.assertEqual(first.strategy, "jvm-template")
         self.assertEqual(first.metadata["base_image"], "maven:3.9.9-eclipse-temurin-17")
-        self.assertEqual(first.metadata["build_command"], "./mvnw -B -DskipTests package")
+        self.assertEqual(
+            first.metadata["build_command"],
+            "./mvnw -B -Dmaven.test.skip=true package",
+        )
         self.assertEqual(first.metadata["build_command_source"], "deterministic:maven-root-marker")
         self.assertTrue(first.metadata["dependency_state_retained_in_image"])
         self.assertIn("RUN chmod +x ./mvnw", dockerfile)
         self.assertIn('ENV MAVEN_CONFIG=""', dockerfile)
-        self.assertIn("RUN ./mvnw -B -DskipTests package", dockerfile)
+        self.assertIn("RUN ./mvnw -B -Dmaven.test.skip=true package", dockerfile)
         self.assertIn("DPRAUTO_JVM_ARTIFACT_OK", dockerfile)
         self.assertNotIn("pip download", dockerfile)
         self.assertNotIn("type=cache,id=dprauto-maven", dockerfile)
@@ -191,7 +197,7 @@ class BuildStrategyTests(unittest.TestCase):
 
         self.assertEqual(
             plan.metadata["build_command"],
-            "./mvnw -B -DskipTests -Dlicense.skip=true package",
+            "./mvnw -B -Dmaven.test.skip=true -Dlicense.skip=true package",
         )
         self.assertEqual(
             plan.metadata["maven_license_skip_evidence"],
@@ -263,6 +269,33 @@ class BuildStrategyTests(unittest.TestCase):
 
         self.assertIn(".cnb-benchmark-source-ready", plan.generated_files[1].content)
 
+    def test_generated_context_retains_vcs_only_when_build_evidence_requires_it(self) -> None:
+        ordinary = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(system="gradle", wrapper=True)
+        )
+        vcs_build = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(
+                system="gradle",
+                wrapper=True,
+                metadata={
+                    "vcs_metadata_required": True,
+                    "vcs_metadata_evidence": ("build.gradle:grgit",),
+                },
+            )
+        )
+
+        ordinary_ignore = next(
+            item.content for item in ordinary.generated_files
+            if item.path == "Dockerfile.dockerignore"
+        )
+        vcs_ignore = next(
+            item.content for item in vcs_build.generated_files
+            if item.path == "Dockerfile.dockerignore"
+        )
+        self.assertIn("\n.git\n", "\n" + ordinary_ignore)
+        self.assertNotIn("\n.git\n", "\n" + vcs_ignore)
+        self.assertNotIn("tests", ordinary_ignore)
+
     def test_native_cmake_plan_installs_bounded_toolchain_and_pipeline(self) -> None:
         plan = NativeTemplateStrategy(self.runner, self.config).create_plan(native_profile())
         dockerfile = plan.generated_files[0].content
@@ -286,6 +319,29 @@ class BuildStrategyTests(unittest.TestCase):
         self.assertIn("USER root", dockerfile)
         self.assertIn("DPRAUTO_NATIVE_BUILD_OK", dockerfile)
         self.assertIn('test "$count" -gt 0', plan.metadata["runtime_probe_command"])
+        self.assertNotIn("-perm -111", plan.metadata["runtime_probe_command"])
+
+    def test_multilang_templates_build_from_evidenced_nested_root(self) -> None:
+        native = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(
+                system="make",
+                build_files=("src/Makefile",),
+                metadata={"build_root": "src"},
+            )
+        )
+        jvm = JVMTemplateStrategy(self.runner, self.config).create_plan(
+            jvm_profile(
+                system="gradle",
+                wrapper=True,
+                metadata={"build_root": "server"},
+            )
+        )
+
+        self.assertIn("WORKDIR /workspace/src", native.generated_files[0].content)
+        self.assertEqual(native.metadata["build_commands"], ("make -j4",))
+        self.assertIn("WORKDIR /workspace/server", jvm.generated_files[0].content)
+        self.assertTrue(jvm.metadata["wrapper"])
+        self.assertIn("chmod +x ./gradlew", jvm.generated_files[0].content)
 
     def test_native_autotools_bootstraps_only_when_root_requires_it(self) -> None:
         generated = NativeTemplateStrategy(self.runner, self.config).create_plan(
@@ -323,6 +379,48 @@ class BuildStrategyTests(unittest.TestCase):
             plan.metadata["build_commands"][1],
             "cmake --build build --parallel 4",
         )
+
+    def test_native_packages_require_structured_safe_dependency_evidence(self) -> None:
+        plan = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(
+                metadata={
+                    "system_dependency_packages": (
+                        "libgflags-dev",
+                        "untrusted-package",
+                    ),
+                    "system_dependency_evidence": (
+                        {
+                            "package": "libgflags-dev",
+                            "capability": "gflags",
+                            "source": "CMakeLists.txt",
+                            "detector": "cmake.find_package",
+                            "evidence": "find_package(gflags REQUIRED)",
+                            "confidence": 0.99,
+                        },
+                        {
+                            "package": "untrusted-package",
+                            "capability": "unknown",
+                            "source": "CMakeLists.txt",
+                            "detector": "cmake.find_package",
+                            "evidence": "find_package(Unknown)",
+                            "confidence": 1.0,
+                        },
+                        {
+                            "package": "libx11-dev",
+                            "capability": "x11",
+                            "source": "examples/CMakeLists.txt",
+                            "detector": "cmake.find_package",
+                            "evidence": "find_package(X11)",
+                            "confidence": 0.5,
+                        },
+                    ),
+                }
+            )
+        )
+
+        self.assertIn("libgflags-dev", plan.metadata["system_packages"])
+        self.assertNotIn("untrusted-package", plan.metadata["system_packages"])
+        self.assertNotIn("libx11-dev", plan.metadata["system_packages"])
 
     def test_python_web_image_uses_only_a_persistent_server_command(self) -> None:
         check = ProjectCommand(
@@ -383,6 +481,33 @@ class BuildStrategyTests(unittest.TestCase):
 
         self.assertEqual(plan.metadata["runtime_probe_type"], "native-cli-command")
         self.assertIn("build/demo --version", plan.metadata["runtime_probe_command"])
+
+    def test_make_cli_uses_explicit_build_target_and_repository_runtime_command(self) -> None:
+        run = ProjectCommand(
+            "run-repository-executable",
+            CommandSpec(
+                ("./demo bench 1 2",),
+                purpose=CommandPurpose.RUN,
+                cwd="src",
+                shell=True,
+            ),
+            "runtime-evidence:.github/workflows/ci.yml",
+            0.98,
+        )
+
+        plan = NativeTemplateStrategy(self.runner, self.config).create_plan(
+            native_profile(
+                system="make",
+                project_type=ProjectType.CLI,
+                commands=(run,),
+                metadata={"build_root": "src", "make_build_target": "all"},
+            )
+        )
+
+        self.assertEqual(plan.metadata["build_commands"], ("make -j4 all",))
+        self.assertEqual(plan.metadata["runtime_probe_type"], "native-cli-command")
+        self.assertIn("./demo bench 1 2", plan.metadata["runtime_probe_command"])
+        self.assertNotIn("-perm -111", plan.metadata["runtime_probe_command"])
 
     def test_runner_clamps_command_timeout_to_remaining_budget(self) -> None:
         strategy = TemplateStrategy(self.runner, self.config)
